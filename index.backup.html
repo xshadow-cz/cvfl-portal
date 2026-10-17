@@ -1,0 +1,3262 @@
+<!DOCTYPE html>
+<html lang="cs" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CVFL Portál - Systém Vedení a Správy Soutěží</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        cvfl: {
+                            navy: '#13236b',
+                            lime: '#aefb12',
+                            mint: '#05fda3',
+                            teal: '#004a49',
+                            red: '#f33332',
+                            green: '#7ecb5b',
+                            dark: '#0a1238',
+                            card: '#0e1a4f',
+                            border: '#1e307d'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #13236b; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #aefb12; border-radius: 3px; }
+
+        .fis-tab-btn.active {
+            border-bottom: 3px solid #aefb12;
+            color: #aefb12;
+            font-weight: bold;
+        }
+
+        /* Bílá ikonka hodin u time-inputu */
+        input[type="time"]::-webkit-calendar-picker-indicator {
+            filter: invert(1);
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body class="bg-[#13236b] text-gray-100 min-h-screen flex flex-col transition-colors duration-200">
+
+    <!-- Maintenance Mode Banner -->
+    <div id="maintenance-banner" class="hidden bg-amber-500 text-black text-xs font-black px-4 py-2 text-center flex justify-between items-center z-50">
+        <span><i class="fa-solid fa-triangle-exclamation mr-2"></i> REŽIM ÚDRŽBY AKTIVNÍ — Přístup má pouze Vedení ligy.</span>
+        <button onclick="toggleMaintenance(false)" class="underline text-xs hover:text-gray-900">Vypnout</button>
+    </div>
+
+    <!-- League System Banner -->
+    <div id="system-banner" class="bg-gradient-to-r from-[#13236b] via-[#1e307d] to-[#004a49] border-b border-[#aefb12]/30 text-white text-xs py-2 px-4 shadow-md flex justify-between items-center z-40">
+        <div class="flex items-center space-x-2 overflow-hidden">
+            <span class="bg-[#aefb12] text-[#13236b] text-[10px] uppercase font-black px-2 py-0.5 rounded-full">OZNÁMENÍ</span>
+            <span id="system-banner-text" class="truncate font-medium text-gray-200">Vítejte v oficiálním CVFL Portálu!</span>
+        </div>
+        <button onclick="document.getElementById('system-banner').classList.add('hidden')" class="text-gray-400 hover:text-white ml-2"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+
+    <!-- Main Navigation Bar -->
+    <header class="bg-[#0e1a4f] border-b border-[#1e307d] sticky top-0 z-30 shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                <!-- Logo & Brand -->
+                <div class="flex items-center space-x-3 cursor-pointer" onclick="switchTab('dashboard')">
+                    <div class="w-10 h-10 rounded-xl bg-[#aefb12] flex items-center justify-center text-[#13236b] font-black text-xl shadow-lg shadow-[#aefb12]/20">
+                        C
+                    </div>
+                    <div>
+                        <span class="font-black text-xl tracking-wider text-white">CVFL <span class="text-[#aefb12]">PORTÁL</span></span>
+                    </div>
+                </div>
+
+                <!-- Desktop Navigation Links -->
+                <nav id="nav-links" class="hidden md:flex space-x-1 lg:space-x-2 text-sm font-bold">
+                    <button onclick="switchTab('dashboard')" id="nav-dashboard" class="px-3 py-2 rounded-lg text-[#aefb12] bg-[#aefb12]/10"><i class="fa-solid fa-chart-pie mr-2"></i>Přehled</button>
+                    <button onclick="switchTab('competitions')" id="nav-competitions" class="px-3 py-2 rounded-lg hover:bg-white/5 text-gray-300"><i class="fa-solid fa-trophy mr-2"></i>Soutěže</button>
+                    <button onclick="switchTab('matches')" id="nav-matches" class="px-3 py-2 rounded-lg hover:bg-white/5 text-gray-300"><i class="fa-solid fa-calendar-days mr-2"></i>Zápasy</button>
+                    <button onclick="switchTab('teams')" id="nav-teams" class="px-3 py-2 rounded-lg hover:bg-white/5 text-gray-300"><i class="fa-solid fa-shield-halved mr-2"></i>Týmy</button>
+                    <button onclick="switchTab('referees')" id="nav-referees" class="px-3 py-2 rounded-lg hover:bg-white/5 text-gray-300 role-perm-admin role-perm-ref-mgr"><i class="fa-solid fa-user-ninja mr-2"></i>Rozhodčí</button>
+                    <button onclick="switchTab('disciplinary')" id="nav-disciplinary" class="px-3 py-2 rounded-lg hover:bg-white/5 text-gray-300 role-perm-admin role-perm-dk role-perm-ref-mgr role-perm-team-mgr role-perm-referee"><i class="fa-solid fa-gavel mr-2"></i>Disciplinárka</button>
+                    <button onclick="switchTab('admin')" id="nav-admin" class="px-3 py-2 rounded-lg hover:bg-white/5 text-gray-300 role-perm-admin"><i class="fa-solid fa-user-gear mr-2"></i>Administrace</button>
+                </nav>
+
+                <!-- Search & User Role Badge -->
+                <div class="flex items-center space-x-3">
+                    <div class="relative hidden sm:block">
+                        <input type="text" id="global-search" oninput="handleGlobalSearch(this.value)" placeholder="Hledat hráče, tým..." class="w-40 lg:w-56 bg-[#13236b] border border-[#1e307d] text-xs rounded-lg pl-8 pr-3 py-2 text-white focus:outline-none focus:border-[#aefb12]">
+                        <i class="fa-solid fa-magnifying-glass absolute left-2.5 top-2.5 text-gray-400 text-xs"></i>
+                        <div id="search-results" class="hidden absolute left-0 right-0 top-10 bg-[#0e1a4f] border border-[#1e307d] rounded-lg shadow-2xl z-50 max-h-60 overflow-y-auto text-xs p-2"></div>
+                    </div>
+
+                    <div class="relative">
+                        <button onclick="toggleRoleSelector()" class="flex items-center space-x-2 bg-[#13236b] hover:bg-[#1e307d] p-1.5 pl-3 rounded-lg text-xs font-bold border border-[#1e307d]">
+                            <span id="active-role-badge" class="px-2 py-0.5 rounded text-[10px] bg-[#aefb12] text-[#13236b] uppercase font-black">Vedení ligy</span>
+                            <i class="fa-solid fa-chevron-down text-[10px] text-gray-400"></i>
+                        </button>
+                        <div id="role-dropdown" class="hidden absolute right-0 top-10 w-64 bg-[#0e1a4f] border border-[#1e307d] rounded-xl shadow-2xl z-50 p-2 text-xs">
+                            <div class="px-2 py-1 font-black text-gray-400 uppercase text-[10px] border-b border-[#1e307d] mb-1">Přepnout Uživatelskou Roli</div>
+                            <button onclick="setUserRole('Admin')" class="w-full text-left px-2 py-1.5 rounded hover:bg-[#aefb12]/10 hover:text-[#aefb12] flex justify-between items-center text-white">
+                                <span>Vedení ligy</span> <i class="fa-solid fa-crown text-[#aefb12]"></i>
+                            </button>
+                            <button onclick="setUserRole('DK')" class="w-full text-left px-2 py-1.5 rounded hover:bg-[#f33332]/10 hover:text-[#f33332] flex justify-between items-center text-white">
+                                <span>Disciplinární komise (DK)</span> <i class="fa-solid fa-gavel text-[#f33332]"></i>
+                            </button>
+                            <button onclick="setUserRole('Referee_Manager')" class="w-full text-left px-2 py-1.5 rounded hover:bg-[#05fda3]/10 hover:text-[#05fda3] flex justify-between items-center text-white">
+                                <span>Vedení rozhodčích</span> <i class="fa-solid fa-user-ninja text-[#05fda3]"></i>
+                            </button>
+                            <button onclick="setUserRole('Team_Manager')" class="w-full text-left px-2 py-1.5 rounded hover:bg-purple-500/10 hover:text-purple-400 flex justify-between items-center text-white">
+                                <span>Vedoucí mužstva</span> <i class="fa-solid fa-shirt text-purple-400"></i>
+                            </button>
+                            <button onclick="setUserRole('Referee')" class="w-full text-left px-2 py-1.5 rounded hover:bg-gray-400/10 hover:text-gray-300 flex justify-between items-center text-white">
+                                <span>Rozhodčí</span> <i class="fa-solid fa-stopwatch text-gray-300"></i>
+                            </button>
+                            <button onclick="setUserRole('Delegate')" class="w-full text-left px-2 py-1.5 rounded hover:bg-amber-500/10 hover:text-amber-400 flex justify-between items-center text-white">
+                                <span>Delegát Utkání</span> <i class="fa-solid fa-user-check text-amber-400"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        
+        <!-- DASHBOARD TAB -->
+        <section id="tab-dashboard" class="space-y-6">
+            <div class="bg-gradient-to-r from-[#0e1a4f] via-[#13236b] to-[#004a49] border border-[#aefb12]/30 rounded-2xl p-6 relative overflow-hidden shadow-2xl">
+                <div class="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <div>
+                        <span id="role-welcome-tag" class="inline-block px-3 py-1 bg-[#aefb12]/20 text-[#aefb12] text-xs font-black rounded-full border border-[#aefb12]/30 mb-2">PŘIHLÁŠEN ROZHRANÍM: VEDENÍ LIGY (SUPER-ADMIN - PLNÁ PRÁVA)</span>
+                        <h1 class="text-2xl sm:text-3xl font-black text-white">Řídící Centrum CVFL Portálu</h1>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <button onclick="switchTab('matches')" class="px-4 py-2 bg-[#aefb12] hover:bg-opacity-90 text-[#13236b] text-xs font-black rounded-xl shadow-lg transition"><i class="fa-solid fa-bolt mr-2"></i>Živé Zápisy</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- KARTY STATISTIK NAVRŽENÉ DLE POŽADAVKU -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="bg-[#0e1a4f] p-4 rounded-xl border border-[#1e307d] shadow-md">
+                    <div class="text-gray-400 text-xs font-semibold uppercase"><i class="fa-solid fa-users mr-1 text-[#aefb12]"></i> Počet Registrovaných Hráčů</div>
+                    <div id="dash-stat-players" class="text-2xl font-black text-[#aefb12] mt-1">0 Hráčů</div>
+                </div>
+                <div class="bg-[#0e1a4f] p-4 rounded-xl border border-[#1e307d] shadow-md">
+                    <div class="text-gray-400 text-xs font-semibold uppercase"><i class="fa-solid fa-user-ninja mr-1 text-[#05fda3]"></i> Počet Rozhodčích</div>
+                    <div id="dash-stat-referees" class="text-2xl font-black text-[#05fda3] mt-1">0 Rozhodčích</div>
+                </div>
+                <div class="bg-[#0e1a4f] p-4 rounded-xl border border-[#1e307d] shadow-md">
+                    <div class="text-gray-400 text-xs font-semibold uppercase"><i class="fa-solid fa-shield-halved mr-1 text-purple-400"></i> Počet Klubů</div>
+                    <div id="dash-stat-teams" class="text-2xl font-black text-purple-400 mt-1">0 Klubů</div>
+                </div>
+            </div>
+
+            <div class="space-y-4">
+                <div class="flex justify-between items-center">
+                    <h2 class="font-bold text-lg flex items-center gap-2 text-white"><i class="fa-solid fa-play text-[#aefb12]"></i> Přehled Zápasů</h2>
+                    <button onclick="switchTab('matches')" class="text-xs text-[#aefb12] hover:underline font-bold">Zobrazit vše</button>
+                </div>
+                <div id="dashboard-matches-list" class="space-y-3"></div>
+            </div>
+        </section>
+
+        <!-- COMPETITIONS TAB -->
+        <section id="tab-competitions" class="hidden space-y-6">
+            <div class="flex flex-wrap border-b border-[#1e307d] pb-2 gap-2">
+                <button onclick="switchCompTab('liga1')" id="comp-btn-liga1" class="px-4 py-2 font-black text-sm rounded-lg bg-[#aefb12] text-[#13236b] shadow">CVFL 1. Liga</button>
+                <button onclick="switchCompTab('liga2')" id="comp-btn-liga2" class="px-4 py-2 font-black text-sm rounded-lg bg-[#05fda3]/10 text-[#05fda3] hover:bg-[#05fda3] hover:text-[#13236b]">CVFL 2. Liga</button>
+                <button onclick="switchCompTab('nadstavba')" id="comp-btn-nadstavba" class="px-4 py-2 font-bold text-sm rounded-lg text-gray-300 hover:bg-[#1e307d] hidden">Nadstavba</button>
+                <button onclick="switchCompTab('baraz')" id="comp-btn-baraz" class="px-4 py-2 font-bold text-sm rounded-lg text-gray-300 hover:bg-[#1e307d] hidden">Baráž o 1. Ligu</button>
+                <button onclick="switchCompTab('molcup')" id="comp-btn-molcup" class="px-4 py-2 font-black text-sm rounded-lg bg-[#004a49] text-[#7ecb5b] hover:bg-[#f33332] hover:text-white hidden"><i class="fa-solid fa-trophy mr-1 text-[#f33332]"></i> MOL Cup</button>
+            </div>
+
+            <div id="comp-view-container" class="bg-[#0e1a4f] border border-[#1e307d] rounded-xl p-4 shadow-xl overflow-x-auto"></div>
+        </section>
+
+        <!-- MATCHES TAB -->
+        <section id="tab-matches" class="hidden space-y-6">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-[#0e1a4f] p-4 rounded-xl border border-[#1e307d]">
+                <div>
+                    <h2 class="text-xl font-bold text-white">Přehled Zápasů</h2>
+                    <p class="text-xs text-gray-400">Filtrování zápasů podle soutěže, kola nebo pohárové fáze (max 14 kol).</p>
+                </div>
+                
+                <div class="flex flex-wrap gap-2 w-full md:w-auto">
+                    <div>
+                        <select id="match-filter-competition" onchange="onCompetitionFilterChange()" class="bg-[#13236b] border border-[#1e307d] text-xs rounded-lg p-2 text-white font-bold">
+                            <option value="ALL">Všechny Soutěže</option>
+                            <option value="CVFL 1. Liga">CVFL 1. Liga</option>
+                            <option value="CVFL 2. Liga">CVFL 2. Liga</option>
+                            <option value="MOL Cup">MOL Cup</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <select id="match-filter-round" onchange="renderMatches()" class="bg-[#13236b] border border-[#1e307d] text-xs rounded-lg p-2 text-white font-bold">
+                            <option value="ALL">Všechna Kola / Fáze</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <select id="match-filter-status" onchange="renderMatches()" class="bg-[#13236b] border border-[#1e307d] text-xs rounded-lg p-2 text-white font-bold">
+                            <option value="ALL">Všechny Stavy</option>
+                            <option value="Scheduled">Naplánované</option>
+                            <option value="In_Progress">Probíhající</option>
+                            <option value="Completed">Odehrané</option>
+                            <option value="Postponed">TBA / Odložené</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div id="matches-full-list" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+        </section>
+
+        <!-- TEAMS TAB -->
+        <section id="tab-teams" class="hidden space-y-6">
+            <div class="flex justify-between items-center">
+                <h2 class="text-xl font-bold text-white">Správa Týmů a Kádru</h2>
+                <button onclick="openFreeAgentsModal()" class="px-3 py-1.5 bg-[#05fda3] hover:bg-opacity-90 text-[#13236b] text-xs font-black rounded-lg shadow role-perm-admin role-perm-team-mgr"><i class="fa-solid fa-users-viewfinder mr-1"></i> Volní Hráči (Free Agents)</button>
+            </div>
+
+            <div id="teams-selector" class="flex overflow-x-auto space-x-2 pb-2 custom-scrollbar"></div>
+            <div id="team-detail-view" class="bg-[#0e1a4f] border border-[#1e307d] rounded-xl p-6 shadow-xl space-y-6"></div>
+        </section>
+
+        <!-- REFEREES TAB -->
+        <section id="tab-referees" class="hidden space-y-6">
+            <div class="bg-[#0e1a4f] border border-[#1e307d] p-4 rounded-xl">
+                <h2 class="text-xl font-bold text-white flex items-center gap-2"><i class="fa-solid fa-user-ninja text-[#aefb12]"></i> Komise a Správa Rozhodčích</h2>
+            </div>
+
+            <div class="bg-[#0e1a4f] border border-[#1e307d] rounded-xl p-4 shadow-xl space-y-4">
+                <h3 class="font-bold text-sm text-[#05fda3] flex items-center gap-2"><i class="fa-solid fa-clipboard-user"></i> Nominace Rozhodčích</h3>
+                <div id="referee-assignments-list" class="space-y-3"></div>
+            </div>
+
+            <div class="bg-[#0e1a4f] border border-[#1e307d] rounded-xl p-4 shadow-xl">
+                <div class="flex justify-between items-center mb-3">
+                    <h3 class="font-bold text-sm text-white">Seznam Registrovaných Rozhodčích</h3>
+                    <button onclick="openAddRefereeModal()" class="px-3 py-1.5 bg-[#aefb12] hover:bg-opacity-90 text-[#13236b] text-xs font-black rounded-lg shadow role-perm-admin role-perm-ref-mgr">
+                        <i class="fa-solid fa-plus mr-1"></i> Přidat Nového Rozhodčího
+                    </button>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs text-left">
+                        <thead class="bg-[#13236b] text-gray-400 uppercase">
+                            <tr>
+                                <th class="p-3">Roblox Username</th>
+                                <th class="p-3">Discord Username</th>
+                                <th class="p-3">Licence</th>
+                                <th class="p-3">Status Licence</th>
+                                <th class="p-3">Je Delegát?</th>
+                                <th class="p-3 text-right">Akce</th>
+                            </tr>
+                        </thead>
+                        <tbody id="referees-main-table" class="divide-y divide-[#1e307d]"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- DISCIPLINARY TAB -->
+        <section id="tab-disciplinary" class="hidden space-y-6">
+            <div class="bg-[#f33332]/10 border border-[#f33332]/30 rounded-xl p-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+                <div>
+                    <h2 class="text-lg font-bold text-[#f33332] flex items-center gap-2"><i class="fa-solid fa-shield-halved"></i> Disciplinární Komise CVFL (DK)</h2>
+                    <p class="text-xs text-gray-300">Správa stopek, kontumací, přeložení, odečtů bodů a rozhodnutí komise.</p>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <button onclick="openAddSuspensionModal()" class="px-3 py-2 bg-[#f33332] hover:bg-opacity-90 text-white text-xs font-bold rounded-lg shadow role-perm-admin role-perm-dk"><i class="fa-solid fa-plus mr-1"></i> Udělit Trest</button>
+                    <button onclick="openForfeitModal()" class="px-3 py-2 bg-amber-500 hover:bg-opacity-90 text-black text-xs font-bold rounded-lg shadow role-perm-admin role-perm-dk"><i class="fa-solid fa-ban mr-1"></i> Kontumace Zápasu</button>
+                    <button onclick="openPostponeModal()" class="px-3 py-2 bg-blue-600 hover:bg-opacity-90 text-white text-xs font-bold rounded-lg shadow role-perm-admin role-perm-dk"><i class="fa-solid fa-clock-rotate-left mr-1"></i> Odložit Utkání (TBA)</button>
+                    <button onclick="openRescheduleModal()" class="px-3 py-2 bg-emerald-600 hover:bg-opacity-90 text-white text-xs font-bold rounded-lg shadow role-perm-admin role-perm-dk"><i class="fa-solid fa-calendar-days mr-1"></i> Přeložit Utkání</button>
+                    <button onclick="openDeductPointsModal()" class="px-3 py-2 bg-purple-600 hover:bg-opacity-90 text-white text-xs font-bold rounded-lg shadow role-perm-admin role-perm-dk"><i class="fa-solid fa-minus-circle mr-1"></i> Odečet Bodů Týmu</button>
+                </div>
+            </div>
+
+            <!-- AKTIVNÍ TRESTY -->
+            <div class="bg-[#0e1a4f] border border-[#1e307d] rounded-xl p-4 shadow-md">
+                <h3 class="font-bold text-sm mb-3 text-white">Aktivní Tresty a Stopky</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs text-left">
+                        <thead class="bg-[#13236b] text-gray-400 uppercase">
+                            <tr>
+                                <th class="p-3">Hráč (Roblox)</th>
+                                <th class="p-3">Tým</th>
+                                <th class="p-3">Typ Trestu</th>
+                                <th class="p-3">Trest (Zápasy / Čas)</th>
+                                <th class="p-3">Důvod</th>
+                                <th class="p-3 text-right role-perm-admin role-perm-dk">Akce</th>
+                            </tr>
+                        </thead>
+                        <tbody id="suspensions-table-body" class="divide-y divide-[#1e307d]"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- AUDIT LOGS DISCIPLINÁRKY -->
+            <div class="bg-[#0e1a4f] border border-[#1e307d] rounded-xl p-4 shadow-md space-y-3 role-perm-admin role-perm-dk">
+                <h3 class="font-bold text-sm text-[#05fda3] flex items-center gap-2"><i class="fa-solid fa-clock-rotate-left"></i> Disciplinární Audit Log (Historie Rozhodnutí & Mazání)</h3>
+                <div class="overflow-x-auto max-h-60 overflow-y-auto">
+                    <table class="w-full text-xs text-left font-mono">
+                        <thead class="bg-[#13236b] text-gray-400 uppercase sticky top-0">
+                            <tr>
+                                <th class="p-2">Čas</th>
+                                <th class="p-2">Typ Události</th>
+                                <th class="p-2">Subjekt / Tým</th>
+                                <th class="p-2">Podrobnosti a Důvod</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dk-audit-log-body" class="divide-y divide-[#1e307d] text-[11px]"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ADMIN TAB -->
+        <section id="tab-admin" class="hidden space-y-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- VYTVOŘENÍ NOVÉHO UTKÁNÍ -->
+                <div class="bg-[#0e1a4f] p-5 rounded-xl border border-[#aefb12]/40 space-y-4 shadow-xl">
+                    <h3 class="font-bold text-sm flex items-center gap-2 text-[#aefb12]"><i class="fa-solid fa-calendar-plus"></i> Vytvořit Nové Utkání</h3>
+                    <div class="space-y-3 text-xs">
+                        <div>
+                            <label class="block text-gray-400 mb-1">Soutěž:</label>
+                            <select id="create-match-comp" onchange="updateCreateMatchTeams()" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-bold">
+                                <option value="CVFL 1. Liga">CVFL 1. Liga</option>
+                                <option value="CVFL 2. Liga">CVFL 2. Liga</option>
+                                <option value="MOL Cup">MOL Cup</option>
+                            </select>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="block text-gray-400 mb-1">Kolo / Fáze:</label>
+                                <select id="create-match-round" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-bold"></select>
+                            </div>
+                            <div>
+                                <label class="block text-gray-400 mb-1">Datum a Čas:</label>
+                                <input type="datetime-local" id="create-match-date" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-gray-400 mb-1">Název Stadionu:</label>
+                            <input type="text" id="create-match-stadium" placeholder="Zadejte název stadionu..." class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-semibold">
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="block text-gray-400 mb-1">Domácí Tým:</label>
+                                <select id="create-match-home" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white"></select>
+                            </div>
+                            <div>
+                                <label class="block text-gray-400 mb-1">Hostující Tým:</label>
+                                <select id="create-match-away" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white"></select>
+                            </div>
+                        </div>
+                        <button onclick="submitCreateMatch()" class="w-full py-2 bg-[#aefb12] hover:bg-opacity-90 text-[#13236b] font-black rounded-lg shadow-lg transition">
+                            <i class="fa-solid fa-plus mr-1"></i> Vytvořit Utkání
+                        </button>
+                    </div>
+                </div>
+
+                <!-- PŘIDÁNÍ NOVÉHO HRÁČE DO DATABÁZE -->
+                <div class="bg-[#0e1a4f] p-5 rounded-xl border border-[#05fda3]/40 space-y-4 shadow-xl">
+                    <h3 class="font-bold text-sm flex items-center gap-2 text-[#05fda3]"><i class="fa-solid fa-user-plus"></i> Přidat Nového Hráče</h3>
+                    <div class="space-y-3 text-xs">
+                        <div>
+                            <label class="block text-gray-400 mb-1">Roblox Username:</label>
+                            <input type="text" id="admin-add-player-roblox" placeholder="Zadejte Roblox Nick" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-mono">
+                        </div>
+                        <div>
+                            <label class="block text-gray-400 mb-1">Discord Username:</label>
+                            <input type="text" id="admin-add-player-discord" placeholder="Zadejte Discord Nick" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-mono">
+                        </div>
+                        <div>
+                            <label class="block text-gray-400 mb-1">Klub / Tým:</label>
+                            <select id="admin-add-player-team" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-bold">
+                                <option value="free">Volný Hráč (Bez Klubu)</option>
+                            </select>
+                        </div>
+                        <button onclick="submitAdminAddPlayer()" class="w-full py-2 bg-[#05fda3] hover:bg-opacity-90 text-[#13236b] font-black rounded-lg shadow-lg transition">
+                            <i class="fa-solid fa-user-plus mr-1"></i> Registroval Hráče
+                        </button>
+                    </div>
+                </div>
+
+                <!-- MOŽNOSTI ZOBRAZENÍ SEKCE SEKCÍ -->
+                <div class="bg-[#0e1a4f] p-5 rounded-xl border border-[#1e307d] space-y-4">
+                    <h3 class="font-bold text-sm flex items-center gap-2 text-purple-400"><i class="fa-solid fa-eye"></i> Viditelnost Sekcí</h3>
+                    <div class="space-y-3 text-xs">
+                        <div class="p-3 bg-[#13236b] rounded-lg border border-[#1e307d] flex justify-between items-center">
+                            <span>Zobrazit Nadstavbu</span>
+                            <input type="checkbox" id="toggle-sec-nadstavba" onchange="toggleExtraSection('nadstavba', this.checked)" class="accent-[#aefb12] w-5 h-5">
+                        </div>
+                        <div class="p-3 bg-[#13236b] rounded-lg border border-[#1e307d] flex justify-between items-center">
+                            <span>Zobrazit Baráž o 1. Ligu</span>
+                            <input type="checkbox" id="toggle-sec-baraz" onchange="toggleExtraSection('baraz', this.checked)" class="accent-[#aefb12] w-5 h-5">
+                        </div>
+                        <div class="p-3 bg-[#13236b] rounded-lg border border-[#1e307d] flex justify-between items-center">
+                            <span>Zobrazit MOL Cup</span>
+                            <input type="checkbox" id="toggle-sec-molcup" onchange="toggleExtraSection('molcup', this.checked)" class="accent-[#aefb12] w-5 h-5">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SPRÁVA A SMAZÁNÍ UTKÁNÍ -->
+            <div class="bg-[#0e1a4f] border border-[#1e307d] rounded-xl p-5 shadow-xl space-y-4">
+                <h3 class="font-bold text-sm flex items-center gap-2 text-[#f33332]"><i class="fa-solid fa-trash-can"></i> Správa a Mazání Utkání</h3>
+                <div id="admin-matches-delete-list" class="space-y-2"></div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="bg-[#0e1a4f] border-t border-[#1e307d] py-4 text-xs text-gray-400 text-center">
+        <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row justify-between items-center gap-2">
+            <div>&copy; 2026 CVFL Portál. Všechna práva vyhrazena.</div>
+            <div>
+                <span class="text-[#aefb12] font-bold"><i class="fa-solid fa-shield mr-1"></i> CVFL Portál v0.1</span>
+            </div>
+        </div>
+    </footer>
+
+    <!-- ABSOLUTNÍ POTVRZOVACÍ DIALOG -->
+    <div id="confirm-overlay" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+        <div class="bg-[#0e1a4f] border-2 border-[#f33332] rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl relative">
+            <div class="flex items-center space-x-3 text-[#f33332]">
+                <div class="w-10 h-10 rounded-xl bg-[#f33332]/20 border border-[#f33332]/40 flex items-center justify-center text-lg font-black">
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                </div>
+                <div>
+                    <h3 id="confirm-dialog-title" class="font-black text-lg text-white">Potvrzení Akce</h3>
+                    <span class="text-[10px] text-[#f33332] font-bold uppercase">Upozornění systému CVFL</span>
+                </div>
+            </div>
+            <p id="confirm-dialog-message" class="text-xs text-gray-300 leading-relaxed bg-[#13236b] p-3 rounded-xl border border-[#1e307d]">
+                Opravdu chcete tuto akce provést?
+            </p>
+            
+            <div id="confirm-reason-box" class="space-y-1">
+                <label class="block text-[11px] font-bold text-gray-300">Důvod akce / odebrání:</label>
+                <input type="text" id="confirm-reason-input" placeholder="Zadejte odůvodnění..." class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-xs text-white">
+            </div>
+
+            <div class="flex justify-end space-x-2 pt-2">
+                <button onclick="closeConfirmModal(false)" class="px-4 py-2 bg-[#13236b] hover:bg-[#1e307d] text-gray-300 font-bold text-xs rounded-xl border border-[#1e307d]">Zrušit</button>
+                <button onclick="closeConfirmModal(true)" class="px-5 py-2 bg-[#f33332] hover:bg-opacity-90 text-white font-black text-xs rounded-xl shadow-lg transition">Potvrdit a Provést</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODALS CONTAINER -->
+    <div id="modal-backdrop" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+
+        <!-- MODAL ODEČET BODŮ TÝMU -->
+        <div id="modal-deduct-points" class="hidden bg-[#0e1a4f] border border-purple-500/40 rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl relative z-50">
+            <div class="flex justify-between items-center border-b border-[#1e307d] pb-3">
+                <h3 class="font-bold text-lg text-purple-400 flex items-center gap-2"><i class="fa-solid fa-minus-circle"></i> Odečet Bodů Týmu</h3>
+                <button onclick="closeSpecificModal('modal-deduct-points')" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="space-y-3 text-xs">
+                <div>
+                    <label class="block text-gray-400 mb-1">Vyberte Tým:</label>
+                    <select id="deduct-team-select" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-bold"></select>
+                </div>
+                <div>
+                    <label class="block text-gray-400 mb-1">Počet Odečtených Bodů:</label>
+                    <input type="number" id="deduct-points-count" value="3" min="1" max="30" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-bold">
+                </div>
+                <div>
+                    <label class="block text-gray-400 mb-1">Důvod Odečtu Bodů (např. Rozhodnutí svazu):</label>
+                    <input type="text" id="deduct-points-reason" value="Rozhodnutí svazu" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white">
+                </div>
+                <button onclick="submitPointsDeduction()" class="w-full py-2 bg-purple-600 hover:bg-opacity-90 text-white font-black rounded-lg shadow-lg">Potvrdit Odečet Bodů</button>
+            </div>
+        </div>
+
+        <!-- MODAL PRO VÝBĚR HRÁČE DO SESTAVY (CENTRUM, VYSOKÝ Z-INDEX) -->
+        <div id="modal-add-roster-player" class="hidden bg-[#0e1a4f] border border-[#aefb12]/40 rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl relative z-[110]">
+            <div class="flex justify-between items-center border-b border-[#1e307d] pb-3">
+                <h3 id="roster-picker-title" class="font-bold text-lg text-[#aefb12]">Přidat Hráče do Sestavy</h3>
+                <button onclick="closeSpecificModal('modal-add-roster-player')" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div id="roster-picker-list" class="space-y-2 max-h-80 overflow-y-auto text-xs"></div>
+        </div>
+
+        <!-- MODAL PRO PŘIDÁNÍ ČLENA STAFFU (CENTRUM, VYSOKÝ Z-INDEX) -->
+        <div id="modal-add-staff-member" class="hidden bg-[#0e1a4f] border border-[#05fda3]/40 rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl relative z-[110]">
+            <div class="flex justify-between items-center border-b border-[#1e307d] pb-3">
+                <h3 id="staff-picker-title" class="font-bold text-lg text-[#05fda3]">Přidat Člena Realizačního Týmu</h3>
+                <button onclick="closeSpecificModal('modal-add-staff-member')" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="space-y-3 text-xs">
+                <div>
+                    <label class="block text-gray-400 mb-1">Roblox Username:</label>
+                    <input type="text" id="staff-roblox-input" placeholder="Zadejte Roblox Nick" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-mono">
+                </div>
+                <div>
+                    <label class="block text-gray-400 mb-1">Discord Username:</label>
+                    <input type="text" id="staff-discord-input" placeholder="Zadejte Discord Nick" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-mono">
+                </div>
+                <div>
+                    <label class="block text-gray-400 mb-1">Role v týmu:</label>
+                    <select id="staff-role-select" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-bold">
+                        <option value="Hlavní trenér">Hlavní trenér</option>
+                        <option value="Asistent Trenéra">Asistent Trenéra</option>
+                        <option value="Kustod">Kustod</option>
+                        <option value="Masér">Masér</option>
+                    </select>
+                </div>
+                <button onclick="submitStaffMember()" class="w-full py-2 bg-[#05fda3] hover:bg-opacity-90 text-[#13236b] font-black rounded-lg shadow-lg">Přidat do Týmu</button>
+            </div>
+        </div>
+
+        <!-- EDIT / ADD REFEREE MODAL -->
+        <div id="modal-edit-referee" class="hidden bg-[#0e1a4f] border border-[#aefb12]/40 rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl relative z-50">
+            <div class="flex justify-between items-center border-b border-[#1e307d] pb-3">
+                <h3 id="referee-modal-title" class="font-bold text-lg text-[#aefb12] flex items-center gap-2"><i class="fa-solid fa-user-ninja"></i> Upravit Rozhodčího</h3>
+                <button onclick="closeSpecificModal('modal-edit-referee')" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="space-y-3 text-xs">
+                <div>
+                    <label class="block text-gray-400 mb-1">Roblox Username:</label>
+                    <input type="text" id="edit-ref-roblox" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-mono">
+                </div>
+                <div>
+                    <label class="block text-gray-400 mb-1">Discord Username:</label>
+                    <input type="text" id="edit-ref-discord" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-mono">
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block text-gray-400 mb-1">Licence Rozhodčího:</label>
+                        <select id="edit-ref-license" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-bold">
+                            <option value="A">Licence A</option>
+                            <option value="B">Licence B</option>
+                            <option value="C">Licence C</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-gray-400 mb-1">Status Licence:</label>
+                        <select id="edit-ref-status" onchange="toggleRefStatusReasonInput()" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-bold">
+                            <option value="Active">Platná</option>
+                            <option value="Suspended">Suspendovaná</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="ref-status-reason-box" class="hidden">
+                    <label class="block text-gray-400 mb-1">Důvod suspendace (Povinné při suspendování):</label>
+                    <input type="text" id="edit-ref-reason" placeholder="Zadejte odůvodnění suspendace..." class="w-full bg-[#13236b] border border-[#f33332]/50 rounded p-2 text-white">
+                </div>
+
+                <div class="p-3 bg-[#13236b] border border-[#1e307d] rounded-lg mt-2">
+                    <label class="flex items-center space-x-2 cursor-pointer text-white">
+                        <input type="checkbox" id="edit-ref-is-delegate" class="accent-[#aefb12] w-4 h-4">
+                        <span class="font-bold text-sm">Je zároveň Delegát utkání</span>
+                    </label>
+                </div>
+                <button onclick="saveRefereeChanges()" class="w-full py-2 bg-[#aefb12] hover:bg-opacity-90 text-[#13236b] font-black rounded-lg shadow-lg">Uložit Rozhodčího</button>
+            </div>
+        </div>
+
+        <!-- REFEREE SLOT PICKER MODAL -->
+        <div id="modal-referee-picker" class="hidden bg-[#0e1a4f] border border-[#05fda3]/40 rounded-2xl w-full max-w-lg p-6 space-y-4 shadow-2xl relative z-50">
+            <div class="flex justify-between items-center border-b border-[#1e307d] pb-3">
+                <div>
+                    <h3 id="picker-title" class="font-bold text-lg text-[#05fda3]">Výběr Rozhodčího</h3>
+                </div>
+                <button onclick="closeSpecificModal('modal-referee-picker')" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div id="picker-list" class="space-y-2 max-h-80 overflow-y-auto text-xs"></div>
+        </div>
+
+        <!-- ADD SUSPENSION MODAL -->
+        <div id="modal-add-suspension" class="hidden bg-[#0e1a4f] border border-[#f33332]/40 rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl relative z-50">
+            <div class="flex justify-between items-center border-b border-[#1e307d] pb-3">
+                <h3 class="font-bold text-lg text-[#f33332] flex items-center gap-2"><i class="fa-solid fa-gavel"></i> Udělit Trest Hráči</h3>
+                <button onclick="closeSpecificModal('modal-add-suspension')" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="space-y-3 text-xs">
+                <div>
+                    <label class="block text-gray-400 mb-1">1. Vyberte Tým:</label>
+                    <select id="suspension-team-select" onchange="updateSuspensionPlayers()" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white"></select>
+                </div>
+                <div>
+                    <label class="block text-gray-400 mb-1">2. Vyberte Hráče Týmu:</label>
+                    <select id="suspension-player-select" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white"></select>
+                </div>
+                <div>
+                    <label class="block text-gray-400 mb-1">Typ Trestu:</label>
+                    <select id="suspension-type-select" onchange="toggleSuspensionInputs()" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-bold">
+                        <option value="Match_Count">Na Počet Zápasů</option>
+                        <option value="Time_Period">Na Časové Období (Do data)</option>
+                    </select>
+                </div>
+                <div id="suspension-input-matches">
+                    <label class="block text-gray-400 mb-1">Počet Zápasů Stopky:</label>
+                    <input type="number" id="suspension-matches-count" value="1" min="1" max="20" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white">
+                </div>
+                <div id="suspension-input-time" class="hidden">
+                    <label class="block text-gray-400 mb-1">Trest Vyprší Dne a V Čase:</label>
+                    <input type="datetime-local" id="suspension-until-date" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white">
+                </div>
+                <div>
+                    <label class="block text-gray-400 mb-1">Důvod Trestu (Povinný):</label>
+                    <textarea id="suspension-reason-text" rows="3" placeholder="Zadejte odůvodnění disciplinární komise..." class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white"></textarea>
+                </div>
+                <button onclick="submitNewSuspension()" class="w-full py-2 bg-[#f33332] hover:bg-opacity-90 text-white font-bold rounded-lg shadow-lg">Potvrdit a Udělit Trest</button>
+            </div>
+        </div>
+
+        <!-- PLAYER CAREER PROFIL MODAL -->
+        <div id="modal-player-card" class="hidden bg-[#0e1a4f] border border-[#aefb12]/40 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl relative z-50">
+            <div id="player-card-content"></div>
+        </div>
+
+        <!-- MATCH PROTOCOL MODAL (FIS ZOU) -->
+        <div id="modal-match-protocol" class="hidden bg-[#0e1a4f] border border-[#1e307d] rounded-2xl w-full max-w-5xl max-h-[92vh] overflow-y-auto shadow-2xl p-6 space-y-6 relative z-40">
+            <div id="match-protocol-content"></div>
+        </div>
+
+        <!-- KONTUMACE UTKÁNÍ MODAL -->
+        <div id="modal-forfeit" class="hidden bg-[#0e1a4f] border border-[#f33332]/40 rounded-2xl w-full max-w-lg p-6 space-y-4 shadow-2xl relative z-50">
+            <div class="flex justify-between items-center border-b border-[#1e307d] pb-3">
+                <h3 class="font-bold text-lg text-[#f33332] flex items-center gap-2"><i class="fa-solid fa-gavel"></i> Kontumace Utkání (3:0)</h3>
+                <button onclick="closeSpecificModal('modal-forfeit')" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="space-y-4 text-xs">
+                <div>
+                    <label class="block text-gray-400 mb-1">1. Vyberte Soutěž:</label>
+                    <select id="forfeit-comp-select" onchange="onForfeitCompChange()" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-bold">
+                        <option value="CVFL 1. Liga">CVFL 1. Liga</option>
+                        <option value="CVFL 2. Liga">CVFL 2. Liga</option>
+                        <option value="MOL Cup">MOL Cup</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-gray-400 mb-1">2. Vyberte Kolo / Fázi:</label>
+                    <select id="forfeit-round-select" onchange="onForfeitRoundChange()" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-bold"></select>
+                </div>
+                <div>
+                    <label class="block text-gray-400 mb-1">3. Vyberte Utkání:</label>
+                    <select id="forfeit-match-select" onchange="updateForfeitTeamsOptions()" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-bold"></select>
+                </div>
+                <div>
+                    <label class="block text-gray-400 mb-1">4. Vítězný Tým Kontumačně (3:0):</label>
+                    <select id="forfeit-winner-team" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-bold"></select>
+                </div>
+                <div>
+                    <label class="block text-gray-400 mb-1">Důvod Kontumace (Povinné):</label>
+                    <input type="text" id="forfeit-reason-input" placeholder="Zadejte odůvodnění..." class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white">
+                </div>
+                <button onclick="executeForfeit()" class="w-full py-2.5 bg-[#f33332] hover:bg-opacity-90 font-bold rounded-lg text-white shadow-lg">Potvrdit a Kontumovat (3:0)</button>
+            </div>
+        </div>
+
+        <!-- POSTPONE MATCH MODAL (ODLOŽENÍ UTKÁNÍ DO TBA) -->
+        <div id="modal-postpone" class="hidden bg-[#0e1a4f] border border-blue-500/40 rounded-2xl w-full max-w-lg p-6 space-y-4 shadow-2xl relative z-50">
+            <div class="flex justify-between items-center border-b border-[#1e307d] pb-3">
+                <h3 class="font-bold text-lg text-blue-400 flex items-center gap-2"><i class="fa-solid fa-clock-rotate-left"></i> Odložit Utkání (na TBA)</h3>
+                <button onclick="closeSpecificModal('modal-postpone')" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="space-y-4 text-xs">
+                <div>
+                    <label class="block text-gray-400 mb-1">1. Vyberte Soutěž:</label>
+                    <select id="postpone-comp-select" onchange="onPostponeCompChange()" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-bold">
+                        <option value="CVFL 1. Liga">CVFL 1. Liga</option>
+                        <option value="CVFL 2. Liga">CVFL 2. Liga</option>
+                        <option value="MOL Cup">MOL Cup</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-gray-400 mb-1">2. Vyberte Kolo / Fázi:</label>
+                    <select id="postpone-round-select" onchange="onPostponeRoundChange()" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-bold"></select>
+                </div>
+                <div>
+                    <label class="block text-gray-400 mb-1">3. Vyberte Utkání:</label>
+                    <select id="postpone-match-select" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-bold"></select>
+                </div>
+                <div>
+                    <label class="block text-gray-400 mb-1">Důvod Odložení (Povinné):</label>
+                    <input type="text" id="postpone-reason-input" placeholder="Zadejte odůvodnění..." class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white">
+                </div>
+                <button onclick="executePostpone()" class="w-full py-2.5 bg-blue-600 hover:bg-opacity-90 font-bold rounded-lg text-white shadow-lg">Potvrdit a Odložit Utkání do TBA</button>
+            </div>
+        </div>
+
+        <!-- RESCHEDULE MATCH MODAL (PŘELOŽENÍ UTKÁNÍ S NOVÝM DATEM) -->
+        <div id="modal-reschedule" class="hidden bg-[#0e1a4f] border border-emerald-500/40 rounded-2xl w-full max-w-lg p-6 space-y-4 shadow-2xl relative z-50">
+            <div class="flex justify-between items-center border-b border-[#1e307d] pb-3">
+                <h3 class="font-bold text-lg text-emerald-400 flex items-center gap-2"><i class="fa-solid fa-calendar-days"></i> Přeložit Utkání</h3>
+                <button onclick="closeSpecificModal('modal-reschedule')" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="space-y-4 text-xs">
+                <div>
+                    <label class="block text-gray-400 mb-1">1. Vyberte Soutěž:</label>
+                    <select id="reschedule-comp-select" onchange="onRescheduleCompChange()" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-bold">
+                        <option value="CVFL 1. Liga">CVFL 1. Liga</option>
+                        <option value="CVFL 2. Liga">CVFL 2. Liga</option>
+                        <option value="MOL Cup">MOL Cup</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-gray-400 mb-1">2. Vyberte Kolo / Fázi:</label>
+                    <select id="reschedule-round-select" onchange="onRescheduleRoundChange()" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-bold"></select>
+                </div>
+                <div>
+                    <label class="block text-gray-400 mb-1">3. Vyberte Utkání:</label>
+                    <select id="reschedule-match-select" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-bold"></select>
+                </div>
+                <div>
+                    <label class="block text-gray-400 mb-1">Nové Datum a Čas Utkání (Povinné):</label>
+                    <input type="datetime-local" id="reschedule-new-date-input" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-bold">
+                </div>
+                <div>
+                    <label class="block text-gray-400 mb-1">Důvod Přeložení (Povinné):</label>
+                    <input type="text" id="reschedule-reason-input" placeholder="Zadejte odůvodnění..." class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white">
+                </div>
+                <button onclick="executeReschedule()" class="w-full py-2.5 bg-emerald-600 hover:bg-opacity-90 font-bold rounded-lg text-white shadow-lg">Potvrdit a Přeložit Utkání</button>
+            </div>
+        </div>
+
+        <!-- FREE AGENTS MODAL -->
+        <div id="modal-free-agents" class="hidden bg-[#0e1a4f] border border-[#1e307d] rounded-2xl w-full max-w-2xl p-6 space-y-4 shadow-2xl relative z-50">
+            <div class="flex justify-between items-center border-b border-[#1e307d] pb-3">
+                <h3 class="font-bold text-lg text-[#aefb12] flex items-center gap-2"><i class="fa-solid fa-users-viewfinder"></i> Volní Hráči Pool</h3>
+                <button onclick="closeSpecificModal('modal-free-agents')" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="overflow-x-auto max-h-80 overflow-y-auto">
+                <table class="w-full text-xs text-left">
+                    <thead class="bg-[#13236b] text-gray-400 uppercase">
+                        <tr>
+                            <th class="p-2">Roblox Nick</th>
+                            <th class="p-2">Discord Nick</th>
+                            <th class="p-2 text-right">Akce</th>
+                        </tr>
+                    </thead>
+                    <tbody id="free-agents-table-body" class="divide-y divide-[#1e307d]"></tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- TOAST NOTIFICATIONS -->
+    <div id="toast-container" class="fixed bottom-5 right-5 z-[120] space-y-2 pointer-events-none flex flex-col items-end"></div>
+
+    <!-- JAVASCRIPT LOGIKA -->
+    <script>
+        let currentUserRole = 'Admin';
+        let activeTab = 'dashboard';
+        let activeCompTab = 'liga1';
+        let activeTeamId = 1;
+        let isMaintenanceMode = false;
+        let unsavedChangesGuard = false;
+        let activeEditRefId = null;
+
+        let activeSlotMatchId = null;
+        let activeSlotRole = null;
+        let activeStaffTeamSide = 'home';
+        let activeRosterMatchId = null;
+        let activeRosterSide = 'home';
+
+        let pendingConfirmCallback = null;
+
+        const teamsData = [
+            { id: 1, name: "AC Sparta Praha", league: "1_Liga", basePoints: 0, deducted: 0, deductionReason: "", played: 0, won: 0, drawn: 0, lost: 0, gf: 0, ga: 0 },
+            { id: 2, name: "SK Slavia Praha", league: "1_Liga", basePoints: 0, deducted: 0, deductionReason: "", played: 0, won: 0, drawn: 0, lost: 0, gf: 0, ga: 0 },
+            { id: 3, name: "FC Viktoria Plzeň", league: "1_Liga", basePoints: 0, deducted: 0, deductionReason: "", played: 0, won: 0, drawn: 0, lost: 0, gf: 0, ga: 0 },
+            { id: 4, name: "FC Baník Ostrava", league: "1_Liga", basePoints: 0, deducted: 0, deductionReason: "", played: 0, won: 0, drawn: 0, lost: 0, gf: 0, ga: 0 },
+            { id: 5, name: "FC Slovan Liberec", league: "1_Liga", basePoints: 0, deducted: 0, deductionReason: "", played: 0, won: 0, drawn: 0, lost: 0, gf: 0, ga: 0 },
+            { id: 6, name: "SK Sigma Olomouc", league: "1_Liga", basePoints: 0, deducted: 0, deductionReason: "", played: 0, won: 0, drawn: 0, lost: 0, gf: 0, ga: 0 },
+            { id: 7, name: "FK Mladá Boleslav", league: "1_Liga", basePoints: 0, deducted: 0, deductionReason: "", played: 0, won: 0, drawn: 0, lost: 0, gf: 0, ga: 0 },
+            { id: 8, name: "Bohemians 1905", league: "1_Liga", basePoints: 0, deducted: 0, deductionReason: "", played: 0, won: 0, drawn: 0, lost: 0, gf: 0, ga: 0 },
+            
+            { id: 9, name: "Zbrojovka Brno", league: "2_Liga", basePoints: 0, deducted: 0, deductionReason: "", played: 0, won: 0, drawn: 0, lost: 0, gf: 0, ga: 0 },
+            { id: 10, name: "FK Teplice", league: "2_Liga", basePoints: 0, deducted: 0, deductionReason: "", played: 0, won: 0, drawn: 0, lost: 0, gf: 0, ga: 0 },
+            { id: 11, name: "FK Pardubice", league: "2_Liga", basePoints: 0, deducted: 0, deductionReason: "", played: 0, won: 0, drawn: 0, lost: 0, gf: 0, ga: 0 },
+            { id: 12, name: "FC Fastav Zlín", league: "2_Liga", basePoints: 0, deducted: 0, deductionReason: "", played: 0, won: 0, drawn: 0, lost: 0, gf: 0, ga: 0 },
+            { id: 13, name: "MFK Karviná", league: "2_Liga", basePoints: 0, deducted: 0, deductionReason: "", played: 0, won: 0, drawn: 0, lost: 0, gf: 0, ga: 0 },
+            { id: 14, name: "FK Jablonec", league: "2_Liga", basePoints: 0, deducted: 0, deductionReason: "", played: 0, won: 0, drawn: 0, lost: 0, gf: 0, ga: 0 },
+            { id: 15, name: "FK Dukla Praha", league: "2_Liga", basePoints: 0, deducted: 0, deductionReason: "", played: 0, won: 0, drawn: 0, lost: 0, gf: 0, ga: 0 },
+            { id: 16, name: "FC Vysočina Jihlava", league: "2_Liga", basePoints: 0, deducted: 0, deductionReason: "", played: 0, won: 0, drawn: 0, lost: 0, gf: 0, ga: 0 }
+        ];
+
+        const playersData = [
+            { id: 101, teamId: 1, robloxNick: "GoalieKing99", discordNick: "jan_gk#1234", goals: 0, assists: 0, cleanSheets: 0, motm: 0, isFreeAgent: false },
+            { id: 102, teamId: 1, robloxNick: "GoalMachine_CZ", discordNick: "petr_striker", goals: 0, assists: 0, cleanSheets: 0, motm: 0, isFreeAgent: false },
+            { id: 103, teamId: 1, robloxNick: "MidfieldMaestro", discordNick: "mkucera", goals: 0, assists: 0, cleanSheets: 0, motm: 0, isFreeAgent: false },
+            { id: 104, teamId: 1, robloxNick: "DefensiveWall", discordNick: "tomas_def", goals: 0, assists: 0, cleanSheets: 0, motm: 0, isFreeAgent: false },
+            { id: 105, teamId: 1, robloxNick: "SpeedyWinger", discordNick: "lukas_winger", goals: 0, assists: 0, cleanSheets: 0, motm: 0, isFreeAgent: false },
+            { id: 201, teamId: 2, robloxNick: "Robloxian123", discordNick: "mhorak", goals: 0, assists: 0, cleanSheets: 0, motm: 0, isFreeAgent: false },
+            { id: 301, teamId: null, robloxNick: "FreeAgentKing", discordNick: "fprochazka", goals: 0, assists: 0, cleanSheets: 0, motm: 0, isFreeAgent: true }
+        ];
+
+        const refereesData = [
+            { id: 1, robloxNick: "RefMaster_CZ", discordNick: "jan_referee#1234", license: "A", status: "Active", isDelegate: true },
+            { id: 2, robloxNick: "ArbitrRoblox", discordNick: "pavel_ref#9999", license: "B", status: "Active", isDelegate: false }
+        ];
+
+        const suspensionsData = [];
+        let matchesData = [];
+
+        // DISCIPLINÁRNÍ AUDIT LOGS
+        const dkAuditLogs = [
+            { id: 1, time: "16.10. 18:00", type: "INICIALIZACE", target: "Systém DK", details: "Disciplinární systém byl inicializován." }
+        ];
+
+        /* POTVRZOVACÍ ABSOLUTNÍ DIALOG */
+        function openConfirmModal(title, message, onConfirmCallback, requireReason = true) {
+            document.getElementById('confirm-dialog-title').textContent = title || "Potvrzení Akce";
+            document.getElementById('confirm-dialog-message').textContent = message || "Opravdu chcete tuto akce provést?";
+            document.getElementById('confirm-reason-input').value = '';
+            
+            const reasonBox = document.getElementById('confirm-reason-box');
+            if (requireReason) {
+                reasonBox.classList.remove('hidden');
+            } else {
+                reasonBox.classList.add('hidden');
+            }
+
+            pendingConfirmCallback = (reason) => onConfirmCallback(reason, requireReason);
+            document.getElementById('confirm-overlay').classList.remove('hidden');
+        }
+
+        function closeConfirmModal(confirmed) {
+            if (confirmed) {
+                const reasonBox = document.getElementById('confirm-reason-box');
+                const isReasonRequired = !reasonBox.classList.contains('hidden');
+                const reason = document.getElementById('confirm-reason-input').value.trim();
+                
+                if (isReasonRequired && !reason) {
+                    showToast("Pro tuto operaci je povinné vyplnit důvod!", true);
+                    return;
+                }
+                if (typeof pendingConfirmCallback === 'function') {
+                    pendingConfirmCallback(reason);
+                }
+            }
+            document.getElementById('confirm-overlay').classList.add('hidden');
+            pendingConfirmCallback = null;
+        }
+
+        function logDKAction(type, target, details) {
+            const now = new Date();
+            const timeStr = `${now.getDate()}.${now.getMonth() + 1}. ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+            dkAuditLogs.unshift({
+                id: Date.now(),
+                time: timeStr,
+                type: type,
+                target: target,
+                details: details
+            });
+            renderDKAuditLogs();
+        }
+
+        function renderDKAuditLogs() {
+            const body = document.getElementById('dk-audit-log-body');
+            if (!body) return;
+
+            body.innerHTML = dkAuditLogs.map(l => `
+                <tr class="hover:bg-[#13236b]/60">
+                    <td class="p-2 text-gray-400">${l.time}</td>
+                    <td class="p-2 font-bold text-purple-400">${l.type}</td>
+                    <td class="p-2 font-bold text-white">${l.target}</td>
+                    <td class="p-2 text-gray-300">${l.details}</td>
+                </tr>
+            `).join('');
+        }
+
+        function switchTab(tabId) {
+            if (unsavedChangesGuard) {
+                openConfirmModal("Opustit Zápis O Utkání?", "Máte neuložené změny v zápisu o utkání! Opravdu chcete opustit stránku bez uložení?", (reason) => {
+                    unsavedChangesGuard = false;
+                    switchTab(tabId);
+                }, false);
+                return;
+            }
+
+            activeTab = tabId;
+            ['dashboard', 'competitions', 'matches', 'teams', 'referees', 'disciplinary', 'admin'].forEach(tab => {
+                const el = document.getElementById(`tab-${tab}`);
+                const nav = document.getElementById(`nav-${tab}`);
+                if (el) el.classList.add('hidden');
+                if (nav) {
+                    nav.classList.remove('text-[#aefb12]', 'bg-[#aefb12]/10');
+                    nav.classList.add('text-gray-300');
+                }
+            });
+
+            const activeEl = document.getElementById(`tab-${tabId}`);
+            const activeNav = document.getElementById(`nav-${tabId}`);
+            if (activeEl) activeEl.classList.remove('hidden');
+            if (activeNav) {
+                activeNav.classList.add('text-[#aefb12]', 'bg-[#aefb12]/10');
+                activeNav.classList.remove('text-gray-300');
+            }
+
+            if (tabId === 'dashboard') renderDashboard();
+            if (tabId === 'competitions') renderCompetitions();
+            if (tabId === 'matches') { onCompetitionFilterChange(); renderMatches(); }
+            if (tabId === 'teams') renderTeams();
+            if (tabId === 'referees') renderRefereesTab();
+            if (tabId === 'disciplinary') renderDisciplinary();
+            if (tabId === 'admin') renderAdmin();
+        }
+
+        /* UŽIVATELSKÉ ROLE A DYNAMICKÝ ODZNAČEK */
+        function setUserRole(role) {
+            currentUserRole = role;
+            const badge = document.getElementById('active-role-badge');
+            const welcomeTag = document.getElementById('role-welcome-tag');
+            
+            const roleConfig = {
+                'Admin': { label: 'Vedení ligy', bg: 'bg-[#aefb12]', text: 'text-[#13236b]' },
+                'DK': { label: 'Disciplinární komise (DK)', bg: 'bg-[#f33332]', text: 'text-white' },
+                'Referee_Manager': { label: 'Vedení rozhodčích', bg: 'bg-[#05fda3]', text: 'text-[#13236b]' },
+                'Team_Manager': { label: 'Vedoucí mužstva', bg: 'bg-purple-500', text: 'text-white' },
+                'Referee': { label: 'Rozhodčí', bg: 'bg-gray-300', text: 'text-[#13236b]' },
+                'Delegate': { label: 'Delegát Utkání', bg: 'bg-amber-400', text: 'text-[#13236b]' }
+            };
+
+            const cfg = roleConfig[role] || { label: role, bg: 'bg-[#aefb12]', text: 'text-[#13236b]' };
+
+            if (badge) {
+                badge.textContent = cfg.label;
+                badge.className = `px-2 py-0.5 rounded text-[10px] ${cfg.bg} ${cfg.text} uppercase font-black`;
+            }
+
+            if (welcomeTag) {
+                welcomeTag.textContent = role === 'Admin' ? 
+                    `PŘIHLÁŠEN ROZHRANÍM: VEDENÍ LIGY (SUPER-ADMIN - PLNÁ PRÁVA)` : 
+                    `PŘIHLÁŠEN ROZHRANÍM: ${cfg.label.toUpperCase()}`;
+            }
+            
+            applyRBACPermissions();
+            showToast(`Uživatelská role přepnuta na: ${cfg.label}`);
+            document.getElementById('role-dropdown').classList.add('hidden');
+
+            if (currentUserRole !== 'Admin') {
+                if ((currentUserRole === 'Team_Manager' || currentUserRole === 'Referee' || currentUserRole === 'Delegate') && activeTab === 'admin') {
+                    switchTab('dashboard');
+                } else {
+                    switchTab(activeTab);
+                }
+            } else {
+                switchTab(activeTab);
+            }
+        }
+
+        function applyRBACPermissions() {
+            const permissions = {
+                'Admin': ['role-perm-admin', 'role-perm-dk', 'role-perm-ref-mgr', 'role-perm-team-mgr', 'role-perm-referee', 'role-perm-delegate'],
+                'DK': ['role-perm-dk'],
+                'Referee_Manager': ['role-perm-ref-mgr', 'role-perm-referee'],
+                'Team_Manager': ['role-perm-team-mgr'],
+                'Referee': ['role-perm-referee'],
+                'Delegate': ['role-perm-delegate']
+            };
+
+            const allowedClasses = permissions[currentUserRole] || [];
+
+            const allPermElements = document.querySelectorAll('[class*="role-perm-"]');
+            allPermElements.forEach(el => {
+                const classList = Array.from(el.classList);
+                const permClasses = classList.filter(c => c.startsWith('role-perm-'));
+                
+                const hasAccess = permClasses.some(pc => allowedClasses.includes(pc));
+                if (hasAccess) {
+                    el.classList.remove('hidden');
+                } else {
+                    el.classList.add('hidden');
+                }
+            });
+        }
+
+        /* STATISTIKY A PŘEHLED ZÁPASŮ NA HLAVNÍ STRÁNCE DLE POŽADAVKU */
+        function renderDashboard() {
+            const list = document.getElementById('dashboard-matches-list');
+            
+            const pStat = document.getElementById('dash-stat-players');
+            const rStat = document.getElementById('dash-stat-referees');
+            const tStat = document.getElementById('dash-stat-teams');
+
+            if (pStat) pStat.textContent = `${playersData.length} Hráčů`;
+            if (rStat) rStat.textContent = `${refereesData.length} Rozhodčích`;
+            if (tStat) tStat.textContent = `${teamsData.length} Klubů`;
+
+            if (!list) return;
+
+            if (matchesData.length === 0) {
+                list.innerHTML = `<div class="p-6 bg-[#0e1a4f] rounded-xl border border-[#1e307d] text-center text-gray-400 text-xs">V systému zatím nejsou žádná zápasy. Nová utkání vytvoříte v sekci Administrace.</div>`;
+                return;
+            }
+
+            list.innerHTML = matchesData.map(m => {
+                const home = teamsData.find(t => t.id === m.homeTeamId);
+                const away = teamsData.find(t => t.id === m.awayTeamId);
+
+                const d = (m.matchDate && m.matchDate !== 'TBA') ? new Date(m.matchDate) : null;
+                const dateFormatted = m.matchDate === 'TBA' ? 'TBA' : (d ? `${d.getDate()}.${d.getMonth() + 1}.` : 'TBD');
+                const timeFormatted = m.matchDate === 'TBA' ? 'TBA' : (d ? d.toLocaleTimeString('cs-CZ', {hour: '2-digit', minute:'2-digit'}) : 'TBD');
+                const stadiumFormatted = m.stadium || 'Stadion neuveden';
+
+                return `
+                    <div class="bg-[#0e1a4f] p-4 rounded-xl border border-[#1e307d] flex flex-col sm:flex-row justify-between items-center gap-4 shadow-md hover:border-[#aefb12]/50 transition">
+                        <div class="flex items-center space-x-4 w-full sm:w-auto justify-between sm:justify-start">
+                            <div class="text-right w-32 font-bold text-sm truncate text-white">${home ? home.name : ''}</div>
+                            <div class="px-3 py-1 bg-[#13236b] rounded-lg text-[#aefb12] font-mono font-black text-sm border border-[#1e307d]">
+                                ${m.status === 'Completed' || m.status === 'In_Progress' ? `${m.homeScore} : ${m.awayScore}` : (m.status === 'Postponed' ? 'TBA' : 'VS')}
+                            </div>
+                            <div class="text-left w-32 font-bold text-sm truncate text-white">${away ? away.name : ''}</div>
+                        </div>
+                        <div class="flex flex-col sm:flex-row items-end sm:items-center space-y-1 sm:space-y-0 sm:space-x-3 text-xs text-right sm:text-left">
+                            <div class="text-gray-300 font-medium">
+                                <div><i class="fa-regular fa-calendar mr-1 text-[#aefb12]"></i> ${dateFormatted} ${timeFormatted}</div>
+                                <div class="text-[11px] text-gray-400"><i class="fa-solid fa-location-dot mr-1 text-[#05fda3]"></i> ${stadiumFormatted}</div>
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <span class="px-2 py-0.5 rounded text-[10px] font-bold ${m.status === 'Completed' ? 'bg-gray-800 text-gray-300' : (m.status === 'Postponed' ? 'bg-amber-500/20 text-amber-300' : 'bg-[#aefb12]/20 text-[#aefb12]')}">
+                                    ${m.status === 'Postponed' ? 'Odloženo' : m.status}
+                                </span>
+                                <button onclick="openMatchProtocol(${m.id})" class="px-3 py-1 bg-[#aefb12] hover:bg-opacity-90 text-[#13236b] font-black rounded-lg transition">
+                                    Zápis Utkání
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function switchCompTab(comp) {
+            activeCompTab = comp;
+            ['liga1', 'liga2', 'nadstavba', 'baraz', 'molcup'].forEach(c => {
+                const btn = document.getElementById(`comp-btn-${c}`);
+                if (btn) {
+                    if (c === comp) {
+                        if (c === 'liga1') btn.className = "px-4 py-2 font-black text-sm rounded-lg bg-[#aefb12] text-[#13236b] shadow";
+                        if (c === 'liga2') btn.className = "px-4 py-2 font-black text-sm rounded-lg bg-[#05fda3] text-[#13236b] shadow";
+                        if (c === 'nadstavba') btn.className = "px-4 py-2 font-black text-sm rounded-lg bg-[#1e307d] text-white shadow";
+                        if (c === 'baraz') btn.className = "px-4 py-2 font-black text-sm rounded-lg bg-[#1e307d] text-white shadow";
+                        if (c === 'molcup') btn.className = "px-4 py-2 font-black text-sm rounded-lg bg-[#004a49] text-[#7ecb5b] border border-[#f33332] shadow";
+                    } else {
+                        const isHidden = btn.classList.contains('hidden');
+                        btn.className = `px-4 py-2 font-bold text-sm rounded-lg text-gray-300 hover:bg-[#1e307d] ${isHidden ? 'hidden' : ''}`;
+                    }
+                }
+            });
+            renderCompetitions();
+        }
+
+        /* POMOCNÁ FUNKCE PRO POROVNÁNÍ TÝMŮ DLE PRAVIDEL */
+        function compareTeams1Liga(a, b) {
+            if (b.finalPoints !== a.finalPoints) return b.finalPoints - a.finalPoints;
+
+            // Vyšší počet bodů získaný v základní části
+            if (b.basePoints !== a.basePoints) return b.basePoints - a.basePoints;
+
+            // Vzájemná utkání v základní části
+            let aHeadPoints = 0, bHeadPoints = 0;
+            let aHeadGf = 0, bHeadGf = 0;
+            let aHeadGa = 0, bHeadGa = 0;
+
+            matchesData.filter(m => m.status === 'Completed' && m.competition === 'CVFL 1. Liga').forEach(m => {
+                if ((m.homeTeamId === a.id && m.awayTeamId === b.id) || (m.homeTeamId === b.id && m.awayTeamId === a.id)) {
+                    let aScore = m.homeTeamId === a.id ? m.homeScore : m.awayScore;
+                    let bScore = m.homeTeamId === b.id ? m.homeScore : m.awayScore;
+
+                    aHeadGf += aScore; aHeadGa += bScore;
+                    bHeadGf += bScore; bHeadGa += aScore;
+
+                    if (aScore > bScore) aHeadPoints += 3;
+                    else if (bScore > aScore) bHeadPoints += 3;
+                    else { aHeadPoints += 1; bHeadPoints += 1; }
+                }
+            });
+
+            // Vyšší počet bodů ze vzájemných utkání
+            if (bHeadPoints !== aHeadPoints) return bHeadPoints - aHeadPoints;
+
+            // Brankový rozdíl ze vzájemných utkání
+            let aHeadDiff = aHeadGf - aHeadGa;
+            let bHeadDiff = bHeadGf - bHeadGa;
+            if (bHeadDiff !== aHeadDiff) return bHeadDiff - aHeadDiff;
+
+            // Vyšší počet vstřelených branek ve vzájemných utkáních
+            if (bHeadGf !== aHeadGf) return bHeadGf - aHeadGf;
+
+            // Vyšší brankový rozdíl ze všech utkání v celé soutěži
+            let aDiff = a.gf - a.ga;
+            let bDiff = b.gf - b.ga;
+            if (bDiff !== aDiff) return bDiff - aDiff;
+
+            // Vyšší počet vstřelených branek v celé soutěži
+            if (b.gf !== a.gf) return b.gf - a.gf;
+
+            // Los z důvodu statistik proveden pouze v případě, že všechny týmy v soutěži mají odehraných 14 utkání
+            const leagueTeams = teamsData.filter(t => t.league === a.league);
+            const allHave14Matches = leagueTeams.every(t => t.played >= 14);
+
+            if (allHave14Matches) {
+                if (!a._randomOrder) a._randomOrder = Math.random();
+                if (!b._randomOrder) b._randomOrder = Math.random();
+                return a._randomOrder - b._randomOrder;
+            }
+
+            return 0;
+        }
+
+        function renderCompetitions() {
+            const container = document.getElementById('comp-view-container');
+            if (!container) return;
+
+            if (activeCompTab === 'liga1' || activeCompTab === 'liga2') {
+                const targetLeague = activeCompTab === 'liga1' ? '1_Liga' : '2_Liga';
+                const accentColor = activeCompTab === 'liga1' ? '#aefb12' : '#05fda3';
+                
+                let teams = teamsData.filter(t => t.league === targetLeague).map(t => ({
+                    ...t,
+                    finalPoints: t.basePoints - t.deducted
+                }));
+
+                if (activeCompTab === 'liga1') {
+                    teams.sort(compareTeams1Liga);
+                } else {
+                    teams.sort((a, b) => b.finalPoints - a.finalPoints);
+                }
+
+                const deductedTeams = teams.filter(t => t.deducted > 0);
+
+                container.innerHTML = `
+                    <div class="flex justify-between items-center mb-4 border-b border-[#1e307d] pb-3">
+                        <h3 class="font-black text-lg" style="color: ${accentColor}">Tabulka ${activeCompTab === 'liga1' ? 'CVFL 1. Liga' : 'CVFL 2. Liga'}</h3>
+                        <span class="text-xs text-gray-400">Základní část (14 kol)</span>
+                    </div>
+                    <table class="w-full text-xs text-left">
+                        <thead class="bg-[#13236b] text-gray-300 uppercase">
+                            <tr>
+                                <th class="p-2.5 text-center">#</th>
+                                <th class="p-2.5">Tým</th>
+                                <th class="p-2.5 text-center">Z</th>
+                                <th class="p-2.5 text-center">V</th>
+                                <th class="p-2.5 text-center">R</th>
+                                <th class="p-2.5 text-center">P</th>
+                                <th class="p-2.5 text-center">Skóre</th>
+                                <th class="p-2.5 text-right font-black" style="color: ${accentColor}">Body</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-[#1e307d]">
+                            ${teams.map((t, idx) => {
+                                let badgeBgClass = "bg-[#13236b] text-gray-300";
+                                if (activeCompTab === 'liga1') {
+                                    if (idx < 4) badgeBgClass = "bg-[#aefb12] text-[#13236b] font-black";
+                                    else if (idx >= teams.length - 4) badgeBgClass = "bg-[#f33332] text-white font-black";
+                                } else if (activeCompTab === 'liga2') {
+                                    if (idx === 0) badgeBgClass = "bg-[#aefb12] text-[#13236b] font-black";
+                                    else if (idx === 1 || idx === 2) badgeBgClass = "bg-[#05fda3] text-[#13236b] font-black";
+                                }
+                                return `
+                                <tr class="hover:bg-[#13236b]/60">
+                                    <td class="p-2.5 text-center font-bold">
+                                        <span class="inline-block w-6 h-6 leading-6 rounded-full text-center ${badgeBgClass}">
+                                            ${idx + 1}
+                                        </span>
+                                    </td>
+                                    <td class="p-2.5 font-bold text-white cursor-pointer hover:underline" onclick="switchTab('teams'); selectTeam(${t.id});">${t.name}</td>
+                                    <td class="p-2.5 text-center text-gray-400">${t.played}</td>
+                                    <td class="p-2.5 text-center font-bold" style="color: ${accentColor}">${t.won}</td>
+                                    <td class="p-2.5 text-center text-gray-400">${t.drawn}</td>
+                                    <td class="p-2.5 text-center text-[#f33332]">${t.lost}</td>
+                                    <td class="p-2.5 text-center font-mono text-gray-300">${t.gf}:${t.ga}</td>
+                                    <td class="p-2.5 text-right font-black text-sm" style="color: ${accentColor}">${t.finalPoints}</td>
+                                </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+
+                    ${activeCompTab === 'liga1' ? `
+                        <div class="mt-4 pt-3 border-t border-[#1e307d] space-y-1 text-xs">
+                            <div class="flex items-center space-x-2 text-gray-300">
+                                <span class="w-3 h-3 rounded-full bg-[#aefb12] inline-block"></span>
+                                <span>Skupina o titul</span>
+                            </div>
+                            <div class="flex items-center space-x-2 text-gray-300">
+                                <span class="w-3 h-3 rounded-full bg-[#f33332] inline-block"></span>
+                                <span>Skupina o udržení</span>
+                            </div>
+                        </div>
+                    ` : ''}
+
+                    ${activeCompTab === 'liga2' ? `
+                        <div class="mt-4 pt-3 border-t border-[#1e307d] space-y-1 text-xs">
+                            <div class="flex items-center space-x-2 text-gray-300">
+                                <span class="w-3 h-3 rounded-full bg-[#aefb12] inline-block"></span>
+                                <span>Postup</span>
+                            </div>
+                            <div class="flex items-center space-x-2 text-gray-300">
+                                <span class="w-3 h-3 rounded-full bg-[#05fda3] inline-block"></span>
+                                <span>Baráž o postup</span>
+                            </div>
+                        </div>
+                    ` : ''}
+
+                    ${deductedTeams.length > 0 ? `
+                        <div class="mt-4 pt-3 border-t border-[#1e307d] space-y-1.5 text-xs">
+                            ${deductedTeams.map(dt => `
+                                <div class="flex items-center space-x-2 text-gray-300">
+                                    <i class="fa-regular fa-circle-question text-gray-400"></i>
+                                    <span class="font-bold text-white">${dt.name}: <span class="text-[#f33332]">-${dt.deducted} bodů</span> <span class="text-gray-400 font-normal">(${dt.deductionReason || 'Rozhodnutí svazu'})</span></span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : ''}
+                `;
+            } else if (activeCompTab === 'nadstavba') {
+                container.innerHTML = `<div class="p-4 bg-[#13236b] rounded-xl text-xs text-gray-300">Skupina o Titul a Udržení</div>`;
+            } else if (activeCompTab === 'baraz') {
+                container.innerHTML = `<div class="p-4 bg-[#13236b] rounded-xl text-xs text-gray-300">Baráž o 1. Ligu</div>`;
+            } else if (activeCompTab === 'molcup') {
+                container.innerHTML = `<div class="p-6 bg-[#004a49] rounded-2xl border-2 border-[#f33332] space-y-4"><h3 class="font-black text-xl text-[#7ecb5b]">MOL CUP</h3></div>`;
+            }
+        }
+
+        function onCompetitionFilterChange() {
+            const comp = document.getElementById('match-filter-competition').value;
+            const roundSelect = document.getElementById('match-filter-round');
+
+            if (comp === 'MOL Cup') {
+                roundSelect.innerHTML = `
+                    <option value="ALL">Všechny Fáze MOL Cupu</option>
+                    <option value="Osmifinále">Osmifinále</option>
+                    <option value="Čtvrtfinále">Čtvrtfinále</option>
+                    <option value="Semifinále">Semifinále</option>
+                    <option value="Finále">Finále</option>
+                `;
+            } else {
+                let options = `<option value="ALL">Všechna Kola (1-14)</option>`;
+                for (let r = 1; r <= 14; r++) {
+                    options += `<option value="${r}">${r}. Kolo</option>`;
+                }
+                roundSelect.innerHTML = options;
+            }
+            renderMatches();
+        }
+
+        function renderMatches() {
+            const container = document.getElementById('matches-full-list');
+            if (!container) return;
+
+            const selectedComp = document.getElementById('match-filter-competition').value;
+            const selectedRound = document.getElementById('match-filter-round').value;
+            const selectedStatus = document.getElementById('match-filter-status').value;
+
+            let filtered = matchesData;
+
+            if (selectedComp !== 'ALL') {
+                filtered = filtered.filter(m => m.competition === selectedComp);
+            }
+
+            if (selectedRound !== 'ALL') {
+                if (selectedComp === 'MOL Cup') {
+                    filtered = filtered.filter(m => m.cupStage === selectedRound);
+                } else {
+                    filtered = filtered.filter(m => m.round === parseInt(selectedRound));
+                }
+            }
+
+            if (selectedStatus !== 'ALL') {
+                filtered = filtered.filter(m => m.status === selectedStatus);
+            }
+
+            if (filtered.length === 0) {
+                container.innerHTML = `<div class="col-span-2 p-8 bg-[#0e1a4f] rounded-xl border border-[#1e307d] text-center text-gray-400 text-xs">Žádné zápasy neodpovídají zvoleným filtrům.</div>`;
+                return;
+            }
+
+            container.innerHTML = filtered.map(m => {
+                const home = teamsData.find(t => t.id === m.homeTeamId);
+                const away = teamsData.find(t => t.id === m.awayTeamId);
+
+                const roundText = m.competition === 'MOL Cup' ? m.cupStage : `${m.round}. Kolo`;
+                const d = (m.matchDate && m.matchDate !== 'TBA') ? new Date(m.matchDate) : null;
+                const matchDateFormatted = m.matchDate === 'TBA' ? 'TBA' : (d ? `${d.getDate()}.${d.getMonth() + 1}. ${d.toLocaleTimeString('cs-CZ', {hour: '2-digit', minute:'2-digit'})}` : 'Termín TBD');
+
+                return `
+                    <div class="bg-[#0e1a4f] p-5 rounded-xl border border-[#1e307d] shadow-md flex flex-col justify-between space-y-4">
+                        <div class="flex justify-between items-center text-xs">
+                            <span class="font-bold text-[#aefb12]">${m.competition} — ${roundText}</span>
+                            <span class="text-gray-400">${m.stadium ? `<i class="fa-solid fa-location-dot mr-1"></i>${m.stadium} | ` : ''}${matchDateFormatted}</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <div class="text-center w-5/12 font-bold text-sm text-white">${home ? home.name : ''}</div>
+                            <div class="text-center font-black text-xl text-[#aefb12] px-3 py-1 bg-[#13236b] border border-[#1e307d] rounded">
+                                ${m.status === 'Completed' || m.status === 'In_Progress' ? `${m.homeScore} : ${m.awayScore}` : (m.status === 'Postponed' ? 'TBA' : 'VS')}
+                            </div>
+                            <div class="text-center w-5/12 font-bold text-sm text-white">${away ? away.name : ''}</div>
+                        </div>
+                        <div class="flex justify-between items-center border-t border-[#1e307d] pt-3 text-xs">
+                            <span class="text-gray-400"><i class="fa-solid fa-user-ninja mr-1"></i> ${m.referee ? m.referee : 'Nenominován'}</span>
+                            <button onclick="openMatchProtocol(${m.id})" class="px-4 py-1.5 bg-[#aefb12] hover:bg-opacity-90 text-[#13236b] font-black rounded-lg shadow">
+                                Zápis Utkání
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        /* ZÁPIS UTKÁNÍ (FIS ZOU) */
+        function openMatchProtocol(matchId) {
+            const match = matchesData.find(m => m.id === matchId);
+            if (!match) return;
+
+            const home = teamsData.find(t => t.id === match.homeTeamId);
+            const away = teamsData.find(t => t.id === match.awayTeamId);
+
+            if (!match.checks) match.checks = { fansIssue: false, systemIssue: false, playersIssue: false, homeIdentityChecked: false, awayIdentityChecked: false };
+            if (!match.periodChecks) match.periodChecks = { h1Started: false, h1Ended: false, h2Started: false, h2Ended: false };
+
+            const canEditEverything = ['Admin', 'DK', 'Referee_Manager', 'Referee'].includes(currentUserRole);
+            const isTeamMgr = currentUserRole === 'Team_Manager';
+
+            unsavedChangesGuard = (currentUserRole === 'Referee' || currentUserRole === 'Admin' || currentUserRole === 'DK');
+
+            const dateObj = (match.matchDate && match.matchDate !== 'TBA') ? new Date(match.matchDate) : null;
+            const dateOnlyFormatted = match.matchDate === 'TBA' ? 'TBA' : (dateObj ? `${dateObj.getDate()}.${dateObj.getMonth() + 1}.` : '16.10.');
+            const timeOnlyFormatted = match.matchDate === 'TBA' ? 'TBA' : (dateObj ? dateObj.toLocaleTimeString('cs-CZ', {hour: '2-digit', minute:'2-digit'}) : '18:00');
+
+            const modalContent = document.getElementById('match-protocol-content');
+            modalContent.innerHTML = `
+                <div class="border-b border-[#1e307d] pb-4 mb-4">
+                    <div class="flex flex-wrap items-center justify-between gap-4">
+                        <div>
+                            <span class="text-xs font-mono text-[#aefb12] uppercase tracking-wider">Oficiální Elektronický Zápis O Utkání (FIS ZOU)</span>
+                            <h2 class="text-2xl font-black text-white">${home ? home.name : ''} vs. ${away ? away.name : ''}</h2>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <span class="px-3 py-1 bg-amber-500/20 text-amber-400 border border-amber-500/30 text-xs font-bold rounded-lg">
+                                Stav: ${match.isLocked ? 'Uzamčeno' : (match.status === 'Completed' ? 'Odehráno' : (match.status === 'In_Progress' ? 'Probíhá' : (match.status === 'Postponed' ? 'Odloženo (TBA)' : 'Naplánováno')))}
+                            </span>
+                            <button onclick="closeSpecificModal('modal-match-protocol')" class="text-gray-400 hover:text-white ml-2"><i class="fa-solid fa-xmark text-xl"></i></button>
+                        </div>
+                    </div>
+
+                    <!-- HORNÍ PANEL DETAILŮ UTKÁNÍ -->
+                    <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mt-4 bg-[#13236b]/80 p-4 rounded-xl text-xs border border-[#1e307d]">
+                        <div>
+                            <label class="text-gray-400 block mb-1">Stadion</label>
+                            <input type="text" id="zou-stadium-input" value="${match.stadium || 'CVFL Aréna'}" ${currentUserRole !== 'Admin' ? 'disabled' : ''} onchange="updateMatchDetails(${match.id})" class="w-full bg-[#0e1a4f] border border-[#1e307d] p-1.5 rounded text-white font-semibold disabled:opacity-60">
+                        </div>
+                        <div>
+                            <label class="text-gray-400 block mb-1">Datum a Čas</label>
+                            <div class="flex space-x-1">
+                                <input type="text" id="zou-date-input" value="${dateOnlyFormatted}" disabled class="w-1/2 bg-[#0e1a4f] border border-[#1e307d] p-1.5 rounded text-white font-mono opacity-60">
+                                <input type="text" id="zou-time-input" value="${timeOnlyFormatted}" disabled class="w-1/2 bg-[#0e1a4f] border border-[#1e307d] p-1.5 rounded text-white font-mono opacity-60">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="text-gray-400 block mb-1">Hlavní Rozhodčí</label>
+                            <input type="text" id="zou-referee-input" value="${match.referee || 'Nenominován'}" disabled class="w-full bg-[#0e1a4f] border border-[#1e307d] p-1.5 rounded text-white font-semibold opacity-60">
+                        </div>
+                        <div>
+                            <label class="text-gray-400 block mb-1">Hlavní Pořadatel</label>
+                            <input type="text" id="zou-recorder-input" value="${match.recorder || 'Vedení Ligy'}" ${!canEditEverything || match.isLocked ? 'disabled' : ''} onchange="updateMatchDetails(${match.id})" class="w-full bg-[#0e1a4f] border border-[#1e307d] p-1.5 rounded text-white font-semibold disabled:opacity-60">
+                        </div>
+                        <div>
+                            <label class="text-gray-400 block mb-1">Diváci / Počet Zápasů</label>
+                            <input type="number" id="zou-spectators-input" value="${match.spectators || 120}" ${!canEditEverything || match.isLocked ? 'disabled' : ''} onchange="updateMatchDetails(${match.id})" class="w-full bg-[#0e1a4f] border border-[#1e307d] p-1.5 rounded text-white font-mono disabled:opacity-60">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex flex-wrap gap-1 border-b border-[#1e307d] mb-4 font-semibold text-xs text-gray-300">
+                    <button onclick="switchFISTab('sestavy')" id="fistab-sestavy" class="fis-tab-btn active px-3 py-2">Sestavy týmů</button>
+                    <button onclick="switchFISTab('realizacni')" id="fistab-realizacni" class="fis-tab-btn px-3 py-2">Realizační tým</button>
+                    <button onclick="switchFISTab('hraci-casti')" id="fistab-hraci-casti" class="fis-tab-btn px-3 py-2">Hrací části</button>
+                    <button onclick="switchFISTab('branky')" id="fistab-branky" class="fis-tab-btn px-3 py-2">Branky a Asistence</button>
+                    <button onclick="switchFISTab('vylouceni')" id="fistab-vylouceni" class="fis-tab-btn px-3 py-2">Karty</button>
+                    <button onclick="switchFISTab('online')" id="fistab-online" class="fis-tab-btn px-3 py-2">Komentář k utkání</button>
+                    <button onclick="switchFISTab('rozhodci')" id="fistab-rozhodci" class="fis-tab-btn px-3 py-2">Rozhodčí</button>
+                    <button onclick="switchFISTab('kontrola')" id="fistab-kontrola" class="fis-tab-btn px-3 py-2">Kontrola ZOU</button>
+                </div>
+
+                <!-- TAB 1: SESTAVY -->
+                <div id="fis-sec-sestavy" class="space-y-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="bg-[#13236b] p-4 rounded-xl border border-[#1e307d] space-y-3">
+                            <div class="flex justify-between items-center border-b border-[#1e307d] pb-2">
+                                <div>
+                                    <h3 class="font-bold text-[#aefb12] text-sm">${home ? home.name : ''}</h3>
+                                    <span class="text-[10px] text-gray-400">Max 10 hráčů, 5 základní sestava, 1 Brankář</span>
+                                </div>
+                                ${(canEditEverything || isTeamMgr) && !match.isLocked ? `
+                                <button onclick="openAddPlayerToRosterModal(${match.id}, 'home')" class="px-2.5 py-1 bg-[#aefb12] text-[#13236b] font-black rounded text-[11px] shadow hover:bg-opacity-90">
+                                    + Přidat Hráče
+                                </button>` : ''}
+                            </div>
+                            <div id="home-roster-container" class="space-y-2 text-xs">
+                                ${renderRosterList(match, 'home')}
+                            </div>
+                        </div>
+
+                        <div class="bg-[#13236b] p-4 rounded-xl border border-[#1e307d] space-y-3">
+                            <div class="flex justify-between items-center border-b border-[#1e307d] pb-2">
+                                <div>
+                                    <h3 class="font-bold text-[#05fda3] text-sm">${away ? away.name : ''}</h3>
+                                    <span class="text-[10px] text-gray-400">Max 10 hráčů, 5 základní sestava, 1 Brankář</span>
+                                </div>
+                                ${(canEditEverything || isTeamMgr) && !match.isLocked ? `
+                                <button onclick="openAddPlayerToRosterModal(${match.id}, 'away')" class="px-2.5 py-1 bg-[#05fda3] text-[#13236b] font-black rounded text-[11px] shadow hover:bg-opacity-90">
+                                    + Přidat Hráče
+                                </button>` : ''}
+                            </div>
+                            <div id="away-roster-container" class="space-y-2 text-xs">
+                                ${renderRosterList(match, 'away')}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 2: REALIZAČNÍ TÝM -->
+                <div id="fis-sec-realizacni" class="hidden space-y-4 text-xs">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="bg-[#13236b] p-4 rounded-xl border border-[#1e307d] space-y-3">
+                            <div class="flex justify-between items-center border-b border-[#1e307d] pb-2">
+                                <h4 class="font-bold text-[#aefb12]">Realizační Tým — ${home ? home.name : ''} (${match.homeStaff.length}/5)</h4>
+                                ${(canEditEverything || isTeamMgr) && !match.isLocked ? `<button onclick="openAddStaffModal(${match.id}, 'home')" class="px-2 py-1 bg-[#aefb12] text-[#13236b] font-bold text-[10px] rounded">+ Přidat Člena</button>` : ''}
+                            </div>
+                            <div class="space-y-2">
+                                ${renderStaffList(match, 'home')}
+                            </div>
+                        </div>
+
+                        <div class="bg-[#13236b] p-4 rounded-xl border border-[#1e307d] space-y-3">
+                            <div class="flex justify-between items-center border-b border-[#1e307d] pb-2">
+                                <h4 class="font-bold text-[#05fda3]">Realizační Tým — ${away ? away.name : ''} (${match.awayStaff.length}/5)</h4>
+                                ${(canEditEverything || isTeamMgr) && !match.isLocked ? `<button onclick="openAddStaffModal(${match.id}, 'away')" class="px-2 py-1 bg-[#05fda3] text-[#13236b] font-bold text-[10px] rounded">+ Přidat Člena</button>` : ''}
+                            </div>
+                            <div class="space-y-2">
+                                ${renderStaffList(match, 'away')}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 3: HRACÍ ČÁSTI -->
+                <div id="fis-sec-hraci-casti" class="hidden space-y-4 text-xs">
+                    <div class="bg-[#13236b] p-4 rounded-xl border border-[#1e307d] space-y-4">
+                        <h4 class="font-bold text-white text-sm">Stav Hracích Částí</h4>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 bg-[#0e1a4f] p-4 rounded-xl border border-[#1e307d]">
+                            <label class="flex items-center space-x-2 cursor-pointer text-white font-bold">
+                                <input type="checkbox" id="check-h1-started" ${match.periodChecks.h1Started ? 'checked' : ''} ${!canEditEverything || match.isLocked ? 'disabled' : ''} onchange="updatePeriodChecks(${match.id})" class="accent-[#aefb12] w-4 h-4">
+                                <span>1. poločas začal</span>
+                            </label>
+                            <label class="flex items-center space-x-2 cursor-pointer text-white font-bold">
+                                <input type="checkbox" id="check-h1-ended" ${match.periodChecks.h1Ended ? 'checked' : ''} ${!canEditEverything || match.isLocked ? 'disabled' : ''} onchange="updatePeriodChecks(${match.id})" class="accent-[#aefb12] w-4 h-4">
+                                <span>1. poločas skončil</span>
+                            </label>
+                            <label class="flex items-center space-x-2 cursor-pointer text-white font-bold">
+                                <input type="checkbox" id="check-h2-started" ${match.periodChecks.h2Started ? 'checked' : ''} ${!canEditEverything || match.isLocked ? 'disabled' : ''} onchange="updatePeriodChecks(${match.id})" class="accent-[#aefb12] w-4 h-4">
+                                <span>2. poločas začal</span>
+                            </label>
+                            <label class="flex items-center space-x-2 cursor-pointer text-white font-bold">
+                                <input type="checkbox" id="check-h2-ended" ${match.periodChecks.h2Ended ? 'checked' : ''} ${!canEditEverything || match.isLocked ? 'disabled' : ''} onchange="updatePeriodChecks(${match.id})" class="accent-[#aefb12] w-4 h-4">
+                                <span>2. poločas skončil</span>
+                            </label>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4 bg-[#0e1a4f] p-4 rounded-xl border border-[#1e307d]">
+                            <div>
+                                <label class="block text-gray-400 mb-1">Čas začátku utkání:</label>
+                                <input type="time" id="match-start-time" value="${match.startTime || ''}" ${!canEditEverything || match.isLocked ? 'disabled' : ''} onchange="updateMatchDetails(${match.id})" class="w-full bg-[#13236b] border border-[#1e307d] p-2 rounded text-white font-mono">
+                            </div>
+                            <div>
+                                <label class="block text-gray-400 mb-1">Čas konce utkání:</label>
+                                <input type="time" id="match-end-time" value="${match.endTime || ''}" ${!canEditEverything || match.isLocked ? 'disabled' : ''} onchange="updateMatchDetails(${match.id})" class="w-full bg-[#13236b] border border-[#1e307d] p-2 rounded text-white font-mono">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 4: BRANKY -->
+                <div id="fis-sec-branky" class="hidden space-y-4">
+                    <div class="flex justify-between items-center">
+                        <h3 class="font-bold text-white text-sm">Záznam Vstřelených Branek a Asistencí</h3>
+                        ${canEditEverything && !match.isLocked ? `<button onclick="addGoalRow(${match.id})" class="px-3 py-1.5 bg-[#aefb12] text-[#13236b] font-black text-xs rounded-lg">+ Přidat Branku</button>` : ''}
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-xs">
+                            <thead class="bg-[#13236b] text-gray-400 uppercase">
+                                <tr>
+                                    <th class="p-2">Tým</th>
+                                    <th class="p-2">Čas</th>
+                                    <th class="p-2">Střelec</th>
+                                    <th class="p-2">Asistent</th>
+                                    <th class="p-2 text-right">Akce</th>
+                                </tr>
+                            </thead>
+                            <tbody id="goalsTableBody" class="divide-y divide-[#1e307d]">
+                                ${match.events.filter(e => e.type === 'Goal').map(e => {
+                                    const scorer = playersData.find(p => p.id === e.playerId);
+                                    const assist = playersData.find(p => p.id === e.secondaryPlayerId);
+                                    return `
+                                    <tr>
+                                        <td class="p-2 font-bold text-[#aefb12]">Domácí</td>
+                                        <td class="p-2 font-mono">0${e.minute}:12</td>
+                                        <td class="p-2 text-white font-bold">${scorer ? scorer.robloxNick : 'Hráč'}</td>
+                                        <td class="p-2 text-gray-300">${assist ? assist.robloxNick : 'Bez asistence'}</td>
+                                        <td class="p-2 text-right">
+                                            ${canEditEverything && !match.isLocked ? `
+                                            <button onclick="deleteMatchEvent(${match.id}, ${e.id})" class="px-2 py-1 bg-[#f33332] text-white rounded font-bold">
+                                                <i class="fa-solid fa-trash"></i>
+                                            </button>` : ''}
+                                        </td>
+                                    </tr>
+                                `;}).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- TAB 5: KARTY -->
+                <div id="fis-sec-vylouceni" class="hidden space-y-4">
+                    <div class="flex justify-between items-center">
+                        <h3 class="font-bold text-white text-sm">Záznam Karet</h3>
+                        ${canEditEverything && !match.isLocked ? `<button onclick="addCardRow(${match.id})" class="px-3 py-1.5 bg-amber-500 text-black font-bold text-xs rounded-lg">+ Přidat Kartu</button>` : ''}
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-xs">
+                            <thead class="bg-[#13236b] text-gray-400 uppercase">
+                                <tr>
+                                    <th class="p-2">Hráč</th>
+                                    <th class="p-2">Karta</th>
+                                    <th class="p-2">Důvod</th>
+                                    <th class="p-2 text-right">Akce</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-[#1e307d]">
+                                ${match.events.filter(e => e.type.includes('Card')).map(e => `
+                                    <tr>
+                                        <td class="p-2 text-white font-bold">Robloxian123</td>
+                                        <td class="p-2"><span class="px-2 py-0.5 bg-[#f33332]/20 text-[#f33332] font-bold rounded">Červená</span></td>
+                                        <td class="p-2 text-gray-300">${e.reason}</td>
+                                        <td class="p-2 text-right">
+                                            ${canEditEverything && !match.isLocked ? `
+                                            <button onclick="deleteMatchEvent(${match.id}, ${e.id})" class="px-2 py-1 bg-[#f33332] text-white rounded font-bold">
+                                                <i class="fa-solid fa-trash"></i>
+                                            </button>` : ''}
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- TAB 6: KOMENTÁŘ K UTKÁNÍ -->
+                <div id="fis-sec-online" class="hidden space-y-4 text-xs">
+                    <div class="bg-[#13236b] p-4 rounded-xl border border-[#1e307d] space-y-2">
+                        <h4 class="font-bold text-[#aefb12]">Komentář k utkání</h4>
+                        <textarea placeholder="Napište komentář k utkání..." ${!canEditEverything || match.isLocked ? 'disabled' : ''} class="w-full h-24 bg-[#0e1a4f] border border-[#1e307d] p-2 rounded text-white disabled:opacity-60"></textarea>
+                    </div>
+                </div>
+
+                <!-- TAB 7: ROZHODČÍ -->
+                <div id="fis-sec-rozhodci" class="hidden space-y-4 text-xs">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="bg-[#13236b] p-4 rounded-xl border border-[#1e307d] space-y-3">
+                            <h4 class="font-bold text-[#aefb12] text-sm">Kontrola Totožnosti</h4>
+                            <label class="flex items-center space-x-2 cursor-pointer text-white font-bold">
+                                <input type="checkbox" id="check-home-identity" ${match.checks.homeIdentityChecked ? 'checked' : ''} ${!canEditEverything || match.isLocked ? 'disabled' : ''} onchange="updateMatchChecks(${match.id})" class="accent-[#aefb12] w-4 h-4">
+                                <span>Kontrola totožnosti u domácích</span>
+                            </label>
+                            <label class="flex items-center space-x-2 cursor-pointer text-white font-bold">
+                                <input type="checkbox" id="check-away-identity" ${match.checks.awayIdentityChecked ? 'checked' : ''} ${!canEditEverything || match.isLocked ? 'disabled' : ''} onchange="updateMatchChecks(${match.id})" class="accent-[#aefb12] w-4 h-4">
+                                <span>Kontrola totožnosti u hostujících</span>
+                            </label>
+
+                            <div class="pt-3 border-t border-[#1e307d] space-y-2">
+                                <h4 class="font-bold text-amber-400 text-sm">Problémy v Utkání</h4>
+                                <label class="flex items-center gap-2 cursor-pointer text-amber-400 font-semibold">
+                                    <input type="checkbox" id="check-fans" ${match.checks.fansIssue ? 'checked' : ''} ${!canEditEverything || match.isLocked ? 'disabled' : ''} onchange="updateMatchChecks(${match.id})" class="accent-amber-400"> Problém s fanoušky
+                                </label>
+                                <label class="flex items-center gap-2 cursor-pointer text-amber-400 font-semibold">
+                                    <input type="checkbox" id="check-system" ${match.checks.systemIssue ? 'checked' : ''} ${!canEditEverything || match.isLocked ? 'disabled' : ''} onchange="updateMatchChecks(${match.id})" class="accent-amber-400"> Problém se systémy
+                                </label>
+                                <label class="flex items-center gap-2 cursor-pointer text-amber-400 font-semibold">
+                                    <input type="checkbox" id="check-players" ${match.checks.playersIssue ? 'checked' : ''} ${!canEditEverything || match.isLocked ? 'disabled' : ''} onchange="updateMatchChecks(${match.id})" class="accent-amber-400"> Problém s hráči
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="bg-[#13236b] p-4 rounded-xl border border-[#1e307d] space-y-3">
+                            <h4 class="font-bold text-[#05fda3] text-sm">Vyjádření k trestům</h4>
+                            <textarea id="referee-punishment-statement" placeholder="Napište podrobné vyjádření k trestům / událostem..." ${!canEditEverything || match.isLocked ? 'disabled' : ''} class="w-full h-20 bg-[#0e1a4f] border border-[#1e307d] p-2 rounded text-white disabled:opacity-60">${match.punishmentStatement || ''}</textarea>
+                            
+                            <div class="p-3 bg-[#0e1a4f] border border-[#1e307d] rounded-lg">
+                                <label class="flex items-center space-x-2 cursor-pointer text-white font-bold">
+                                    <input type="checkbox" id="check-send-dk" ${match.sendStatementToDK ? 'checked' : ''} ${!canEditEverything || match.isLocked ? 'disabled' : ''} onchange="toggleSendToDK(${match.id}, this.checked)" class="accent-[#f33332] w-4 h-4">
+                                    <span>Odeslat zprávu k DK</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 8: KONTROLA ZOU -->
+                <div id="fis-sec-kontrola" class="hidden space-y-4 text-xs">
+                    <div class="bg-[#13236b] p-4 rounded-xl border border-[#1e307d] space-y-3">
+                        <h4 class="font-bold text-[#aefb12] text-sm">Uzamčení a Dokončení ZOU</h4>
+
+                        <div class="space-y-3">
+                            <label class="flex items-center space-x-2 cursor-pointer text-white font-bold">
+                                <input type="checkbox" id="check-is-ready" ${match.isReady ? 'checked' : ''} ${!canEditEverything || match.isLocked ? 'disabled' : ''} onchange="toggleMatchReady(${match.id}, this.checked)" class="accent-[#aefb12] w-4 h-4">
+                                <span>Zápis je hotový</span>
+                            </label>
+
+                            <div class="flex items-center space-x-2">
+                                <button id="btn-lock-match" onclick="lockMatchRecord(${match.id})" ${!match.isReady || match.isLocked || !['Admin', 'Referee_Manager', 'Referee'].includes(currentUserRole) ? 'disabled' : ''} class="px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-40 text-black font-black rounded-lg shadow">
+                                    <i class="fa-solid fa-lock mr-1"></i> Uzamknout Zápis
+                                </button>
+                                ${match.isLocked && ['Admin', 'Referee_Manager', 'DK'].includes(currentUserRole) ? `
+                                <button onclick="unlockMatchRecord(${match.id})" class="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-black font-black rounded-lg shadow">
+                                    <i class="fa-solid fa-lock-open mr-1"></i> Odemknout Zápis
+                                </button>` : ''}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TLAČÍTKO OPUSŤENÍ VÝHRADNĚ DOLE -->
+                <div class="flex flex-wrap justify-between items-center gap-2 pt-3 border-t border-[#1e307d]">
+                    <button onclick="closeMatchProtocolWithoutSave(${match.id})" class="px-4 py-2 bg-[#f33332]/20 hover:bg-[#f33332] text-[#f33332] hover:text-white font-bold text-xs rounded-xl border border-[#f33332]/40 transition">
+                        <i class="fa-solid fa-xmark mr-1"></i> Opuštění Bez Uložení
+                    </button>
+                    ${(canEditEverything || isTeamMgr) && !match.isLocked ? `
+                    <button onclick="saveMatchProtocol(${match.id})" class="px-6 py-2.5 bg-[#aefb12] hover:bg-opacity-90 text-[#13236b] font-black text-xs rounded-xl shadow-lg">
+                        <i class="fa-solid fa-floppy-disk mr-1"></i> Uložit Zápas
+                    </button>` : ''}
+                </div>
+            `;
+
+            openModal('modal-match-protocol');
+        }
+
+        function toggleSendToDK(matchId, checked) {
+            const match = matchesData.find(m => m.id === matchId);
+            if (match) {
+                match.sendStatementToDK = checked;
+                if (checked) {
+                    showToast("Zpráva bude při uložení odeslána k DK.");
+                }
+            }
+        }
+
+        function toggleMatchReady(matchId, checked) {
+            const match = matchesData.find(m => m.id === matchId);
+            if (match) {
+                match.isReady = checked;
+                const lockBtn = document.getElementById('btn-lock-match');
+                if (lockBtn) {
+                    lockBtn.disabled = !checked || match.isLocked || !['Admin', 'Referee_Manager', 'Referee'].includes(currentUserRole);
+                }
+            }
+        }
+
+        function lockMatchRecord(matchId) {
+            const match = matchesData.find(m => m.id === matchId);
+            if (match) {
+                match.isLocked = true;
+                showToast("Zápis byl úspěšně uzamčen!");
+                openMatchProtocol(matchId);
+            }
+        }
+
+        function unlockMatchRecord(matchId) {
+            const match = matchesData.find(m => m.id === matchId);
+            if (match) {
+                match.isLocked = false;
+                showToast("Zápis byl úspěšně odemčen!");
+                openMatchProtocol(matchId);
+            }
+        }
+
+        function updateMatchDetails(matchId) {
+            const match = matchesData.find(m => m.id === matchId);
+            if (!match) return;
+
+            if (currentUserRole === 'Admin') {
+                match.stadium = document.getElementById('zou-stadium-input').value;
+            }
+            const recorderEl = document.getElementById('zou-recorder-input');
+            if (recorderEl) match.recorder = recorderEl.value;
+            
+            match.spectators = parseInt(document.getElementById('zou-spectators-input').value) || 0;
+            
+            const startTimeEl = document.getElementById('match-start-time');
+            const endTimeEl = document.getElementById('match-end-time');
+            if (startTimeEl) match.startTime = startTimeEl.value;
+            if (endTimeEl) match.endTime = endTimeEl.value;
+
+            const statementEl = document.getElementById('referee-punishment-statement');
+            if (statementEl) match.punishmentStatement = statementEl.value;
+
+            showToast("Detaily zápasu aktualizovány.");
+        }
+
+        function renderRosterList(match, side) {
+            const roster = side === 'home' ? match.homeRoster : match.awayRoster;
+            const canEditEverything = ['Admin', 'DK', 'Referee_Manager', 'Referee'].includes(currentUserRole);
+            const isTeamMgr = currentUserRole === 'Team_Manager';
+
+            if (!roster || roster.length === 0) {
+                return `<div class="text-gray-400 italic text-center p-2">Sestava je prázdná. Přidejte hráče.</div>`;
+            }
+
+            return roster.map(item => {
+                const player = playersData.find(p => p.id === item.playerId);
+                if (!player) return '';
+
+                return `
+                    <div class="grid grid-cols-12 gap-1 items-center bg-[#0e1a4f] p-2 rounded border border-[#1e307d] text-xs">
+                        <div class="col-span-2">
+                            <input type="number" min="1" max="99" value="${item.jersey}" ${!(canEditEverything || isTeamMgr) || match.isLocked ? 'disabled' : ''} onchange="updatePlayerJerseyInRoster(${match.id}, '${side}', ${player.id}, this.value)" class="w-12 bg-[#13236b] border border-[#1e307d] text-center font-bold text-white rounded p-1 disabled:opacity-60">
+                        </div>
+                        <div class="col-span-5 font-semibold text-white truncate px-1">
+                            ${player.robloxNick}
+                        </div>
+                        <div class="col-span-2 text-center">
+                            <label class="flex items-center justify-center space-x-1 cursor-pointer text-[10px] ${item.isGK ? 'text-[#05fda3] font-black' : 'text-gray-400'}">
+                                <input type="checkbox" ${item.isGK ? 'checked' : ''} ${!(canEditEverything || isTeamMgr) || match.isLocked ? 'disabled' : ''} onchange="togglePlayerGKInRoster(${match.id}, '${side}', ${player.id}, this.checked)" class="accent-[#05fda3]">
+                                <span>GK</span>
+                            </label>
+                        </div>
+                        <div class="col-span-2 text-center">
+                            <label class="flex items-center justify-center space-x-1 cursor-pointer text-[10px] ${item.isStarter ? 'text-[#aefb12] font-black' : 'text-gray-400'}">
+                                <input type="checkbox" ${item.isStarter ? 'checked' : ''} ${!(canEditEverything || isTeamMgr) || match.isLocked ? 'disabled' : ''} onchange="togglePlayerStarterInRoster(${match.id}, '${side}', ${player.id}, this.checked)" class="accent-[#aefb12]">
+                                <span>ZÁKLAD</span>
+                            </label>
+                        </div>
+                        <div class="col-span-1 text-right">
+                            ${(canEditEverything || isTeamMgr) && !match.isLocked ? `
+                            <button onclick="removePlayerFromRosterWithConfirm(${match.id}, '${side}', ${player.id})" class="text-[#f33332] hover:text-red-400 p-1">
+                                <i class="fa-solid fa-trash"></i>
+                            </button>` : ''}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function updatePlayerJerseyInRoster(matchId, side, playerId, newJerseyVal) {
+            const num = parseInt(newJerseyVal);
+            if (isNaN(num) || num < 1 || num > 99) {
+                showToast("Číslo dresu musí být v rozmezí 1 až 99!", true);
+                openMatchProtocol(matchId);
+                return;
+            }
+
+            const match = matchesData.find(m => m.id === matchId);
+            if (!match) return;
+
+            const roster = side === 'home' ? match.homeRoster : match.awayRoster;
+            const target = roster.find(r => r.playerId === playerId);
+
+            if (target) {
+                if (num === 1 && !target.isGK) {
+                    showToast("Číslo 1 je vyhrazeno pouze pro brankáře!", true);
+                    openMatchProtocol(matchId);
+                    return;
+                }
+                target.jersey = num;
+            }
+        }
+
+        function togglePlayerGKInRoster(matchId, side, playerId, checked) {
+            const match = matchesData.find(m => m.id === matchId);
+            if (!match) return;
+
+            const roster = side === 'home' ? match.homeRoster : match.awayRoster;
+
+            if (checked) {
+                roster.forEach(r => r.isGK = false);
+                const target = roster.find(r => r.playerId === playerId);
+                if (target) target.isGK = true;
+            } else {
+                const target = roster.find(r => r.playerId === playerId);
+                if (target) target.isGK = false;
+            }
+            openMatchProtocol(matchId);
+        }
+
+        function togglePlayerStarterInRoster(matchId, side, playerId, checked) {
+            const match = matchesData.find(m => m.id === matchId);
+            if (!match) return;
+
+            const roster = side === 'home' ? match.homeRoster : match.awayRoster;
+            const target = roster.find(r => r.playerId === playerId);
+            if (target) target.isStarter = checked;
+            openMatchProtocol(matchId);
+        }
+
+        function updatePeriodChecks(matchId) {
+            const match = matchesData.find(m => m.id === matchId);
+            if (!match) return;
+
+            match.periodChecks = {
+                h1Started: document.getElementById('check-h1-started').checked,
+                h1Ended: document.getElementById('check-h1-ended').checked,
+                h2Started: document.getElementById('check-h2-started').checked,
+                h2Ended: document.getElementById('check-h2-ended').checked
+            };
+        }
+
+        function renderStaffList(match, side) {
+            const staffList = side === 'home' ? match.homeStaff : match.awayStaff;
+            const canEditEverything = ['Admin', 'DK', 'Referee_Manager', 'Referee'].includes(currentUserRole);
+            const isTeamMgr = currentUserRole === 'Team_Manager';
+
+            if (!staffList || staffList.length === 0) {
+                return `<div class="text-gray-400 italic text-center p-2">Žádní členové realizačního týmu.</div>`;
+            }
+
+            return staffList.map(s => `
+                <div class="p-2 bg-[#0e1a4f] border border-[#1e307d] rounded flex justify-between items-center">
+                    <div>
+                        <span class="font-bold text-white block">${s.robloxNick} <span class="text-gray-400 font-normal">(${s.discordNick})</span></span>
+                        <span class="text-[10px] bg-[#aefb12]/20 text-[#aefb12] font-bold px-1.5 py-0.5 rounded">${s.role}</span>
+                    </div>
+                    ${(canEditEverything || isTeamMgr) && !match.isLocked ? `
+                    <button onclick="removeStaffMemberWithConfirm(${match.id}, '${side}', ${s.id})" class="text-[#f33332] hover:text-red-400 p-1">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>` : ''}
+                </div>
+            `).join('');
+        }
+
+        function openAddPlayerToRosterModal(matchId, side) {
+            activeRosterMatchId = matchId;
+            activeRosterSide = side;
+
+            const match = matchesData.find(m => m.id === matchId);
+            if (!match) return;
+
+            const roster = side === 'home' ? match.homeRoster : match.awayRoster;
+
+            if (roster.length >= 10) {
+                showToast("V zápasové sestavě může být maximálně 10 hráčů!", true);
+                return;
+            }
+
+            const teamId = side === 'home' ? match.homeTeamId : match.awayTeamId;
+            const team = teamsData.find(t => t.id === teamId);
+            const teamPlayers = playersData.filter(p => p.teamId === teamId);
+
+            const activeIds = roster.map(r => r.playerId);
+            const available = teamPlayers.filter(p => !activeIds.includes(p.id));
+
+            const titleEl = document.getElementById('roster-picker-title');
+            const listEl = document.getElementById('roster-picker-list');
+
+            titleEl.textContent = `Přidat Hráče — ${team ? team.name : ''}`;
+
+            if (available.length === 0) {
+                listEl.innerHTML = `<div class="p-3 text-center text-gray-400">Všichni registrovaní hráči jsou již v sestavě.</div>`;
+            } else {
+                listEl.innerHTML = available.map(p => `
+                    <div onclick="addPlayerToRoster(${p.id})" class="p-2.5 bg-[#13236b] hover:bg-[#1e307d] rounded-xl cursor-pointer border border-[#1e307d] flex justify-between items-center transition">
+                        <div>
+                            <span class="font-bold text-white">${p.robloxNick}</span>
+                            <span class="text-[10px] text-gray-400 block">${p.discordNick}</span>
+                        </div>
+                        <span class="px-2 py-0.5 bg-[#aefb12]/20 text-[#aefb12] rounded font-bold text-[10px]">+ Přidat</span>
+                    </div>
+                `).join('');
+            }
+
+            openModal('modal-add-roster-player');
+        }
+
+        function addPlayerToRoster(playerId) {
+            const match = matchesData.find(m => m.id === activeRosterMatchId);
+            if (!match) return;
+
+            const roster = activeRosterSide === 'home' ? match.homeRoster : match.awayRoster;
+            
+            if (roster.length >= 10) {
+                showToast("Nelze přidat více než 10 hráčů do sestavy!", true);
+                return;
+            }
+
+            const isFirst = roster.length === 0;
+            const isGK = isFirst;
+            const isStarter = roster.length < 5;
+
+            roster.push({
+                playerId: playerId,
+                jersey: isGK ? 1 : (roster.length + 2),
+                isStarter: isStarter,
+                isGK: isGK
+            });
+
+            showToast("Hráč přidán do zápasové sestavy.");
+            closeSpecificModal('modal-add-roster-player');
+            openMatchProtocol(activeRosterMatchId);
+        }
+
+        function removePlayerFromRosterWithConfirm(matchId, side, playerId) {
+            const player = playersData.find(p => p.id === playerId);
+            const pName = player ? player.robloxNick : 'Hráče';
+
+            openConfirmModal("Odebrat Hráče Ze Sestavy?", `Opravdu chcete odebrat hráče ${pName} ze zápasové sestavy?`, (reason) => {
+                const match = matchesData.find(m => m.id === matchId);
+                if (!match) return;
+
+                const roster = side === 'home' ? match.homeRoster : match.awayRoster;
+                const idx = roster.findIndex(r => r.playerId === playerId);
+                if (idx !== -1) {
+                    roster.splice(idx, 1);
+                    logDKAction("ODEBRÁNÍ_HRÁČE", pName, `Odebrán ze sestavy. Důvod: ${reason}`);
+                    showToast(`Hráč ${pName} odebrán ze sestavy.`);
+                }
+                openMatchProtocol(matchId);
+            }, true);
+        }
+
+        function openAddStaffModal(matchId, side) {
+            activeRosterMatchId = matchId;
+            activeStaffTeamSide = side;
+
+            document.getElementById('staff-roblox-input').value = '';
+            document.getElementById('staff-discord-input').value = '';
+            openModal('modal-add-staff-member');
+        }
+
+        function submitStaffMember() {
+            const roblox = document.getElementById('staff-roblox-input').value;
+            const discord = document.getElementById('staff-discord-input').value;
+            const role = document.getElementById('staff-role-select').value;
+
+            if (!roblox || !discord) {
+                showToast("Vyplňte prosím Roblox i Discord Username!", true);
+                return;
+            }
+
+            const match = matchesData.find(m => m.id === activeRosterMatchId);
+            if (!match) return;
+
+            const staffList = activeStaffTeamSide === 'home' ? match.homeStaff : match.awayStaff;
+
+            if (staffList.length >= 5) {
+                showToast("Realizační tým může mít maximálně 5 členů!", true);
+                return;
+            }
+
+            const mainCoachCount = staffList.filter(s => s.role === 'Hlavní trenér').length;
+            if (role === 'Hlavní trenér' && mainCoachCount >= 1) {
+                showToast("V realizačním týmu může být maximálně 1 Hlavní trenér!", true);
+                return;
+            }
+
+            staffList.push({
+                id: Date.now(),
+                robloxNick: roblox,
+                discordNick: discord,
+                role: role
+            });
+
+            showToast(`Člen realizačního týmu (${role}) přidán!`);
+            closeSpecificModal('modal-add-staff-member');
+            openMatchProtocol(activeRosterMatchId);
+        }
+
+        function removeStaffMemberWithConfirm(matchId, side, staffId) {
+            const match = matchesData.find(m => m.id === matchId);
+            if (!match) return;
+
+            const staffList = side === 'home' ? match.homeStaff : match.awayStaff;
+            const member = staffList.find(s => s.id === staffId);
+            const memberName = member ? member.robloxNick : 'Člena';
+
+            openConfirmModal("Odebrat Člena Realizačního Týmu?", `Opravdu chcete odebrat člena realizačního týmu ${memberName}?`, (reason) => {
+                const idx = staffList.findIndex(s => s.id === staffId);
+                if (idx !== -1) {
+                    staffList.splice(idx, 1);
+                    logDKAction("ODEBRÁNÍ_STAFFU", memberName, `Člen týmu odebrán. Důvod: ${reason}`);
+                    showToast("Člen realizačního týmu odebrán.");
+                }
+                openMatchProtocol(matchId);
+            }, true);
+        }
+
+        function deleteMatchEvent(matchId, eventId) {
+            openConfirmModal("Smazat Událost Utkání?", "Opravdu chcete tuto událost smazat z protokolu?", (reason) => {
+                const match = matchesData.find(m => m.id === matchId);
+                if (!match) return;
+
+                const idx = match.events.findIndex(e => e.id === eventId);
+                if (idx !== -1) {
+                    const deletedEvent = match.events[idx];
+                    if (deletedEvent.type === 'Goal') {
+                        match.homeScore = Math.max(0, match.homeScore - 1);
+                    }
+                    match.events.splice(idx, 1);
+                    logDKAction("SMAZÁNÍ_UDÁLOSTI", `Zápas #${matchId}`, `Událost smazána. Důvod: ${reason}`);
+                    showToast("Událost smazána z protokolu.");
+                    openMatchProtocol(matchId);
+                }
+            }, true);
+        }
+
+        function addCardRow(matchId) {
+            const match = matchesData.find(m => m.id === matchId);
+            if (match) {
+                match.events.push({
+                    id: Date.now(),
+                    type: 'Yellow_Card',
+                    minute: 12,
+                    playerId: 201,
+                    reason: "Protesty proti rozhodnutí"
+                });
+                showToast("Nová karta zaznamenána.");
+                openMatchProtocol(matchId);
+            }
+        }
+
+        function updateMatchChecks(matchId) {
+            const match = matchesData.find(m => m.id === matchId);
+            if (!match) return;
+
+            match.checks = {
+                fansIssue: document.getElementById('check-fans') ? document.getElementById('check-fans').checked : match.checks.fansIssue,
+                systemIssue: document.getElementById('check-system') ? document.getElementById('check-system').checked : match.checks.systemIssue,
+                playersIssue: document.getElementById('check-players') ? document.getElementById('check-players').checked : match.checks.playersIssue,
+                homeIdentityChecked: document.getElementById('check-home-identity') ? document.getElementById('check-home-identity').checked : match.checks.homeIdentityChecked,
+                awayIdentityChecked: document.getElementById('check-away-identity') ? document.getElementById('check-away-identity').checked : match.checks.awayIdentityChecked
+            };
+        }
+
+        function switchFISTab(fisTabId) {
+            activeFISTab = fisTabId;
+            ['sestavy', 'realizacni', 'hraci-casti', 'branky', 'vylouceni', 'online', 'rozhodci', 'kontrola'].forEach(t => {
+                const sec = document.getElementById(`fis-sec-${t}`);
+                const btn = document.getElementById(`fistab-${t}`);
+                if (sec) sec.classList.add('hidden');
+                if (btn) btn.classList.remove('active');
+            });
+
+            const targetSec = document.getElementById(`fis-sec-${fisTabId}`);
+            const targetBtn = document.getElementById(`fistab-${fisTabId}`);
+            if (targetSec) targetSec.classList.remove('hidden');
+            if (targetBtn) targetBtn.classList.add('active');
+        }
+
+        function addGoalRow(matchId) {
+            const match = matchesData.find(m => m.id === matchId);
+            if (match) {
+                match.homeScore += 1;
+                match.events.push({
+                    id: Date.now(),
+                    type: 'Goal',
+                    minute: 22,
+                    playerId: 102,
+                    secondaryPlayerId: 103
+                });
+                showToast("Přidána nová branka.");
+                openMatchProtocol(matchId);
+            }
+        }
+
+        function closeMatchProtocolWithoutSave(matchId) {
+            openConfirmModal("Opustit Zápis O Utkání?", "Opravdu chcete opustit zápis o utkání bez uložení změn?", (reason) => {
+                unsavedChangesGuard = false;
+                closeSpecificModal('modal-match-protocol');
+                showToast("Zápis opuštěn bez uložení.");
+            }, false);
+        }
+
+        function calculateMatchStats(match) {
+            match.events.forEach(e => {
+                if (e.type === 'Goal') {
+                    if (e.playerId) {
+                        const scorer = playersData.find(p => p.id === e.playerId);
+                        if (scorer) scorer.goals = (scorer.goals || 0) + 1;
+                    }
+                    if (e.secondaryPlayerId) {
+                        const assist = playersData.find(p => p.id === e.secondaryPlayerId);
+                        if (assist) assist.assists = (assist.assists || 0) + 1;
+                    }
+                }
+            });
+
+            // Čistá konta pro brankáře (min. 10 minut odehraných v zápase)
+            const matchDurationMinutes = 20;
+            
+            if (match.awayScore === 0) {
+                const homeGkItem = match.homeRoster.find(r => r.isGK);
+                if (homeGkItem) {
+                    const gkPlayer = playersData.find(p => p.id === homeGkItem.playerId);
+                    if (gkPlayer && matchDurationMinutes >= 10) {
+                        gkPlayer.cleanSheets = (gkPlayer.cleanSheets || 0) + 1;
+                    }
+                }
+            }
+
+            if (match.homeScore === 0) {
+                const awayGkItem = match.awayRoster.find(r => r.isGK);
+                if (awayGkItem) {
+                    const gkPlayer = playersData.find(p => p.id === awayGkItem.playerId);
+                    if (gkPlayer && matchDurationMinutes >= 10) {
+                        gkPlayer.cleanSheets = (gkPlayer.cleanSheets || 0) + 1;
+                    }
+                }
+            }
+        }
+
+        function saveMatchProtocol(matchId) {
+            const match = matchesData.find(m => m.id === matchId);
+            if (!match) return;
+
+            const homeCoach = match.homeStaff.filter(s => s.role === 'Hlavní trenér').length;
+            const awayCoach = match.awayStaff.filter(s => s.role === 'Hlavní trenér').length;
+
+            if (homeCoach === 0 || awayCoach === 0) {
+                showToast("Obě mužstva musí mít v realizačním týmu právě jednoho Hlavního trenéra!", true);
+                return;
+            }
+
+            const homeGKs = match.homeRoster.filter(r => r.isGK).length;
+            const awayGKs = match.awayRoster.filter(r => r.isGK).length;
+
+            if (homeGKs !== 1 || awayGKs !== 1) {
+                showToast("V sestavě každého týmu musí být určen právě 1 brankář!", true);
+                return;
+            }
+
+            const homeStarters = match.homeRoster.filter(r => r.isStarter).length;
+            const awayStarters = match.awayRoster.filter(r => r.isStarter).length;
+
+            if (homeStarters !== 5 || awayStarters !== 5) {
+                showToast("V základní sestavě každého týmu musí být označených přesně 5 hráčů!", true);
+                return;
+            }
+
+            if (match.status !== 'Completed') {
+                calculateMatchStats(match);
+            }
+
+            if (match.sendStatementToDK && match.punishmentStatement) {
+                logDKAction("ODESLANÉ_VYJÁDŘENÍ", `Zápas #${matchId}`, `Zpráva k DK: ${match.punishmentStatement}`);
+                showToast("Vyjádření k trestům bylo úspěšně odesláno k DK.");
+            }
+
+            match.status = 'Completed';
+            unsavedChangesGuard = false;
+            showToast("Zápas byl úspěšně zkontrolován a uložen.");
+            closeSpecificModal('modal-match-protocol');
+            renderMatches();
+            renderDashboard();
+        }
+
+        function renderRefereesTab() {
+            renderRefereesMainTable();
+            renderRefereeAssignments();
+        }
+
+        function renderRefereesMainTable() {
+            const body = document.getElementById('referees-main-table');
+            if (!body) return;
+
+            body.innerHTML = refereesData.map(r => `
+                <tr class="hover:bg-[#13236b]/60">
+                    <td class="p-3 font-bold text-[#05fda3]">${r.robloxNick}</td>
+                    <td class="p-3 font-mono text-gray-300">${r.discordNick}</td>
+                    <td class="p-3"><span class="px-2 py-0.5 rounded bg-[#aefb12] text-[#13236b] font-black uppercase text-[10px]">Licence ${r.license}</span></td>
+                    <td class="p-3">
+                        ${r.status === 'Suspended' ? 
+                            '<span class="px-2 py-0.5 rounded bg-red-500/20 text-red-400 font-black uppercase text-[10px] border border-red-500/40"><i class="fa-solid fa-ban mr-1"></i> Suspendován</span>' : 
+                            '<span class="px-2 py-0.5 rounded bg-[#aefb12] text-[#13236b] font-black uppercase text-[10px]">Platná</span>'}
+                    </td>
+                    <td class="p-3">
+                        ${r.isDelegate ? '<span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 font-bold text-[10px]"><i class="fa-solid fa-check mr-1"></i> ANO</span>' : '<span class="px-2 py-0.5 rounded bg-gray-800 text-gray-400 font-bold text-[10px]">NE</span>'}
+                    </td>
+                    <td class="p-3 text-right space-x-1">
+                        <button onclick="editRefereeModal(${r.id})" class="px-2 py-1 bg-[#13236b] hover:bg-[#1e307d] text-[#aefb12] rounded font-bold">Upravit</button>
+                        <button onclick="deleteRefereeLicenseWithConfirm(${r.id})" class="px-2 py-1 bg-[#f33332]/20 hover:bg-[#f33332] text-[#f33332] hover:text-white rounded font-bold transition" title="Odebrat licencí / Smazat">
+                            <i class="fa-solid fa-user-slash"></i>
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function deleteRefereeLicenseWithConfirm(refId) {
+            const ref = refereesData.find(r => r.id === refId);
+            if (!ref) return;
+
+            openConfirmModal("Odebrat Licenci Rozhodčího?", `Opravdu chcete odebrat licencí a smazat profil rozhodčího ${ref.robloxNick}?`, (reason) => {
+                const idx = refereesData.findIndex(r => r.id === refId);
+                if (idx !== -1) {
+                    refereesData.splice(idx, 1);
+                    logDKAction("ODEBRÁNÍ_LICENCE", ref.robloxNick, `Licence rozhodčího odebrána. Důvod: ${reason}`);
+                    showToast(`Licence rozhodčího ${ref.robloxNick} odebrána.`);
+                    renderRefereesTab();
+                    updateAdminStats();
+                }
+            }, true);
+        }
+
+        function renderRefereeAssignments() {
+            const container = document.getElementById('referee-assignments-list');
+            if (!container) return;
+
+            const unfinishedMatches = matchesData.filter(m => m.status !== 'Completed');
+
+            if (unfinishedMatches.length === 0) {
+                container.innerHTML = `<div class="p-4 text-center text-gray-400 text-xs">Všechny vytvořené zápasy mají kompletní nominaci nebo zápis.</div>`;
+                return;
+            }
+
+            container.innerHTML = unfinishedMatches.map(m => {
+                const home = teamsData.find(t => t.id === m.homeTeamId);
+                const away = teamsData.find(t => t.id === m.awayTeamId);
+
+                const roundLabel = m.competition === 'MOL Cup' ? m.cupStage : `${m.round}. Kolo`;
+                const d = (m.matchDate && m.matchDate !== 'TBA') ? new Date(m.matchDate) : null;
+                const matchDateFormatted = m.matchDate === 'TBA' ? 'TBA' : (d ? `${d.getDate()}.${d.getMonth() + 1}. ${d.toLocaleTimeString('cs-CZ', {hour: '2-digit', minute:'2-digit'})}` : 'Termín TBD');
+
+                return `
+                    <div class="bg-[#13236b] p-4 rounded-xl border border-[#1e307d] space-y-3">
+                        <div class="flex justify-between items-center text-xs">
+                            <span class="font-bold text-[#aefb12]">${m.competition} — ${roundLabel}</span>
+                            <span class="text-gray-400">${matchDateFormatted}</span>
+                        </div>
+                        <div class="font-bold text-white text-sm">
+                            ${home ? home.name : ''} <span class="text-gray-400 font-normal">vs</span> ${away ? away.name : ''}
+                        </div>
+                        
+                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 text-xs">
+                            <div>
+                                <span class="text-[10px] text-gray-400 block mb-1">Hlavní Rozhodčí (HR):</span>
+                                <button onclick="openSlotPicker(${m.id}, 'referee')" class="w-full text-left p-2 rounded border transition flex justify-between items-center ${m.referee ? 'bg-[#0e1a4f] border-[#aefb12] text-[#aefb12] font-bold' : 'bg-[#0e1a4f]/50 border-[#1e307d] text-gray-400 hover:border-[#aefb12]'}">
+                                    <span class="truncate">${m.referee || '+ Vybrat HR'}</span>
+                                    <i class="fa-solid fa-chevron-right text-[10px]"></i>
+                                </button>
+                            </div>
+
+                            <div>
+                                <span class="text-[10px] text-gray-400 block mb-1">Delegát Utkání:</span>
+                                <button onclick="openSlotPicker(${m.id}, 'delegate')" class="w-full text-left p-2 rounded border transition flex justify-between items-center ${m.delegate ? 'bg-[#0e1a4f] border-amber-400 text-amber-400 font-bold' : 'bg-[#0e1a4f]/50 border-[#1e307d] text-gray-400 hover:border-amber-400'}">
+                                    <span class="truncate">${m.delegate || '+ Vybrat Delegáta'}</span>
+                                    <i class="fa-solid fa-chevron-right text-[10px]"></i>
+                                </button>
+                            </div>
+
+                            <div>
+                                <span class="text-[10px] text-gray-400 block mb-1">Čtvrtý Rozhodčí (4R):</span>
+                                <button onclick="openSlotPicker(${m.id}, 'fourthRef')" class="w-full text-left p-2 rounded border transition flex justify-between items-center ${m.fourthRef ? 'bg-[#0e1a4f] border-[#05fda3] text-[#05fda3] font-bold' : 'bg-[#0e1a4f]/50 border-[#1e307d] text-gray-400 hover:border-[#05fda3]'}">
+                                    <span class="truncate">${m.fourthRef || '+ Vybrat 4R'}</span>
+                                    <i class="fa-solid fa-chevron-right text-[10px]"></i>
+                                </button>
+                            </div>
+
+                            <div>
+                                <span class="text-[10px] text-gray-400 block mb-1">Videorozhodčí (VAR):</span>
+                                <button onclick="openSlotPicker(${m.id}, 'var')" class="w-full text-left p-2 rounded border transition flex justify-between items-center ${m.var ? 'bg-[#0e1a4f] border-purple-400 text-purple-300 font-bold' : 'bg-[#0e1a4f]/50 border-[#1e307d] text-gray-400 hover:border-purple-400'}">
+                                    <span class="truncate">${m.var || '+ Vybrat VAR'}</span>
+                                    <i class="fa-solid fa-chevron-right text-[10px]"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="flex justify-end pt-2 border-t border-[#1e307d]">
+                            <button onclick="saveRefereeAssignmentsForMatch(${m.id})" class="px-4 py-1.5 bg-[#05fda3] hover:bg-opacity-90 text-[#13236b] font-black rounded-lg text-xs shadow">
+                                <i class="fa-solid fa-floppy-disk mr-1"></i> Uložit Nominaci
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function saveRefereeAssignmentsForMatch(matchId) {
+            showToast("Nominace rozhodčích pro utkání byla úspěšně uložena!");
+            renderRefereeAssignments();
+        }
+
+        function openSlotPicker(matchId, role) {
+            const match = matchesData.find(m => m.id === matchId);
+            if (!match) return;
+
+            activeSlotMatchId = matchId;
+            activeSlotRole = role;
+
+            const titleEl = document.getElementById('picker-title');
+            const listEl = document.getElementById('picker-list');
+
+            const roleNames = { 'referee': 'Hlavního Rozhodčího', 'fourthRef': 'Čtvrtého Rozhodčího', 'var': 'VAR Rozhodčího', 'delegate': 'Delegáta Utkání' };
+            titleEl.textContent = `Vybrat ${roleNames[role]}`;
+
+            let allowedLicenses = ['A', 'B', 'C'];
+            let reqDelegate = (role === 'delegate');
+
+            let eligible = refereesData.filter(r => r.status !== 'Suspended' && allowedLicenses.includes(r.license));
+            if (reqDelegate) eligible = eligible.filter(r => r.isDelegate);
+
+            listEl.innerHTML = `
+                <div onclick="selectRefereeForSlot(null)" class="p-3 bg-[#13236b] hover:bg-slate-700 rounded-xl cursor-pointer border border-[#1e307d] text-rose-400 font-bold flex justify-between items-center">
+                    <span>Odebrat přiřazení</span>
+                    <i class="fa-solid fa-trash"></i>
+                </div>
+                ${eligible.length === 0 ? '<div class="p-3 text-center text-gray-400">Žádní dostupní rozhodčí splňující kritéria.</div>' : ''}
+                ${eligible.map(r => `
+                    <div onclick="selectRefereeForSlot('${r.robloxNick}')" class="p-3 bg-[#13236b] hover:bg-[#1e307d] rounded-xl cursor-pointer border border-[#1e307d] flex justify-between items-center transition">
+                        <div>
+                            <div class="font-bold text-white text-sm">${r.robloxNick}</div>
+                            <div class="text-[10px] text-gray-400 font-mono">${r.discordNick}</div>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <span class="px-2 py-0.5 bg-[#aefb12]/20 text-[#aefb12] rounded font-bold text-[10px]">Licence ${r.license}</span>
+                        </div>
+                    </div>
+                `).join('')}
+            `;
+
+            openModal('modal-referee-picker');
+        }
+
+        function selectRefereeForSlot(refName) {
+            const match = matchesData.find(m => m.id === activeSlotMatchId);
+            if (match && activeSlotRole) {
+                match[activeSlotRole] = refName;
+                showToast(`Vybrán ${refName || 'žádný'}.`);
+                closeSpecificModal('modal-referee-picker');
+                renderRefereeAssignments();
+            }
+        }
+
+        function openAddRefereeModal() {
+            activeEditRefId = null;
+            document.getElementById('referee-modal-title').innerHTML = `<i class="fa-solid fa-user-plus"></i> Přidat Rozhodčího`;
+            document.getElementById('edit-ref-roblox').value = '';
+            document.getElementById('edit-ref-discord').value = '';
+            document.getElementById('edit-ref-license').value = 'A';
+            document.getElementById('edit-ref-status').value = 'Active';
+            document.getElementById('edit-ref-is-delegate').checked = false;
+
+            toggleRefStatusReasonInput();
+            openModal('modal-edit-referee');
+        }
+
+        function editRefereeModal(refId) {
+            const ref = refereesData.find(r => r.id === refId);
+            if (!ref) return;
+
+            activeEditRefId = refId;
+            document.getElementById('referee-modal-title').innerHTML = `<i class="fa-solid fa-user-ninja"></i> Upravit Rozhodčího`;
+            document.getElementById('edit-ref-roblox').value = ref.robloxNick;
+            document.getElementById('edit-ref-discord').value = ref.discordNick;
+            document.getElementById('edit-ref-license').value = ref.license;
+            document.getElementById('edit-ref-status').value = ref.status || 'Active';
+            document.getElementById('edit-ref-is-delegate').checked = ref.isDelegate;
+            document.getElementById('edit-ref-reason').value = '';
+
+            toggleRefStatusReasonInput();
+            openModal('modal-edit-referee');
+        }
+
+        function toggleRefStatusReasonInput() {
+            const status = document.getElementById('edit-ref-status').value;
+            const box = document.getElementById('ref-status-reason-box');
+            if (status === 'Suspended') {
+                box.classList.remove('hidden');
+            } else {
+                box.classList.add('hidden');
+            }
+        }
+
+        function saveRefereeChanges() {
+            const roblox = document.getElementById('edit-ref-roblox').value.trim();
+            const discord = document.getElementById('edit-ref-discord').value.trim();
+            const license = document.getElementById('edit-ref-license').value;
+            const status = document.getElementById('edit-ref-status').value;
+            const isDelegate = document.getElementById('edit-ref-is-delegate').checked;
+            const reason = document.getElementById('edit-ref-reason').value.trim();
+
+            if (!roblox || !discord) {
+                showToast("Vyplňte Roblox Nick i Discord Nick.", true);
+                return;
+            }
+
+            if (status === 'Suspended' && !reason) {
+                showToast("Pro suspendování rozhodčího musíte vyplnit důvod!", true);
+                return;
+            }
+
+            if (activeEditRefId) {
+                const ref = refereesData.find(r => r.id === activeEditRefId);
+                if (ref) {
+                    const wasActive = ref.status !== 'Suspended';
+                    ref.robloxNick = roblox;
+                    ref.discordNick = discord;
+                    ref.license = license;
+                    ref.status = status;
+                    ref.isDelegate = isDelegate;
+
+                    if (status === 'Suspended' && wasActive) {
+                        let removedCount = 0;
+                        matchesData.forEach(m => {
+                            if (m.referee === roblox) { m.referee = null; removedCount++; }
+                            if (m.fourthRef === roblox) { m.fourthRef = null; removedCount++; }
+                            if (m.var === roblox) { m.var = null; removedCount++; }
+                            if (m.delegate === roblox) { m.delegate = null; removedCount++; }
+                        });
+
+                        logDKAction("SUSPENZACE_ROZHODČÍHO", roblox, `Rozhodčí byl suspendován. Důvod: ${reason}. Odebrán z ${removedCount} nominací.`);
+                        showToast(`Rozhodčí ${roblox} suspendován a odebrán z ${removedCount} zápasů!`);
+                    } else {
+                        showToast(`Rozhodčí ${roblox} upraven!`);
+                    }
+                }
+            } else {
+                refereesData.push({
+                    id: Date.now(),
+                    robloxNick: roblox,
+                    discordNick: discord,
+                    license: license,
+                    status: status,
+                    isDelegate: isDelegate
+                });
+                
+                if (status === 'Suspended') {
+                    logDKAction("SUSPENZACE_ROZHODČÍHO", roblox, `Vytvořen nový suspendovaný rozhodčí. Důvod: ${reason}`);
+                }
+                showToast(`Novému rozhodčímu ${roblox} vytvořen profil!`);
+            }
+
+            closeSpecificModal('modal-edit-referee');
+            renderRefereesTab();
+            updateAdminStats();
+            renderDashboard();
+        }
+
+        /* DISCIPLINÁRKA */
+        function renderDisciplinary() {
+            renderDKAuditLogs();
+            const body = document.getElementById('suspensions-table-body');
+            if (!body) return;
+
+            if (suspensionsData.length === 0) {
+                body.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-gray-400">Žádné aktivní disciplinární tresty.</td></tr>`;
+                return;
+            }
+
+            const canManageDK = ['Admin', 'DK'].includes(currentUserRole);
+
+            body.innerHTML = suspensionsData.map(s => {
+                const uDate = s.untilDate ? new Date(s.untilDate) : null;
+                const formattedUntil = uDate ? `${uDate.getDate()}.${uDate.getMonth() + 1}. ${uDate.toLocaleTimeString('cs-CZ', {hour: '2-digit', minute:'2-digit'})}` : '';
+                return `
+                <tr class="hover:bg-[#13236b]/60">
+                    <td class="p-3 font-bold text-white">${s.playerName}</td>
+                    <td class="p-3 text-gray-300">${s.teamName}</td>
+                    <td class="p-3">
+                        ${s.type === 'Match_Count' ? '<span class="px-2 py-0.5 rounded bg-[#f33332]/20 text-[#f33332] font-bold text-[10px]">Stopka Zápasy</span>' : '<span class="px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 font-bold text-[10px]">Časová Stopka</span>'}
+                    </td>
+                    <td class="p-3 font-bold text-[#f33332]">
+                        ${s.type === 'Match_Count' ? `${s.remainingMatches} Zápasy` : `Do: ${formattedUntil}`}
+                    </td>
+                    <td class="p-3 text-gray-300">${s.reason}</td>
+                    <td class="p-3 text-right role-perm-admin role-perm-dk">
+                        ${canManageDK ? `<button onclick="cancelSuspensionWithConfirm(${s.id})" class="px-2.5 py-1 bg-[#13236b] hover:bg-[#1e307d] text-[#f33332] border border-[#f33332]/30 rounded font-bold transition">Zrušit Trest</button>` : ''}
+                    </td>
+                </tr>
+            `;}).join('');
+            applyRBACPermissions();
+        }
+
+        function cancelSuspensionWithConfirm(id) {
+            const suspension = suspensionsData.find(s => s.id === id);
+            if (!suspension) return;
+
+            openConfirmModal("Zrušit Trest?", `Opravdu chcete zrušit trest pro hráče ${suspension.playerName}?`, (reason) => {
+                const idx = suspensionsData.findIndex(s => s.id === id);
+                if (idx !== -1) {
+                    suspensionsData.splice(idx, 1);
+                    logDKAction("ZRUŠENÍ_TRESTU", suspension.playerName, `Trest zrušen. Důvod: ${reason}`);
+                    showToast(`Trest pro ${suspension.playerName} byl zrušen.`);
+                    renderDisciplinary();
+                }
+            }, true);
+        }
+
+        function openDeductPointsModal() {
+            const selectTeam = document.getElementById('deduct-team-select');
+            if (selectTeam) {
+                selectTeam.innerHTML = teamsData.map(t => `<option value="${t.id}">${t.name} (${t.league === '1_Liga' ? '1. Liga' : '2. Liga'})</option>`).join('');
+            }
+            openModal('modal-deduct-points');
+        }
+
+        function submitPointsDeduction() {
+            const teamId = parseInt(document.getElementById('deduct-team-select').value);
+            const pts = parseInt(document.getElementById('deduct-points-count').value) || 0;
+            const reason = document.getElementById('deduct-points-reason').value || 'Rozhodnutí svazu';
+
+            const team = teamsData.find(t => t.id === teamId);
+            if (team && pts > 0) {
+                team.deducted += pts;
+                team.deductionReason = reason;
+
+                logDKAction("ODEČET_BODŮ", team.name, `Odečteno ${pts} bodů. Důvod: ${reason}`);
+                showToast(`Týmu ${team.name} bylo odečteno ${pts} bodů.`);
+                closeSpecificModal('modal-deduct-points');
+                renderCompetitions();
+            }
+        }
+
+        function toggleSuspensionInputs() {
+            const type = document.getElementById('suspension-type-select').value;
+            const inputMatches = document.getElementById('suspension-input-matches');
+            const inputTime = document.getElementById('suspension-input-time');
+
+            if (type === 'Match_Count') {
+                inputMatches.classList.remove('hidden');
+                inputTime.classList.add('hidden');
+            } else {
+                inputMatches.classList.add('hidden');
+                inputTime.classList.remove('hidden');
+            }
+        }
+
+        function openAddSuspensionModal() {
+            const selectTeam = document.getElementById('suspension-team-select');
+            if (selectTeam) {
+                selectTeam.innerHTML = teamsData.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
+            }
+            updateSuspensionPlayers();
+            toggleSuspensionInputs();
+            openModal('modal-add-suspension');
+        }
+
+        function updateSuspensionPlayers() {
+            const teamId = parseInt(document.getElementById('suspension-team-select').value);
+            const selectPlayer = document.getElementById('suspension-player-select');
+            const teamPlayers = playersData.filter(p => p.teamId === teamId);
+
+            if (selectPlayer) {
+                if (teamPlayers.length === 0) {
+                    selectPlayer.innerHTML = `<option value="">Žádní hráči v kádru</option>`;
+                } else {
+                    selectPlayer.innerHTML = teamPlayers.map(p => `<option value="${p.id}">${p.robloxNick}</option>`).join('');
+                }
+            }
+        }
+
+        function submitNewSuspension() {
+            const playerId = parseInt(document.getElementById('suspension-player-select').value);
+            const type = document.getElementById('suspension-type-select').value;
+            const count = parseInt(document.getElementById('suspension-matches-count').value);
+            const untilDate = document.getElementById('suspension-until-date').value;
+            const reason = document.getElementById('suspension-reason-text').value.trim();
+
+            if (!reason) {
+                showToast("Pro udělení trestu musíte zadat odůvodnění suspendace!", true);
+                return;
+            }
+
+            const player = playersData.find(p => p.id === playerId);
+            const team = teamsData.find(t => t.id === player?.teamId);
+
+            if (player) {
+                suspensionsData.push({
+                    id: Date.now(),
+                    playerId: player.id,
+                    playerName: player.robloxNick,
+                    teamName: team ? team.name : 'Volný Hráč',
+                    type: type,
+                    remainingMatches: type === 'Match_Count' ? count : null,
+                    untilDate: type === 'Time_Period' ? untilDate : null,
+                    reason: reason
+                });
+
+                logDKAction("UDĚLENÍ_TRESTU", player.robloxNick, `Trest (${type === 'Match_Count' ? count + ' zápasů' : untilDate}). Důvod suspendace: ${reason}`);
+                showToast(`Trest pro ${player.robloxNick} udělen!`);
+                closeSpecificModal('modal-add-suspension');
+                renderDisciplinary();
+            }
+        }
+
+        function updateCreateMatchTeams() {
+            const comp = document.getElementById('create-match-comp').value;
+            const selectRound = document.getElementById('create-match-round');
+            const selectHome = document.getElementById('create-match-home');
+            const selectAway = document.getElementById('create-match-away');
+
+            if (comp === 'MOL Cup') {
+                selectRound.innerHTML = `
+                    <option value="Osmifinále">Osmifinále</option>
+                    <option value="Čtvrtfinále">Čtvrtfinále</option>
+                    <option value="Semifinále">Semifinále</option>
+                    <option value="Finále">Finále</option>
+                `;
+            } else {
+                let options = '';
+                for (let r = 1; r <= 14; r++) {
+                    options += `<option value="${r}">${r}. Kolo</option>`;
+                }
+                selectRound.innerHTML = options;
+            }
+
+            let leagueKey = '1_Liga';
+            if (comp === 'CVFL 2. Liga') leagueKey = '2_Liga';
+
+            const filteredTeams = teamsData.filter(t => comp === 'MOL Cup' ? true : t.league === leagueKey);
+
+            selectHome.innerHTML = filteredTeams.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
+            selectAway.innerHTML = filteredTeams.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
+            
+            if (selectAway.options.length > 1) {
+                selectAway.selectedIndex = 1;
+            }
+        }
+
+        function submitCreateMatch() {
+            const comp = document.getElementById('create-match-comp').value;
+            const roundVal = document.getElementById('create-match-round').value;
+            const dateVal = document.getElementById('create-match-date').value;
+            const stadiumVal = document.getElementById('create-match-stadium').value.trim() || 'CVFL Aréna';
+            const homeId = parseInt(document.getElementById('create-match-home').value);
+            const awayId = parseInt(document.getElementById('create-match-away').value);
+
+            if (homeId === awayId) {
+                showToast("Domácí a hostující tým nesmí být stejný!", true);
+                return;
+            }
+
+            const newMatch = {
+                id: Date.now(),
+                round: comp === 'MOL Cup' ? 1 : parseInt(roundVal),
+                competition: comp,
+                cupStage: comp === 'MOL Cup' ? roundVal : null,
+                homeTeamId: homeId,
+                awayTeamId: awayId,
+                homeScore: 0,
+                awayScore: 0,
+                stadium: stadiumVal,
+                matchDate: dateVal || new Date().toISOString(),
+                status: "Scheduled",
+                homeKitSelected: "Home",
+                awayKitSelected: "Away",
+                referee: null,
+                fourthRef: null,
+                var: null,
+                delegate: null,
+                homeRoster: [],
+                awayRoster: [],
+                homeStaff: [],
+                awayStaff: [],
+                periodChecks: { h1Started: false, h1Ended: false, h2Started: false, h2Ended: false },
+                checks: { fansIssue: false, systemIssue: false, playersIssue: false, homeIdentityChecked: false, awayIdentityChecked: false },
+                events: []
+            };
+
+            matchesData.push(newMatch);
+            showToast("Nové utkání bylo úspěšně vytvořeno!");
+            renderMatches();
+            renderDashboard();
+            renderRefereeAssignments();
+            renderAdminMatchesDeleteList();
+        }
+
+        /* AKCE PŘIDÁNÍ HRÁČE Z ADMINISTRACE */
+        function submitAdminAddPlayer() {
+            const roblox = document.getElementById('admin-add-player-roblox').value.trim();
+            const discord = document.getElementById('admin-add-player-discord').value.trim();
+            const teamVal = document.getElementById('admin-add-player-team').value;
+
+            if (!roblox || !discord) {
+                showToast("Vyplňte prosím Roblox i Discord Nick!", true);
+                return;
+            }
+
+            const isFree = (teamVal === 'free');
+            const teamId = isFree ? null : parseInt(teamVal);
+
+            const newPlayer = {
+                id: Date.now(),
+                teamId: teamId,
+                robloxNick: roblox,
+                discordNick: discord,
+                goals: 0,
+                assists: 0,
+                cleanSheets: 0,
+                motm: 0,
+                isFreeAgent: isFree
+            };
+
+            playersData.push(newPlayer);
+            showToast(`Hráč ${roblox} byl úspěšně zaregistrován!`);
+
+            document.getElementById('admin-add-player-roblox').value = '';
+            document.getElementById('admin-add-player-discord').value = '';
+
+            updateAdminStats();
+            renderDashboard();
+            if (activeTab === 'teams') renderTeams();
+        }
+
+        function toggleExtraSection(secId, isShown) {
+            const btn = document.getElementById(`comp-btn-${secId}`);
+            if (btn) {
+                btn.classList.toggle('hidden', !isShown);
+            }
+            showToast(`Sekce ${secId.toUpperCase()} byla ${isShown ? 'ZOBRAZENA' : 'SCHOVÁNA'}.`);
+        }
+
+        function renderAdmin() {
+            updateAdminStats();
+            updateCreateMatchTeams();
+
+            const selectPlayerTeam = document.getElementById('admin-add-player-team');
+            if (selectPlayerTeam) {
+                selectPlayerTeam.innerHTML = `<option value="free">Volný Hráč (Bez Klubu)</option>` + 
+                    teamsData.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
+            }
+            renderAdminMatchesDeleteList();
+        }
+
+        function renderAdminMatchesDeleteList() {
+            const list = document.getElementById('admin-matches-delete-list');
+            if (!list) return;
+
+            if (matchesData.length === 0) {
+                list.innerHTML = `<div class="p-4 text-center text-gray-400 text-xs">Žádné zápasy ke správě.</div>`;
+                return;
+            }
+
+            list.innerHTML = matchesData.map(m => {
+                const home = teamsData.find(t => t.id === m.homeTeamId);
+                const away = teamsData.find(t => t.id === m.awayTeamId);
+                const roundText = m.competition === 'MOL Cup' ? m.cupStage : `${m.round}. Kolo`;
+
+                return `
+                    <div class="p-3 bg-[#13236b] rounded-lg border border-[#1e307d] flex justify-between items-center text-xs">
+                        <div>
+                            <span class="font-bold text-[#aefb12]">${m.competition} (${roundText})</span>
+                            <span class="text-white font-bold ml-2">${home ? home.name : ''} vs ${away ? away.name : ''}</span>
+                        </div>
+                        <button onclick="deleteMatchFromAdmin(${m.id})" class="px-3 py-1 bg-[#f33332] hover:bg-red-600 text-white font-bold rounded shadow transition">
+                            <i class="fa-solid fa-trash-can mr-1"></i> Smazat Zápas
+                        </button>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function deleteMatchFromAdmin(matchId) {
+            const match = matchesData.find(m => m.id === matchId);
+            if (!match) return;
+
+            const home = teamsData.find(t => t.id === match.homeTeamId);
+            const away = teamsData.find(t => t.id === match.awayTeamId);
+            const matchName = `${home ? home.name : ''} vs ${away ? away.name : ''}`;
+
+            openConfirmModal("Smazat Utkání?", `Opravdu chcete trvale smazat zápas ${matchName}?`, (reason) => {
+                const idx = matchesData.findIndex(m => m.id === matchId);
+                if (idx !== -1) {
+                    matchesData.splice(idx, 1);
+                    logDKAction("SMAZÁNÍ_ZÁPASU", matchName, `Zápas smazán v administraci. Důvod: ${reason}`);
+                    showToast(`Zápas ${matchName} byl smazán.`);
+                    renderAdminMatchesDeleteList();
+                    renderMatches();
+                    renderDashboard();
+                    renderRefereeAssignments();
+                }
+            }, true);
+        }
+
+        function updateAdminStats() {
+            const elPlayers = document.getElementById('dash-stat-players');
+            const elReferees = document.getElementById('dash-stat-referees');
+
+            if (elPlayers) elPlayers.textContent = `${playersData.length} Hráčů`;
+            if (elReferees) elReferees.textContent = `${refereesData.length} Rozhodčích`;
+        }
+
+        function renderTeams() {
+            const selector = document.getElementById('teams-selector');
+            if (!selector) return;
+
+            selector.innerHTML = teamsData.map(t => `
+                <button onclick="selectTeam(${t.id})" class="px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition ${t.id === activeTeamId ? 'bg-[#aefb12] text-[#13236b] font-black shadow' : 'bg-[#13236b] text-gray-300 hover:bg-[#1e307d]'}">
+                    ${t.name}
+                </button>
+            `).join('');
+
+            renderSelectedTeamView();
+        }
+
+        function selectTeam(teamId) {
+            activeTeamId = teamId;
+            renderTeams();
+        }
+
+        function renderSelectedTeamView() {
+            const container = document.getElementById('team-detail-view');
+            const team = teamsData.find(t => t.id === activeTeamId);
+            if (!container || !team) return;
+
+            const roster = playersData.filter(p => p.teamId === team.id);
+
+            container.innerHTML = `
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-[#1e307d] pb-4">
+                    <div>
+                        <span class="text-xs text-[#aefb12] font-bold uppercase">${team.league === '1_Liga' ? 'CVFL 1. Liga' : 'CVFL 2. Liga'}</span>
+                        <h2 class="text-2xl font-black text-white">${team.name}</h2>
+                    </div>
+                </div>
+
+                <div>
+                    <h3 class="font-bold text-sm mb-3 text-white">Hráčský Kádr (${roster.length} Hráčů)</h3>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-xs text-left">
+                            <thead class="bg-[#13236b] text-gray-400 uppercase">
+                                <tr>
+                                    <th class="p-2">Roblox Username</th>
+                                    <th class="p-2">Discord Username</th>
+                                    <th class="p-2">Góly</th>
+                                    <th class="p-2">Asistence</th>
+                                    <th class="p-2">Čistá konta</th>
+                                    <th class="p-2 text-right">Akce</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-[#1e307d]">
+                                ${roster.map(p => `
+                                    <tr class="hover:bg-[#13236b]/60">
+                                        <td class="p-2 font-bold text-[#05fda3] cursor-pointer hover:underline" onclick="openPlayerCard(${p.id})">${p.robloxNick}</td>
+                                        <td class="p-2 font-mono text-gray-400">${p.discordNick}</td>
+                                        <td class="p-2 font-bold text-[#aefb12]">${p.goals || 0}</td>
+                                        <td class="p-2 font-bold text-[#05fda3]">${p.assists || 0}</td>
+                                        <td class="p-2 font-bold text-amber-400">${p.cleanSheets || 0}</td>
+                                        <td class="p-2 text-right">
+                                            <button onclick="openPlayerCard(${p.id})" class="px-2 py-1 bg-[#13236b] hover:bg-[#1e307d] text-gray-200 rounded">Profil</button>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        }
+
+        function openPlayerCard(playerId) {
+            const player = playersData.find(p => p.id === playerId);
+            if (!player) return;
+
+            const team = teamsData.find(t => t.id === player.teamId);
+
+            const content = document.getElementById('player-card-content');
+            content.innerHTML = `
+                <div class="bg-gradient-to-r from-[#13236b] to-[#0e1a4f] p-6 border-b border-[#aefb12]/30 flex justify-between items-start">
+                    <div>
+                        <span class="text-xs text-[#aefb12] font-bold uppercase">${team ? team.name : 'Volný Hráč'}</span>
+                        <h2 class="text-2xl font-black text-white mt-1">${player.robloxNick}</h2>
+                    </div>
+                    <button onclick="closeSpecificModal('modal-player-card')" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
+                </div>
+                <div class="p-6 space-y-4 text-xs">
+                    <div>Discord Username: <strong>${player.discordNick}</strong></div>
+                    <div class="grid grid-cols-3 gap-2 p-3 bg-[#13236b] rounded-xl border border-[#1e307d] text-center">
+                        <div>
+                            <span class="block text-gray-400">Góly</span>
+                            <span class="text-lg font-black text-[#aefb12]">${player.goals || 0}</span>
+                        </div>
+                        <div>
+                            <span class="block text-gray-400">Asistence</span>
+                            <span class="text-lg font-black text-[#05fda3]">${player.assists || 0}</span>
+                        </div>
+                        <div>
+                            <span class="block text-gray-400">Čistá konta</span>
+                            <span class="text-lg font-black text-amber-400">${player.cleanSheets || 0}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            openModal('modal-player-card');
+        }
+
+        /* KONTUMACE, ODLOŽENÍ A PŘELOŽENÍ UTKÁNÍ */
+        function openForfeitModal() {
+            onForfeitCompChange();
+            openModal('modal-forfeit');
+        }
+
+        function onForfeitCompChange() {
+            const comp = document.getElementById('forfeit-comp-select').value;
+            const roundSelect = document.getElementById('forfeit-round-select');
+
+            if (comp === 'MOL Cup') {
+                roundSelect.innerHTML = `
+                    <option value="Osmifinále">Osmifinále</option>
+                    <option value="Čtvrtfinále">Čtvrtfinále</option>
+                    <option value="Semifinále">Semifinále</option>
+                    <option value="Finále">Finále</option>
+                `;
+            } else {
+                let options = '';
+                for (let r = 1; r <= 14; r++) {
+                    options += `<option value="${r}">${r}. Kolo</option>`;
+                }
+                roundSelect.innerHTML = options;
+            }
+            onForfeitRoundChange();
+        }
+
+        function onForfeitRoundChange() {
+            const comp = document.getElementById('forfeit-comp-select').value;
+            const roundVal = document.getElementById('forfeit-round-select').value;
+            const matchSelect = document.getElementById('forfeit-match-select');
+
+            let filtered = matchesData.filter(m => m.competition === comp);
+            if (comp === 'MOL Cup') {
+                filtered = filtered.filter(m => m.cupStage === roundVal);
+            } else {
+                filtered = filtered.filter(m => m.round === parseInt(roundVal));
+            }
+
+            if (filtered.length === 0) {
+                matchSelect.innerHTML = `<option value="">Žádné zápasy pro toto kolo</option>`;
+            } else {
+                matchSelect.innerHTML = filtered.map(m => {
+                    const home = teamsData.find(t => t.id === m.homeTeamId);
+                    const away = teamsData.find(t => t.id === m.awayTeamId);
+                    return `<option value="${m.id}">${home ? home.name : ''} vs ${away ? away.name : ''}</option>`;
+                }).join('');
+            }
+            updateForfeitTeamsOptions();
+        }
+
+        function updateForfeitTeamsOptions() {
+            const matchId = parseInt(document.getElementById('forfeit-match-select').value);
+            const winnerSelect = document.getElementById('forfeit-winner-team');
+
+            const match = matchesData.find(m => m.id === matchId);
+            if (match) {
+                const home = teamsData.find(t => t.id === match.homeTeamId);
+                const away = teamsData.find(t => t.id === match.awayTeamId);
+
+                winnerSelect.innerHTML = `
+                    <option value="home">${home ? home.name : 'Domácí'}</option>
+                    <option value="away">${away ? away.name : 'Hosté'}</option>
+                `;
+            } else {
+                winnerSelect.innerHTML = `<option value="">Vyberte zápas</option>`;
+            }
+        }
+
+        function executeForfeit() {
+            const matchId = parseInt(document.getElementById('forfeit-match-select').value);
+            const winner = document.getElementById('forfeit-winner-team').value;
+            const reason = document.getElementById('forfeit-reason-input').value.trim();
+
+            if (!reason) {
+                showToast("Pro kontumaci zápasu musíte zadat odůvodnění!", true);
+                return;
+            }
+
+            const match = matchesData.find(m => m.id === matchId);
+
+            if (match) {
+                match.status = 'Completed';
+                match.homeScore = winner === 'home' ? 3 : 0;
+                match.awayScore = winner === 'away' ? 3 : 0;
+
+                logDKAction("KONTUMACE_UTKÁNÍ", `Zápas #${matchId}`, `Kontumováno (3:0 pro ${winner === 'home' ? 'domácí' : 'hosty'}). Důvod: ${reason}`);
+                showToast("Utkání úspěšně skontumováno (3:0).");
+                closeSpecificModal('modal-forfeit');
+                renderMatches();
+                renderDashboard();
+            }
+        }
+
+        function openPostponeModal() {
+            onPostponeCompChange();
+            openModal('modal-postpone');
+        }
+
+        function onPostponeCompChange() {
+            const comp = document.getElementById('postpone-comp-select').value;
+            const roundSelect = document.getElementById('postpone-round-select');
+
+            if (comp === 'MOL Cup') {
+                roundSelect.innerHTML = `
+                    <option value="Osmifinále">Osmifinále</option>
+                    <option value="Čtvrtfinále">Čtvrtfinále</option>
+                    <option value="Semifinále">Semifinále</option>
+                    <option value="Finále">Finále</option>
+                `;
+            } else {
+                let options = '';
+                for (let r = 1; r <= 14; r++) {
+                    options += `<option value="${r}">${r}. Kolo</option>`;
+                }
+                roundSelect.innerHTML = options;
+            }
+            onPostponeRoundChange();
+        }
+
+        function onPostponeRoundChange() {
+            const comp = document.getElementById('postpone-comp-select').value;
+            const roundVal = document.getElementById('postpone-round-select').value;
+            const matchSelect = document.getElementById('postpone-match-select');
+
+            let filtered = matchesData.filter(m => m.competition === comp);
+            if (comp === 'MOL Cup') {
+                filtered = filtered.filter(m => m.cupStage === roundVal);
+            } else {
+                filtered = filtered.filter(m => m.round === parseInt(roundVal));
+            }
+
+            if (filtered.length === 0) {
+                matchSelect.innerHTML = `<option value="">Žádné zápasy pro toto kolo</option>`;
+            } else {
+                matchSelect.innerHTML = filtered.map(m => {
+                    const home = teamsData.find(t => t.id === m.homeTeamId);
+                    const away = teamsData.find(t => t.id === m.awayTeamId);
+                    return `<option value="${m.id}">${home ? home.name : ''} vs ${away ? away.name : ''}</option>`;
+                }).join('');
+            }
+        }
+
+        function executePostpone() {
+            const matchId = parseInt(document.getElementById('postpone-match-select').value);
+            const reason = document.getElementById('postpone-reason-input').value.trim();
+
+            if (!reason) {
+                showToast("Pro odložení zápasu musíte zadat odůvodnění!", true);
+                return;
+            }
+
+            const match = matchesData.find(m => m.id === matchId);
+
+            if (match) {
+                match.status = 'Postponed';
+                match.matchDate = 'TBA';
+
+                logDKAction("ODLOŽENÍ_UTKÁNÍ", `Zápas #${matchId}`, `Utkání odloženo na TBA. Důvod: ${reason}`);
+                showToast("Utkání bylo úspěšně odloženo na TBA.");
+                closeSpecificModal('modal-postpone');
+                renderMatches();
+                renderDashboard();
+            }
+        }
+
+        /* AKCE PŘELOŽENÍ UTKÁNÍ S NOVÝM DATEM */
+        function openRescheduleModal() {
+            onRescheduleCompChange();
+            openModal('modal-reschedule');
+        }
+
+        function onRescheduleCompChange() {
+            const comp = document.getElementById('reschedule-comp-select').value;
+            const roundSelect = document.getElementById('reschedule-round-select');
+
+            if (comp === 'MOL Cup') {
+                roundSelect.innerHTML = `
+                    <option value="Osmifinále">Osmifinále</option>
+                    <option value="Čtvrtfinále">Čtvrtfinále</option>
+                    <option value="Semifinále">Semifinále</option>
+                    <option value="Finále">Finále</option>
+                `;
+            } else {
+                let options = '';
+                for (let r = 1; r <= 14; r++) {
+                    options += `<option value="${r}">${r}. Kolo</option>`;
+                }
+                roundSelect.innerHTML = options;
+            }
+            onRescheduleRoundChange();
+        }
+
+        function onRescheduleRoundChange() {
+            const comp = document.getElementById('reschedule-comp-select').value;
+            const roundVal = document.getElementById('reschedule-round-select').value;
+            const matchSelect = document.getElementById('reschedule-match-select');
+
+            let filtered = matchesData.filter(m => m.competition === comp);
+            if (comp === 'MOL Cup') {
+                filtered = filtered.filter(m => m.cupStage === roundVal);
+            } else {
+                filtered = filtered.filter(m => m.round === parseInt(roundVal));
+            }
+
+            if (filtered.length === 0) {
+                matchSelect.innerHTML = `<option value="">Žádné zápasy pro toto kolo</option>`;
+            } else {
+                matchSelect.innerHTML = filtered.map(m => {
+                    const home = teamsData.find(t => t.id === m.homeTeamId);
+                    const away = teamsData.find(t => t.id === m.awayTeamId);
+                    return `<option value="${m.id}">${home ? home.name : ''} vs ${away ? away.name : ''}</option>`;
+                }).join('');
+            }
+        }
+
+        function executeReschedule() {
+            const matchId = parseInt(document.getElementById('reschedule-match-select').value);
+            const newDateVal = document.getElementById('reschedule-new-date-input').value;
+            const reason = document.getElementById('reschedule-reason-input').value.trim();
+
+            if (!newDateVal) {
+                showToast("Musíte vybrat nové datum a čas konání utkání!", true);
+                return;
+            }
+
+            if (!reason) {
+                showToast("Pro přeložení zápasu musíte zadat odůvodnění!", true);
+                return;
+            }
+
+            const match = matchesData.find(m => m.id === matchId);
+
+            if (match) {
+                match.status = 'Scheduled';
+                match.matchDate = newDateVal;
+
+                const formattedDate = new Date(newDateVal).toLocaleString('cs-CZ');
+                logDKAction("PŘELOŽENÍ_UTKÁNÍ", `Zápas #${matchId}`, `Utkání přeloženo na ${formattedDate}. Důvod: ${reason}`);
+                showToast(`Utkání bylo úspěšně přeloženo na ${formattedDate}.`);
+                closeSpecificModal('modal-reschedule');
+                renderMatches();
+                renderDashboard();
+            }
+        }
+
+        function openFreeAgentsModal() {
+            const body = document.getElementById('free-agents-table-body');
+            const freeAgents = playersData.filter(p => p.isFreeAgent);
+
+            if (body) {
+                body.innerHTML = freeAgents.map(p => `
+                    <tr class="hover:bg-[#13236b]/60">
+                        <td class="p-2 font-mono text-[#aefb12] font-bold">${p.robloxNick}</td>
+                        <td class="p-2 text-gray-300">${p.discordNick}</td>
+                        <td class="p-2 text-right">
+                            <button onclick="signFreeAgent(${p.id})" class="px-2 py-1 bg-[#aefb12] text-[#13236b] rounded font-black">Podepsat</button>
+                        </td>
+                    </tr>
+                `).join('');
+            }
+            openModal('modal-free-agents');
+        }
+
+        function signFreeAgent(playerId) {
+            const player = playersData.find(p => p.id === playerId);
+            if (player) {
+                player.isFreeAgent = false;
+                player.teamId = activeTeamId;
+                showToast(`Hráč ${player.robloxNick} podepsán!`);
+                closeSpecificModal('modal-free-agents');
+                renderTeams();
+                updateAdminStats();
+                renderDashboard();
+            }
+        }
+
+        function toggleMaintenance(state) {
+            isMaintenanceMode = state !== undefined ? state : !isMaintenanceMode;
+            const banner = document.getElementById('maintenance-banner');
+            if (banner) banner.classList.toggle('hidden', !isMaintenanceMode);
+            showToast(`Režim údržby ${isMaintenanceMode ? 'AKTIVOVÁN' : 'DEAKTIVOVÁN'}.`);
+        }
+
+        function toggleRoleSelector() {
+            document.getElementById('role-dropdown').classList.toggle('hidden');
+        }
+
+        function openModal(id) {
+            document.getElementById('modal-backdrop').classList.remove('hidden');
+            const target = document.getElementById(id);
+            if (target) target.classList.remove('hidden');
+        }
+
+        function closeSpecificModal(id) {
+            const target = document.getElementById(id);
+            if (target) target.classList.add('hidden');
+
+            const anyVisible = document.querySelectorAll('#modal-backdrop > div:not(.hidden)').length > 0;
+            if (!anyVisible) {
+                document.getElementById('modal-backdrop').classList.add('hidden');
+            }
+        }
+
+        function showToast(message, isError = false) {
+            const container = document.getElementById('toast-container');
+            if (!container) return;
+
+            const toast = document.createElement('div');
+            toast.className = `p-3.5 rounded-xl shadow-2xl flex items-center space-x-2 text-xs font-bold text-white border pointer-events-auto transition duration-300 transform translate-y-0 ${
+                isError ? 'bg-[#0e1a4f] border-[#f33332] text-[#f33332]' : 'bg-[#0e1a4f] border-[#aefb12] text-[#aefb12]'
+            }`;
+            
+            toast.innerHTML = `<i class="fa-solid ${isError ? 'fa-circle-exclamation text-[#f33332]' : 'fa-circle-check text-[#aefb12]'}"></i><span class="text-gray-200">${message}</span>`;
+
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => toast.remove(), 300);
+            }, 3500);
+        }
+
+        function handleGlobalSearch(query) {
+            const results = document.getElementById('search-results');
+            if (!query || query.length < 2) {
+                results.classList.add('hidden');
+                return;
+            }
+
+            const q = query.toLowerCase();
+            const matchedPlayers = playersData.filter(p => p.robloxNick.toLowerCase().includes(q) || p.discordNick.toLowerCase().includes(q));
+            const matchedTeams = teamsData.filter(t => t.name.toLowerCase().includes(q));
+
+            if (matchedPlayers.length === 0 && matchedTeams.length === 0) {
+                results.innerHTML = `<div class="p-2 text-gray-400">Žádné výsledky</div>`;
+            } else {
+                results.innerHTML = `
+                    ${matchedTeams.map(t => `<div onclick="switchTab('teams'); selectTeam(${t.id}); document.getElementById('search-results').classList.add('hidden');" class="p-2 hover:bg-[#13236b] cursor-pointer font-bold text-[#aefb12]"><i class="fa-solid fa-shield-halved mr-1"></i> ${t.name}</div>`).join('')}
+                    ${matchedPlayers.map(p => `<div onclick="openPlayerCard(${p.id}); document.getElementById('search-results').classList.add('hidden');" class="p-2 hover:bg-[#13236b] cursor-pointer text-gray-200"><i class="fa-solid fa-user mr-1"></i> ${p.robloxNick} (${p.discordNick})</div>`).join('')}
+                `;
+            }
+            results.classList.remove('hidden');
+        }
+
+        window.onload = function () {
+            setUserRole('Admin');
+            switchTab('dashboard');
+            renderDashboard();
+            updateAdminStats();
+            renderDKAuditLogs();
+        };
+    </script>
+</body>
+</html>

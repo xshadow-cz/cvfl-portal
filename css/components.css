@@ -1,0 +1,35 @@
+/* Custom scrollbars */
+.custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #aefb12;
+    border-radius: 3px;
+}
+
+/* FIS Tab active underline & highlight */
+.fis-tab-btn.active {
+    border-bottom: 3px solid #aefb12;
+    color: #aefb12;
+    font-weight: bold;
+}
+
+/* Bílá ikonka hodin u time-inputu */
+input[type="time"]::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+    cursor: pointer;
+}
+
+/* Role Badges */
+.role-badge-admin { background-color: #e91e63; color: #ffffff; }
+.role-badge-ref-mgr { background-color: #7f7f7f; color: #ffffff; }
+.role-badge-dk { background-color: #ffffff; color: #13236b; font-weight: 900; }
+.role-badge-delegate { background-color: #71368a; color: #ffffff; }
+.role-badge-referee { background-color: #607d8b; color: #ffffff; }
+.role-badge-team-mgr { background-color: #11806a; color: #ffffff; }

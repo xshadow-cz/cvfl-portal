@@ -1,0 +1,921 @@
+<!DOCTYPE html>
+<html lang="cs" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CVFL Portál - Systém Vedení a Správy Soutěží</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        cvfl: {
+                            navy: '#13236b',
+                            lime: '#aefb12',
+                            mint: '#05fda3',
+                            teal: '#004a49',
+                            red: '#f33332',
+                            green: '#7ecb5b',
+                            dark: '#0a1238',
+                            card: '#0e1a4f',
+                            border: '#1e307d'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="bg-[#13236b] text-gray-100 min-h-screen flex flex-col transition-colors duration-200">
+
+    <!-- Maintenance Mode Banner -->
+    <div id="maintenance-banner" class="hidden bg-amber-500 text-black text-xs font-black px-4 py-2 text-center flex justify-between items-center z-50">
+        <span><i class="fa-solid fa-triangle-exclamation mr-2"></i> REŽIM ÚDRŽBY AKTIVNÍ</span>
+        <button onclick="toggleMaintenance(false)" class="underline text-xs hover:text-gray-900">Vypnout</button>
+    </div>
+
+    <div id="auth-gate-overlay" class="fixed inset-0 z-[300] bg-[#0a1238] flex items-center justify-center p-6 text-center">
+        <div class="max-w-md w-full space-y-4">
+            <i class="fa-brands fa-discord text-5xl text-[#5865f2]"></i>
+            <h2 id="auth-gate-title" class="text-xl font-black text-white">Přihlášení do CVFL portálu</h2>
+            <p id="auth-gate-message" class="text-sm text-gray-300">Pro pokračování se přihlaste svým Discord účtem.</p>
+            <p id="auth-gate-error" class="hidden text-sm text-red-400"></p>
+            <a id="discord-login-link" href="http://localhost:3000/api/auth/discord" class="inline-block px-5 py-2 bg-[#5865f2] hover:bg-[#4752c4] text-white font-black rounded-lg">
+                <i class="fa-brands fa-discord mr-2"></i>Přihlásit přes Discord
+            </a>
+            <button id="discord-logout-button" onclick="logoutDiscord()" class="hidden px-5 py-2 bg-[#1e307d] text-white font-bold rounded-lg">Odhlásit</button>
+        </div>
+    </div>
+
+    <!-- League System Banner -->
+    <div id="system-banner" class="bg-[#1e307d] border-b border-[#aefb12]/30 text-white text-xs py-2 px-4 shadow-md flex justify-between items-center z-40">
+        <div class="flex items-center space-x-2 overflow-hidden">
+            <span class="bg-[#aefb12] text-[#13236b] text-[10px] uppercase font-black px-2 py-0.5 rounded-full">OZNÁMENÍ</span>
+            <span id="system-banner-text" class="truncate font-medium text-gray-200">Vítejte v oficiálním CVFL Portálu!</span>
+        </div>
+        <button onclick="document.getElementById('system-banner').classList.add('hidden')" class="text-gray-400 hover:text-white ml-2"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+
+    <!-- Main Navigation Bar -->
+    <header class="bg-[#0e1a4f] border-b border-[#1e307d] sticky top-0 z-30 shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                <!-- Logo & Brand -->
+                <div class="flex items-center space-x-3 cursor-pointer" onclick="switchTab('dashboard')">
+                    <img src="assets/cvfl-logo.png" alt="CVFL" class="h-10 w-10 object-contain">
+                    <div>
+                        <span class="font-black text-xl tracking-wider text-white">CVFL <span class="text-[#aefb12]">PORTÁL</span></span>
+                    </div>
+                </div>
+
+                <!-- Desktop Navigation Links -->
+                <nav id="nav-links" class="hidden md:flex space-x-1 lg:space-x-2 text-sm font-bold">
+                    <button onclick="switchTab('dashboard')" id="nav-dashboard" class="px-3 py-2 rounded-lg text-[#aefb12] bg-[#aefb12]/10"><i class="fa-solid fa-chart-pie mr-2"></i>Přehled</button>
+                    <button onclick="switchTab('competitions')" id="nav-competitions" class="px-3 py-2 rounded-lg hover:bg-white/5 text-gray-300"><i class="fa-solid fa-list mr-2"></i>Soutěže</button>
+                    <button onclick="switchTab('matches')" id="nav-matches" class="px-3 py-2 rounded-lg hover:bg-white/5 text-gray-300"><i class="fa-solid fa-calendar-days mr-2"></i>Zápasy</button>
+                    <button onclick="switchTab('teams')" id="nav-teams" class="px-3 py-2 rounded-lg hover:bg-white/5 text-gray-300"><i class="fa-solid fa-shield-halved mr-2"></i>Týmy</button>
+                    <button onclick="switchTab('referees')" id="nav-referees" class="px-3 py-2 rounded-lg hover:bg-white/5 text-gray-300 role-perm-admin role-perm-ref-mgr"><i class="fa-solid fa-user-ninja mr-2"></i>Rozhodčí</button>
+                    <button onclick="switchTab('disciplinary')" id="nav-disciplinary" class="px-3 py-2 rounded-lg hover:bg-white/5 text-gray-300 role-perm-admin role-perm-dk role-perm-ref-mgr role-perm-team-mgr role-perm-referee"><i class="fa-solid fa-gavel mr-2"></i>Disciplinárka</button>
+                    <button onclick="switchTab('admin')" id="nav-admin" class="px-3 py-2 rounded-lg hover:bg-white/5 text-gray-300 role-perm-admin"><i class="fa-solid fa-user-gear mr-2"></i>Administrace</button>
+                </nav>
+
+                <!-- Search & User Role Badge -->
+                <div class="flex items-center space-x-3">
+                    <div class="relative hidden sm:block">
+                        <input type="text" id="global-search" oninput="handleGlobalSearch(this.value)" placeholder="Hledat hráče, tým..." class="w-40 lg:w-56 bg-[#13236b] border border-[#1e307d] text-xs rounded-lg pl-8 pr-3 py-2 text-white focus:outline-none focus:border-[#aefb12]">
+                        <i class="fa-solid fa-magnifying-glass absolute left-2.5 top-2.5 text-gray-400 text-xs"></i>
+                        <div id="search-results" class="hidden absolute left-0 right-0 top-10 bg-[#0e1a4f] border border-[#1e307d] rounded-lg shadow-2xl z-50 max-h-60 overflow-y-auto text-xs p-2"></div>
+                    </div>
+
+                    <div class="relative flex shrink-0 items-center gap-2">
+                        <button onclick="toggleRoleSelector()" class="flex items-center space-x-2 bg-[#13236b] hover:bg-[#1e307d] p-1.5 pl-3 rounded-lg text-xs font-bold border border-[#1e307d]">
+                            <span id="active-role-badge" class="px-2 py-0.5 rounded text-[10px] bg-[#e91e63] text-white uppercase font-black">Vedení Ligy</span>
+                            <i class="fa-solid fa-chevron-down text-[10px] text-gray-400"></i>
+                        </button>
+                        <div id="role-dropdown" class="hidden absolute right-0 top-10 w-64 bg-[#0e1a4f] border border-[#1e307d] rounded-xl shadow-2xl z-50 p-2 text-xs">
+                            <div class="px-2 py-1 font-black text-gray-400 uppercase text-[10px] border-b border-[#1e307d] mb-1">Přepnout Uživatelskou Roli</div>
+                            <button data-role-option="Admin" onclick="setUserRole('Admin')" class="w-full text-left px-2 py-1.5 rounded hover:bg-[#e91e63]/20 hover:text-[#e91e63] flex justify-between items-center text-white">
+                                <span>Vedení Ligy</span> <i class="fa-solid fa-crown text-[#e91e63]"></i>
+                            </button>
+                            <button data-role-option="Referee_Manager" onclick="setUserRole('Referee_Manager')" class="w-full text-left px-2 py-1.5 rounded hover:bg-[#7f7f7f]/20 hover:text-gray-300 flex justify-between items-center text-white">
+                                <span>Vedení Rozhodčích</span> <i class="fa-solid fa-user-ninja text-[#7f7f7f]"></i>
+                            </button>
+                            <button data-role-option="DK" onclick="setUserRole('DK')" class="w-full text-left px-2 py-1.5 rounded hover:bg-white/20 hover:text-white flex justify-between items-center text-white">
+                                <span>Disciplinární komise</span> <i class="fa-solid fa-gavel text-white"></i>
+                            </button>
+                            <button data-role-option="Delegate" onclick="setUserRole('Delegate')" class="w-full text-left px-2 py-1.5 rounded hover:bg-[#71368a]/20 hover:text-[#71368a] flex justify-between items-center text-white">
+                                <span>Delegát Utkání</span> <i class="fa-solid fa-user-check text-[#71368a]"></i>
+                            </button>
+                            <button data-role-option="Referee" onclick="setUserRole('Referee')" class="w-full text-left px-2 py-1.5 rounded hover:bg-[#607d8b]/20 hover:text-[#607d8b] flex justify-between items-center text-white">
+                                <span>Rozhodčí</span> <i class="fa-solid fa-stopwatch text-[#607d8b]"></i>
+                            </button>
+                            
+                            <!-- VEDOUCÍ MUŽSTVA S VÝBĚREM KLUBU -->
+                            <div id="team-managers-role-section" class="hidden border-t border-[#1e307d] my-1 pt-1">
+                                <div class="px-2 py-1 font-black text-gray-400 uppercase text-[9px] flex justify-between items-center">
+                                    <span>Vedoucí Mužstva (Kluby)</span>
+                                    <i class="fa-solid fa-shirt text-[#11806a]"></i>
+                                </div>
+                                <div id="team-managers-dropdown-list" class="max-h-48 overflow-y-auto space-y-0.5 custom-scrollbar pr-1"></div>
+                            </div>
+                        </div>
+                        <button id="header-discord-logout-button" onclick="logoutDiscord()" title="Odhlásit" aria-label="Odhlásit" class="hidden h-9 w-9 rounded-lg border border-red-500/40 text-red-400 hover:bg-red-500/15 hover:text-red-300 transition-colors"><i class="fa-solid fa-door-open"></i></button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        
+        <!-- DASHBOARD TAB -->
+        <section id="tab-dashboard" class="space-y-6">
+            <div class="bg-gradient-to-r from-[#0e1a4f] via-[#13236b] to-[#004a49] border border-[#aefb12]/30 rounded-2xl p-6 relative overflow-hidden shadow-2xl">
+                <div class="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <div>
+                        <h1 id="dashboard-welcome" class="text-2xl sm:text-3xl font-black text-white">Vítej!</h1>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <button onclick="switchTab('matches')" class="px-4 py-2 bg-[#aefb12] hover:bg-opacity-90 text-[#13236b] text-xs font-black rounded-xl shadow-lg transition"><i class="fa-solid fa-bolt mr-2"></i>Živé Zápisy</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- KARTY STATISTIK NAVRŽENÉ DLE POŽADAVKU -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="bg-[#0e1a4f] p-4 rounded-xl border border-[#1e307d] shadow-md">
+                    <div class="text-gray-400 text-xs font-semibold uppercase"><i class="fa-solid fa-users mr-1 text-[#aefb12]"></i> Počet Registrovaných Hráčů</div>
+                    <div id="dash-stat-players" class="text-2xl font-black text-[#aefb12] mt-1">0 Hráčů</div>
+                </div>
+                <div class="bg-[#0e1a4f] p-4 rounded-xl border border-[#1e307d] shadow-md">
+                    <div class="text-gray-400 text-xs font-semibold uppercase"><i class="fa-solid fa-user-ninja mr-1 text-[#05fda3]"></i> Počet Rozhodčích</div>
+                    <div id="dash-stat-referees" class="text-2xl font-black text-[#05fda3] mt-1">0 Rozhodčích</div>
+                </div>
+                <div class="bg-[#0e1a4f] p-4 rounded-xl border border-[#1e307d] shadow-md">
+                    <div class="text-gray-400 text-xs font-semibold uppercase"><i class="fa-solid fa-shield-halved mr-1 text-purple-400"></i> Počet Klubů</div>
+                    <div id="dash-stat-teams" class="text-2xl font-black text-purple-400 mt-1">0 Klubů</div>
+                </div>
+            </div>
+
+            <div class="space-y-4">
+                <div class="flex justify-between items-center">
+                    <h2 class="font-bold text-lg flex items-center gap-2 text-white"><i class="fa-solid fa-play text-[#aefb12]"></i> Přehled Zápasů</h2>
+                    <button onclick="switchTab('matches')" class="text-xs text-[#aefb12] hover:underline font-bold">Zobrazit vše</button>
+                </div>
+                <div id="dashboard-matches-list" class="space-y-3"></div>
+            </div>
+        </section>
+
+        <!-- COMPETITIONS TAB -->
+        <section id="tab-competitions" class="hidden space-y-6">
+            <div class="flex flex-wrap border-b border-[#1e307d] pb-2 gap-2">
+                <button onclick="switchCompTab('liga1')" id="comp-btn-liga1" class="px-4 py-2 font-black text-sm rounded-lg bg-[#aefb12] text-[#13236b] shadow">CVFL 1. Liga</button>
+                <button onclick="switchCompTab('liga2')" id="comp-btn-liga2" class="px-4 py-2 font-black text-sm rounded-lg bg-[#05fda3]/10 text-[#05fda3] hover:bg-[#05fda3] hover:text-[#13236b]">CVFL 2. Liga</button>
+                <button onclick="switchCompTab('nadstavba')" id="comp-btn-nadstavba" class="px-4 py-2 font-bold text-sm rounded-lg text-gray-300 hover:bg-[#1e307d] hidden">Nadstavba</button>
+                <button onclick="switchCompTab('baraz')" id="comp-btn-baraz" class="px-4 py-2 font-bold text-sm rounded-lg text-gray-300 hover:bg-[#1e307d] hidden">Baráž o 1. Ligu</button>
+                <button onclick="switchCompTab('molcup')" id="comp-btn-molcup" class="px-4 py-2 font-black text-sm rounded-lg text-[#f33332] hover:bg-[#f33332]/15 hidden">MOL Cup</button>
+            </div>
+
+            <div id="comp-view-container" class="bg-[#0e1a4f] border border-[#1e307d] rounded-xl p-4 shadow-xl overflow-x-auto"></div>
+        </section>
+
+        <!-- MATCHES TAB -->
+        <section id="tab-matches" class="hidden space-y-6">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-[#0e1a4f] p-4 rounded-xl border border-[#1e307d]">
+                <div>
+                    <h2 class="text-xl font-bold text-white">Přehled Zápasů</h2>
+                    <p class="text-xs text-gray-400">Filtrování zápasů podle soutěže, kola nebo pohárové fáze (max 14 kol).</p>
+                </div>
+                
+                <div class="flex flex-wrap gap-2 w-full md:w-auto">
+                    <div>
+                        <select id="match-filter-competition" onchange="onCompetitionFilterChange()" class="bg-[#13236b] border border-[#1e307d] text-xs rounded-lg p-2 text-white font-bold">
+                            <option value="ALL">Všechny Soutěže</option>
+                            <option value="CVFL 1. Liga">CVFL 1. Liga</option>
+                            <option value="CVFL 2. Liga">CVFL 2. Liga</option>
+                            <option value="MOL Cup">MOL Cup</option>
+                            <option value="Baráž o 1. Ligu">Baráž o 1. Ligu</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <select id="match-filter-round" onchange="renderMatches()" class="bg-[#13236b] border border-[#1e307d] text-xs rounded-lg p-2 text-white font-bold">
+                            <option value="ALL">Všechna Kola / Fáze</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <select id="match-filter-status" onchange="renderMatches()" class="bg-[#13236b] border border-[#1e307d] text-xs rounded-lg p-2 text-white font-bold">
+                            <option value="ALL">Všechny Stavy</option>
+                            <option value="Scheduled">Naplánované</option>
+                            <option value="In_Progress">Probíhající</option>
+                            <option value="Completed">Odehrané</option>
+                            <option value="Postponed">Odložené</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div id="matches-full-list" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+        </section>
+
+        <!-- TEAMS TAB -->
+        <section id="tab-teams" class="hidden space-y-6">
+            <div class="flex justify-between items-center">
+                <h2 class="text-xl font-bold text-white">Správa Týmů a Kádru</h2>
+                <button onclick="openTransferBanList()" class="px-3 py-1.5 bg-[#f33332] hover:bg-red-600 text-white text-xs font-black rounded-lg shadow role-perm-admin role-perm-team-mgr"><i class="fa-solid fa-ban mr-1"></i> Seznam hráčů s Transfer Banem</button>
+            </div>
+
+            <div id="teams-selector" class="flex overflow-x-auto space-x-2 pb-2 custom-scrollbar"></div>
+            <div id="team-detail-view" class="bg-[#0e1a4f] border border-[#1e307d] rounded-xl p-6 shadow-xl space-y-6"></div>
+        </section>
+
+        <!-- REFEREES TAB -->
+        <section id="tab-referees" class="hidden space-y-6">
+            <div class="bg-[#0e1a4f] border border-[#1e307d] p-4 rounded-xl">
+                <h2 class="text-xl font-bold text-white flex items-center gap-2"><i class="fa-solid fa-user-ninja text-[#aefb12]"></i> Komise a Správa Rozhodčích</h2>
+            </div>
+
+            <div id="referee-delegate-alerts" class="hidden"></div>
+
+            <div class="bg-[#0e1a4f] border border-[#1e307d] rounded-xl p-4 shadow-xl space-y-4">
+                <h3 class="font-bold text-sm text-[#05fda3] flex items-center gap-2"><i class="fa-solid fa-clipboard-user"></i> Nominace Rozhodčích</h3>
+                <div id="referee-assignments-list" class="space-y-3"></div>
+            </div>
+
+            <div class="bg-[#0e1a4f] border border-[#1e307d] rounded-xl p-4 shadow-xl">
+                <div class="flex justify-between items-center mb-3">
+                    <h3 class="font-bold text-sm text-white">Seznam Registrovaných Rozhodčích</h3>
+                    <button onclick="openAddRefereeModal()" class="px-3 py-1.5 bg-[#aefb12] hover:bg-opacity-90 text-[#13236b] text-xs font-black rounded-lg shadow role-perm-admin role-perm-ref-mgr">
+                        <i class="fa-solid fa-plus mr-1"></i> Přidat Nového Rozhodčího
+                    </button>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs text-left">
+                        <thead class="bg-[#13236b] text-gray-400 uppercase">
+                            <tr>
+                                <th class="p-3">Roblox Username</th>
+                                <th class="p-3">Discord Username</th>
+                                <th class="p-3">Přístup do portálu</th>
+                                <th class="p-3">Licence</th>
+                                <th class="p-3">Status Licence</th>
+                                <th class="p-3">Je Delegát?</th>
+                                <th class="p-3 text-right">Akce</th>
+                            </tr>
+                        </thead>
+                        <tbody id="referees-main-table" class="divide-y divide-[#1e307d]"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- DISCIPLINARY TAB -->
+        <section id="tab-disciplinary" class="hidden space-y-6">
+            <div class="bg-[#f33332]/10 border border-[#f33332]/30 rounded-xl p-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+                <div>
+                    <h2 class="text-lg font-bold text-[#f33332] flex items-center gap-2"><i class="fa-solid fa-shield-halved"></i> Disciplinární Komise CVFL (DK)</h2>
+                    <p class="text-xs text-gray-300">Správa stopek, kontumací, přeložení, odečtů bodů a rozhodnutí komise.</p>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <button onclick="openAddSuspensionModal()" class="px-3 py-2 bg-[#f33332] hover:bg-opacity-90 text-white text-xs font-bold rounded-lg shadow role-perm-admin role-perm-dk"><i class="fa-solid fa-plus mr-1"></i> Udělit Trest</button>
+                    <button onclick="openForfeitModal()" class="px-3 py-2 bg-amber-500 hover:bg-opacity-90 text-black text-xs font-bold rounded-lg shadow role-perm-admin role-perm-dk"><i class="fa-solid fa-ban mr-1"></i> Kontumace Zápasu</button>
+                    <button onclick="openPostponeModal()" class="px-3 py-2 bg-blue-600 hover:bg-opacity-90 text-white text-xs font-bold rounded-lg shadow role-perm-admin role-perm-dk"><i class="fa-solid fa-clock-rotate-left mr-1"></i> Odložit Utkání</button>
+                    <button onclick="openRescheduleModal()" class="px-3 py-2 bg-emerald-600 hover:bg-opacity-90 text-white text-xs font-bold rounded-lg shadow role-perm-admin role-perm-dk"><i class="fa-solid fa-calendar-days mr-1"></i> Přeložit Utkání</button>
+                    <button onclick="openDeductPointsModal()" class="px-3 py-2 bg-purple-600 hover:bg-opacity-90 text-white text-xs font-bold rounded-lg shadow role-perm-admin role-perm-dk"><i class="fa-solid fa-minus-circle mr-1"></i> Odečet Bodů Týmu</button>
+                </div>
+            </div>
+
+            <div id="dk-fan-issue-alerts" class="hidden space-y-3"></div>
+
+            <!-- AKTIVNÍ TRESTY -->
+            <div class="bg-[#0e1a4f] border border-[#1e307d] rounded-xl p-4 shadow-md">
+                <h3 class="font-bold text-sm mb-3 text-white">Aktivní Tresty a Stopky</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs text-left">
+                        <thead class="bg-[#13236b] text-gray-400 uppercase">
+                            <tr>
+                                <th class="p-3">Hráč (Roblox)</th>
+                                <th class="p-3">Tým</th>
+                                <th class="p-3">Typ Trestu</th>
+                                <th class="p-3">Trest (Zápasy / Čas)</th>
+                                <th class="p-3">Důvod</th>
+                                <th class="p-3 text-right role-perm-admin role-perm-dk">Akce</th>
+                            </tr>
+                        </thead>
+                        <tbody id="suspensions-table-body" class="divide-y divide-[#1e307d]"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- AKTIVNÍ ODEČTY BODŮ -->
+            <div id="deductions-container" class="bg-[#0e1a4f] border border-[#1e307d] rounded-xl p-4 shadow-md space-y-3">
+                <div class="flex justify-between items-center">
+                    <h3 class="font-bold text-sm text-purple-400 flex items-center gap-2"><i class="fa-solid fa-minus-circle"></i> Aktivní Odečty Bodů Klubům</h3>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs text-left">
+                        <thead class="bg-[#13236b] text-gray-400 uppercase">
+                            <tr>
+                                <th class="p-3">Tým</th>
+                                <th class="p-3">Soutěž</th>
+                                <th class="p-3">Odečteno</th>
+                                <th class="p-3">Důvod</th>
+                                <th class="p-3 text-right role-perm-admin role-perm-dk">Akce</th>
+                            </tr>
+                        </thead>
+                        <tbody id="deductions-table-body" class="divide-y divide-[#1e307d]"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- AUDIT LOGS DISCIPLINÁRKY -->
+            <div class="bg-[#0e1a4f] border border-[#1e307d] rounded-xl p-4 shadow-md space-y-3 role-perm-admin role-perm-dk">
+                <h3 class="font-bold text-sm text-[#05fda3] flex items-center gap-2"><i class="fa-solid fa-clock-rotate-left"></i> Disciplinární Audit Log (Historie Rozhodnutí & Mazání)</h3>
+                <div class="overflow-x-auto max-h-60 overflow-y-auto">
+                    <table class="w-full text-xs text-left font-mono">
+                        <thead class="bg-[#13236b] text-gray-400 uppercase sticky top-0">
+                            <tr>
+                                <th class="p-2">Čas</th>
+                                <th class="p-2">Typ Události</th>
+                                <th class="p-2">Subjekt / Tým</th>
+                                <th class="p-2">Podrobnosti a Důvod</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dk-audit-log-body" class="divide-y divide-[#1e307d] text-[11px]"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ADMIN TAB -->
+        <section id="tab-admin" class="hidden space-y-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- VYTVOŘENÍ NOVÉHO UTKÁNÍ -->
+                <div class="bg-[#0e1a4f] p-5 rounded-xl border border-[#aefb12]/40 space-y-4 shadow-xl">
+                    <h3 class="font-bold text-sm flex items-center gap-2 text-[#aefb12]"><i class="fa-solid fa-calendar-plus"></i> Vytvořit Nové Utkání</h3>
+                    <div class="space-y-3 text-xs">
+                        <div>
+                            <label class="block text-gray-400 mb-1">Soutěž:</label>
+                            <select id="create-match-comp" onchange="updateCreateMatchTeams()" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-bold">
+                                <option value="CVFL 1. Liga">CVFL 1. Liga</option>
+                                <option value="CVFL 2. Liga">CVFL 2. Liga</option>
+                                <option value="MOL Cup">MOL Cup</option>
+                                <option value="Baráž o 1. Ligu">Baráž o 1. Ligu</option>
+                            </select>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="block text-gray-400 mb-1">Kolo / Fáze:</label>
+                                <select id="create-match-round" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-bold"></select>
+                            </div>
+                            <div>
+                                <label class="block text-gray-400 mb-1">Datum a Čas:</label>
+                                <input type="datetime-local" id="create-match-date" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-gray-400 mb-1">Název Stadionu:</label>
+                            <input type="text" id="create-match-stadium" placeholder="Zadejte název stadionu..." class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-semibold">
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="block text-gray-400 mb-1">Domácí Tým:</label>
+                                <select id="create-match-home" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white"></select>
+                            </div>
+                            <div>
+                                <label class="block text-gray-400 mb-1">Hostující Tým:</label>
+                                <select id="create-match-away" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white"></select>
+                            </div>
+                        </div>
+                        <button onclick="submitCreateMatch()" class="w-full py-2 bg-[#aefb12] hover:bg-opacity-90 text-[#13236b] font-black rounded-lg shadow-lg transition">
+                            <i class="fa-solid fa-plus mr-1"></i> Vytvořit Utkání
+                        </button>
+                    </div>
+                </div>
+
+                <!-- PŘIDÁNÍ NOVÉHO HRÁČE DO DATABÁZE -->
+                <div class="bg-[#0e1a4f] p-5 rounded-xl border border-[#05fda3]/40 space-y-4 shadow-xl">
+                        <h3 class="font-bold text-sm flex items-center gap-2 text-[#05fda3]"><i class="fa-solid fa-user-plus"></i> Přidat Nového Hráče</h3>
+                        <div id="admin-player-sync-panel" class="hidden rounded-lg border border-[#05fda3]/30 bg-[#05fda3]/10 p-3 text-xs text-gray-200">
+                            <p class="font-bold text-[#05fda3]">Hráče a Transfer Bany spravuje Discord bot.</p>
+                            <p id="admin-player-sync-status" class="mt-1 text-gray-300">Načítám stav synchronizace…</p>
+                        </div>
+                        <div id="admin-add-player-fields" class="space-y-3 text-xs">
+                            <div>
+                                <label class="block text-gray-400 mb-1">Roblox Username:</label>
+                                <input type="text" id="admin-add-player-roblox" placeholder="Zadejte Roblox Nick" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-mono">
+                            </div>
+                            <div>
+                                <label class="block text-gray-400 mb-1">Discord Username:</label>
+                                <input type="text" id="admin-add-player-discord" placeholder="Zadejte Discord Nick" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-mono">
+                            </div>
+                            <div>
+                                <label class="block text-gray-400 mb-1">Klub / Tým:</label>
+                                <select id="admin-add-player-team" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-bold">
+                                    <option value="free">Bez klubu</option>
+                                </select>
+                            </div>
+                            <label class="flex items-center gap-2 text-red-300 font-bold">
+                                <input id="admin-add-player-transfer-ban" type="checkbox" class="accent-[#f33332] w-4 h-4">
+                                Transfer Ban
+                            </label>
+                            <button onclick="submitAdminAddPlayer()" class="w-full py-2 bg-[#05fda3] hover:bg-opacity-90 text-[#13236b] font-black rounded-lg shadow-lg transition">
+                                <i class="fa-solid fa-user-plus mr-1"></i> Registroval Hráče
+                            </button>
+                    </div>
+                    </div>
+
+                    <div class="bg-[#0e1a4f] p-5 rounded-xl border border-amber-400/40 space-y-4 shadow-xl role-perm-admin">
+                        <h3 class="font-bold text-sm flex items-center gap-2 text-amber-300"><i class="fa-solid fa-user-tie"></i> Realizační tým</h3>
+                        <div class="space-y-3 text-xs">
+                            <label class="block text-gray-400">Roblox Username:
+                                <input type="text" id="admin-add-trainer-roblox" required maxlength="100" placeholder="Zadejte Roblox Username" class="mt-1 w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-mono">
+                            </label>
+                            <label class="block text-gray-400">Discord Username:
+                                <input type="text" id="admin-add-trainer-discord" required maxlength="100" placeholder="Zadejte Discord Username" class="mt-1 w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-mono">
+                            </label>
+                            <label class="block text-gray-400">Role:
+                                <select id="admin-add-trainer-role" required class="mt-1 w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-bold">
+                                    <option value="Coach">Trenér</option>
+                                    <option value="Owner">Majitel</option>
+                                </select>
+                            </label>
+                            <label class="block text-gray-400">Klub / Tým:
+                                <select id="admin-add-trainer-team" required class="mt-1 w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-bold"></select>
+                            </label>
+                            <button onclick="submitAdminAddTrainer()" class="w-full py-2 bg-amber-300 text-[#13236b] font-black rounded-lg shadow-lg"><i class="fa-solid fa-user-plus mr-1"></i> Přidat do realizačního týmu</button>
+                        </div>
+                    </div>
+
+                <div class="bg-[#0e1a4f] p-5 rounded-xl border border-[#aefb12]/40 space-y-4 shadow-xl role-perm-admin">
+                        <h3 class="font-bold text-sm flex items-center gap-2 text-[#aefb12]"><i class="fa-solid fa-bullhorn"></i> Horní Oznámení</h3>
+                        <label class="block text-xs text-gray-300" for="admin-system-announcement">Text zobrazený v horním oznamovacím pruhu
+                            <textarea id="admin-system-announcement" maxlength="500" rows="3" placeholder="Zadejte oznámení pro návštěvníky portálu." class="mt-1 w-full resize-y bg-[#13236b] border border-[#1e307d] rounded p-2 text-white"></textarea>
+                        </label>
+                        <button type="button" onclick="saveSystemAnnouncement()" class="px-3 py-2 bg-[#aefb12] text-[#13236b] font-black rounded-lg text-xs"><i class="fa-solid fa-floppy-disk mr-1"></i> Uložit oznámení</button>
+                </div>
+
+                <div class="bg-[#0e1a4f] p-5 rounded-xl border border-amber-400/40 space-y-4 shadow-xl role-perm-admin">
+                        <h3 class="font-bold text-sm flex items-center gap-2 text-amber-300"><i class="fa-solid fa-screwdriver-wrench"></i> Režim Údržby</h3>
+                        <label class="flex items-center justify-between gap-3 text-xs font-bold">
+                            <span>Uzamknout portál pro ostatní role</span>
+                            <input type="checkbox" id="admin-maintenance-toggle" onchange="toggleMaintenance(this.checked)" class="accent-amber-400 w-5 h-5">
+                        </label>
+                        <label class="block text-xs text-gray-300" for="admin-maintenance-note">Poznámka zobrazená během údržby
+                            <textarea id="admin-maintenance-note" maxlength="500" rows="3" placeholder="Například: Probíhá plánovaná aktualizace portálu." class="mt-1 w-full resize-y bg-[#13236b] border border-[#1e307d] rounded p-2 text-white"></textarea>
+                        </label>
+                        <button type="button" onclick="saveMaintenanceNotice()" class="px-3 py-2 bg-amber-300 text-[#13236b] font-black rounded-lg text-xs"><i class="fa-solid fa-floppy-disk mr-1"></i> Uložit poznámku</button>
+                </div>
+
+                <!-- MOŽNOSTI ZOBRAZENÍ SEKCE SEKCÍ -->
+                <div class="bg-[#0e1a4f] p-5 rounded-xl border border-[#1e307d] space-y-4">
+                    <h3 class="font-bold text-sm flex items-center gap-2 text-purple-400"><i class="fa-solid fa-eye"></i> Viditelnost Sekcí</h3>
+                    <div class="space-y-3 text-xs">
+                        <div class="p-3 bg-[#13236b] rounded-lg border border-[#1e307d] flex justify-between items-center">
+                            <span>Zobrazit Nadstavbu</span>
+                            <input type="checkbox" id="toggle-sec-nadstavba" onchange="toggleExtraSection('nadstavba', this.checked)" class="accent-[#aefb12] w-5 h-5">
+                        </div>
+                        <div class="p-3 bg-[#13236b] rounded-lg border border-[#1e307d] flex justify-between items-center">
+                            <span>Zobrazit Baráž o 1. Ligu</span>
+                            <input type="checkbox" id="toggle-sec-baraz" onchange="toggleExtraSection('baraz', this.checked)" class="accent-[#aefb12] w-5 h-5">
+                        </div>
+                        <div class="p-3 bg-[#13236b] rounded-lg border border-[#1e307d] flex justify-between items-center">
+                            <span>Zobrazit MOL Cup</span>
+                            <input type="checkbox" id="toggle-sec-molcup" onchange="toggleExtraSection('molcup', this.checked)" class="accent-[#aefb12] w-5 h-5">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-[#0e1a4f] border border-[#1e307d] rounded-xl p-5 shadow-xl space-y-4">
+                <h3 class="font-bold text-sm flex items-center gap-2 text-[#aefb12]"><i class="fa-solid fa-shield-halved"></i> Správa Týmů a Lig</h3>
+                <form onsubmit="submitAdminAddTeam(event)" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[1fr_12rem_1fr_auto] gap-2">
+                    <input id="admin-add-team-name" type="text" required maxlength="100" placeholder="Název týmu" class="bg-[#13236b] border border-[#1e307d] rounded p-2 text-white">
+                    <select id="admin-add-team-league" class="bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-bold">
+                        <option value="1_Liga">CVFL 1. Liga</option>
+                        <option value="2_Liga">CVFL 2. Liga</option>
+                    </select>
+                    <label class="text-xs text-gray-300">Logo týmu (čtvercové PNG, do 1 MB)
+                        <input id="admin-add-team-logo" type="file" accept="image/png,.png" class="mt-1 w-full bg-[#13236b] border border-[#1e307d] rounded p-1.5 text-white">
+                    </label>
+                    <button type="submit" class="px-4 py-2 bg-[#aefb12] text-[#13236b] font-black rounded-lg"><i class="fa-solid fa-plus mr-1"></i> Přidat tým</button>
+                </form>
+                <div id="admin-teams-list" class="space-y-2"></div>
+            </div>
+
+            <div class="bg-[#0e1a4f] border border-[#1e307d] rounded-xl p-5 shadow-xl space-y-4 role-perm-admin">
+                <h3 class="font-bold text-sm flex items-center gap-2 text-[#5865f2]"><i class="fa-brands fa-discord"></i> Discord Účty a Přístupy</h3>
+                <p class="text-xs text-gray-400">Každá pozvánka je jedinečná, platí 7 dní a lze ji použít jen jednou. Discord účet lze zaregistrovat pouze jednou.</p>
+                <form onsubmit="createDiscordInvite(event)" class="space-y-3 rounded-lg border border-[#1e307d] bg-[#13236b]/60 p-4">
+                    <h4 class="text-xs font-black text-white">Vytvořit jednorázový odkaz</h4>
+                    <div id="admin-discord-invite-role-options" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2"></div>
+                    <button type="submit" class="px-4 py-2 bg-[#5865f2] text-white font-black rounded-lg"><i class="fa-solid fa-link mr-1"></i> Vytvořit pozvánku</button>
+                    <div class="flex flex-col sm:flex-row gap-2">
+                        <input id="admin-discord-invite-link" type="text" readonly aria-label="Jednorázový odkaz na přihlášení" class="hidden flex-1 bg-[#0e1a4f] border border-[#1e307d] rounded p-2 text-white font-mono text-xs">
+                        <button id="admin-discord-invite-copy" type="button" onclick="copyDiscordInviteLink()" class="hidden px-4 py-2 bg-[#1e307d] text-white font-bold rounded-lg">Kopírovat odkaz</button>
+                    </div>
+                </form>
+                <div class="space-y-2 rounded-lg border border-[#1e307d] bg-[#13236b]/60 p-4">
+                    <h4 class="text-xs font-black text-white">Nepoužité pozvánky</h4>
+                    <div class="mb-2 flex justify-end"><button type="button" onclick="refreshDiscordInvites()" class="rounded bg-[#1e307d] px-3 py-1.5 text-xs font-bold text-white"><i class="fa-solid fa-rotate mr-1"></i> Obnovit</button></div>
+                    <div id="admin-discord-invite-list" class="space-y-2"></div>
+                </div>
+                <form id="admin-discord-user-form" onsubmit="saveDiscordUserRoles(event)" class="space-y-3 rounded-lg border border-[#1e307d] bg-[#13236b]/60 p-4">
+                    <h4 class="text-xs font-black text-white">Změnit role existujícího účtu</h4>
+                    <input id="admin-discord-user-id" type="text" inputmode="numeric" pattern="[0-9]{17,20}" required oninput="invalidateDiscordUserLookup()" onkeydown="handleDiscordUserIdKeydown(event)" placeholder="Discord User ID (17–20 číslic)" class="w-full sm:max-w-md bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-mono">
+                    <button type="button" onclick="lookupDiscordUserRoles()" class="px-4 py-2 bg-[#1e307d] text-white font-bold rounded-lg"><i class="fa-solid fa-magnifying-glass mr-1"></i> Načíst účet a role</button>
+                    <p id="admin-discord-user-lookup-status" class="text-xs text-gray-400">Zadejte Discord ID a stiskněte Enter nebo načtěte účet.</p>
+                    <div id="admin-discord-role-options" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2"></div>
+                    <button type="submit" class="px-4 py-2 bg-[#5865f2] text-white font-black rounded-lg"><i class="fa-solid fa-floppy-disk mr-1"></i> Uložit role</button>
+                    <button id="admin-discord-user-delete" type="button" onclick="deleteDiscordUserFromDatabase()" class="hidden px-4 py-2 bg-[#f33332] text-white font-black rounded-lg"><i class="fa-solid fa-trash mr-1"></i> Smazat z databáze</button>
+                </form>
+                <input id="admin-discord-user-search" type="search" oninput="filterDiscordUsers(this.value)" placeholder="Hledat podle jména, Discord ID nebo role..." class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-xs text-white">
+                <div id="admin-discord-user-list" class="space-y-2"></div>
+            </div>
+
+            <!-- SPRÁVA A SMAZÁNÍ UTKÁNÍ -->
+            <div class="bg-[#0e1a4f] border border-[#1e307d] rounded-xl p-5 shadow-xl space-y-4">
+                <h3 class="font-bold text-sm flex items-center gap-2 text-[#f33332]"><i class="fa-solid fa-trash-can"></i> Správa a Mazání Utkání</h3>
+                <div id="admin-matches-delete-list" class="space-y-2"></div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="bg-[#0e1a4f] border-t border-[#1e307d] py-4 text-xs text-gray-400 text-center">
+        <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row justify-between items-center gap-2">
+            <div>&copy; 2026 CVFL Portál. Všechna práva vyhrazena.</div>
+            <nav aria-label="Právní informace" class="flex gap-4">
+                <a href="privacy-policy.html" class="hover:text-white">Zásady ochrany osobních údajů</a>
+                <a href="terms-of-service.html" class="hover:text-white">Podmínky používání</a>
+            </nav>
+            <div>
+                <span class="text-[#aefb12] font-bold"><i class="fa-solid fa-shield mr-1"></i> CVFL Portál v0.1</span>
+            </div>
+        </div>
+    </footer>
+
+    <div id="database-unavailable-overlay" class="hidden fixed inset-0 z-[200] bg-[#0a1238]/95 flex items-center justify-center p-6 text-center">
+        <div class="max-w-md space-y-4">
+            <i class="fa-solid fa-database text-4xl text-[#f33332]"></i>
+            <h2 class="text-xl font-black text-white">Databáze není dostupná</h2>
+            <p class="text-sm text-gray-300">Portál používá výhradně data z databáze. Spusťte backend příkazem <code class="text-[#aefb12]">npm start</code> a obnovte stránku.</p>
+            <button onclick="location.reload()" class="px-4 py-2 bg-[#aefb12] text-[#13236b] font-black rounded-lg">Obnovit stránku</button>
+        </div>
+    </div>
+
+    <div id="maintenance-access-overlay" class="hidden fixed inset-0 z-[190] bg-[#0a1238] flex items-center justify-center p-6 text-center">
+        <div class="max-w-md space-y-4">
+            <i class="fa-solid fa-screwdriver-wrench text-4xl text-amber-400"></i>
+            <h2 class="text-xl font-black text-white">Portál je v údržbě</h2>
+            <p id="maintenance-access-notice" class="text-sm text-gray-300"></p>
+            <button onclick="logoutDiscord()" class="px-4 py-2 bg-red-500 hover:bg-red-600 text-white font-bold rounded-lg"><i class="fa-solid fa-door-open mr-2"></i>Odhlásit se</button>
+        </div>
+    </div>
+
+    <!-- ABSOLUTNÍ POTVRZOVACÍ DIALOG -->
+    <div id="confirm-overlay" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+        <div class="bg-[#0e1a4f] border-2 border-[#f33332] rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl relative">
+            <div class="flex items-center space-x-3 text-[#f33332]">
+                <div class="w-10 h-10 rounded-xl bg-[#f33332]/20 border border-[#f33332]/40 flex items-center justify-center text-lg font-black">
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                </div>
+                <div>
+                    <h3 id="confirm-dialog-title" class="font-black text-lg text-white">Potvrzení Akce</h3>
+                    <span class="text-[10px] text-[#f33332] font-bold uppercase">Upozornění systému CVFL</span>
+                </div>
+            </div>
+            <p id="confirm-dialog-message" class="text-xs text-gray-300 leading-relaxed bg-[#13236b] p-3 rounded-xl border border-[#1e307d]">
+                Opravdu chcete tuto akce provést?
+            </p>
+            
+            <div id="confirm-reason-box" class="space-y-1">
+                <label class="block text-[11px] font-bold text-gray-300">Důvod akce / odebrání:</label>
+                <input type="text" id="confirm-reason-input" placeholder="Zadejte odůvodnění..." class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-xs text-white">
+            </div>
+
+            <div class="flex justify-end space-x-2 pt-2">
+                <button onclick="closeConfirmModal(false)" class="px-4 py-2 bg-[#13236b] hover:bg-[#1e307d] text-gray-300 font-bold text-xs rounded-xl border border-[#1e307d]">Zrušit</button>
+                <button onclick="closeConfirmModal(true)" class="px-5 py-2 bg-[#f33332] hover:bg-opacity-90 text-white font-black text-xs rounded-xl shadow-lg transition">Potvrdit a Provést</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODALS CONTAINER -->
+    <div id="modal-backdrop" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+
+        <!-- MODAL ODEČET BODŮ TÝMU -->
+        <div id="modal-deduct-points" class="hidden bg-[#0e1a4f] border border-purple-500/40 rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl relative z-50">
+            <div class="flex justify-between items-center border-b border-[#1e307d] pb-3">
+                <h3 class="font-bold text-lg text-purple-400 flex items-center gap-2"><i class="fa-solid fa-minus-circle"></i> Odečet Bodů Týmu</h3>
+                <button onclick="closeSpecificModal('modal-deduct-points')" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="space-y-3 text-xs">
+                <div>
+                    <label class="block text-gray-400 mb-1">Vyberte Tým:</label>
+                    <select id="deduct-team-select" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-bold"></select>
+                </div>
+                <div>
+                    <label class="block text-gray-400 mb-1">Počet Odečtených Bodů:</label>
+                    <input type="number" id="deduct-points-count" value="3" min="1" max="30" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-bold">
+                </div>
+                <div>
+                    <label class="block text-gray-400 mb-1">Důvod Odečtu Bodů (např. Rozhodnutí svazu):</label>
+                    <input type="text" id="deduct-points-reason" value="Rozhodnutí svazu" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white">
+                </div>
+                <button onclick="submitPointsDeduction()" class="w-full py-2 bg-purple-600 hover:bg-opacity-90 text-white font-black rounded-lg shadow-lg">Potvrdit Odečet Bodů</button>
+            </div>
+        </div>
+
+        <!-- MODAL PRO VÝBĚR HRÁČE DO SESTAVY (CENTRUM, VYSOKÝ Z-INDEX) -->
+        <div id="modal-add-roster-player" class="hidden bg-[#0e1a4f] border border-[#aefb12]/40 rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl relative z-[110]">
+            <div class="flex justify-between items-center border-b border-[#1e307d] pb-3">
+                <h3 id="roster-picker-title" class="font-bold text-lg text-[#aefb12]">Přidat Hráče do Sestavy</h3>
+                <button onclick="closeSpecificModal('modal-add-roster-player')" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div id="roster-picker-list" class="space-y-2 max-h-80 overflow-y-auto text-xs"></div>
+        </div>
+
+        <!-- MODAL PRO PŘIDÁNÍ ČLENA STAFFU (CENTRUM, VYSOKÝ Z-INDEX) -->
+        <div id="modal-add-staff-member" class="hidden bg-[#0e1a4f] border border-[#05fda3]/40 rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl relative z-[110]">
+            <div class="flex justify-between items-center border-b border-[#1e307d] pb-3">
+                <h3 id="staff-picker-title" class="font-bold text-lg text-[#05fda3]">Přidat Člena Realizačního Týmu</h3>
+                <button onclick="closeSpecificModal('modal-add-staff-member')" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="space-y-3 text-xs">
+                <div>
+                    <label class="block text-gray-400 mb-1">Roblox Username:</label>
+                    <input type="text" id="staff-roblox-input" placeholder="Zadejte Roblox Nick" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-mono">
+                </div>
+                <div>
+                    <label class="block text-gray-400 mb-1">Discord Username:</label>
+                    <input type="text" id="staff-discord-input" placeholder="Zadejte Discord Nick" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-mono">
+                </div>
+                <div>
+                    <label class="block text-gray-400 mb-1">Role v týmu:</label>
+                    <select id="staff-role-select" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-bold">
+                        <option value="Hlavní trenér">Hlavní trenér</option>
+                        <option value="Asistent Trenéra">Asistent Trenéra</option>
+                        <option value="Kustod">Kustod</option>
+                        <option value="Masér">Masér</option>
+                        <option value="Ostatní">Ostatní</option>
+                    </select>
+                </div>
+                <button onclick="submitStaffMember()" class="w-full py-2 bg-[#05fda3] hover:bg-opacity-90 text-[#13236b] font-black rounded-lg shadow-lg">Přidat do Týmu</button>
+            </div>
+        </div>
+
+        <!-- EDIT / ADD REFEREE MODAL -->
+        <div id="modal-edit-referee" class="hidden bg-[#0e1a4f] border border-[#aefb12]/40 rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl relative z-50">
+            <div class="flex justify-between items-center border-b border-[#1e307d] pb-3">
+                <h3 id="referee-modal-title" class="font-bold text-lg text-[#aefb12] flex items-center gap-2"><i class="fa-solid fa-user-ninja"></i> Upravit Rozhodčího</h3>
+                <button onclick="closeSpecificModal('modal-edit-referee')" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="space-y-3 text-xs">
+                <div>
+                    <label class="block text-gray-400 mb-1">Roblox Username:</label>
+                    <input type="text" id="edit-ref-roblox" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-mono">
+                </div>
+                <div>
+                    <label class="block text-gray-400 mb-1">Discord Username:</label>
+                    <input type="text" id="edit-ref-discord" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-mono">
+                </div>
+                <div id="referee-discord-id-field">
+                    <label class="block text-gray-400 mb-1">Discord ID (umožní rozhodčímu registraci bez pozvánky):</label>
+                    <input type="text" id="edit-ref-discord-id" inputmode="numeric" pattern="[0-9]{17,20}" placeholder="Discord User ID (17–20 číslic)" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-mono">
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block text-gray-400 mb-1">Licence Rozhodčího:</label>
+                        <select id="edit-ref-license" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-bold">
+                            <option value="A">Licence A</option>
+                            <option value="B">Licence B</option>
+                            <option value="C">Licence C</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-gray-400 mb-1">Status Licence:</label>
+                        <select id="edit-ref-status" onchange="toggleRefStatusReasonInput()" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-bold">
+                            <option value="Active">Platná</option>
+                            <option value="Suspended">Suspendovaná</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="ref-status-reason-box" class="hidden">
+                    <label class="block text-gray-400 mb-1">Důvod suspendace (Povinné při suspendování):</label>
+                    <input type="text" id="edit-ref-reason" placeholder="Zadejte odůvodnění suspendace..." class="w-full bg-[#13236b] border border-[#f33332]/50 rounded p-2 text-white">
+                </div>
+
+                <div class="p-3 bg-[#13236b] border border-[#1e307d] rounded-lg mt-2">
+                    <label class="flex items-center space-x-2 cursor-pointer text-white">
+                        <input type="checkbox" id="edit-ref-is-delegate" class="accent-[#aefb12] w-4 h-4">
+                        <span class="font-bold text-sm">Je zároveň Delegát utkání</span>
+                    </label>
+                </div>
+                <button onclick="saveRefereeChanges()" class="w-full py-2 bg-[#aefb12] hover:bg-opacity-90 text-[#13236b] font-black rounded-lg shadow-lg">Uložit Rozhodčího</button>
+            </div>
+        </div>
+
+        <!-- REFEREE SLOT PICKER MODAL -->
+        <div id="modal-referee-picker" class="hidden bg-[#0e1a4f] border border-[#05fda3]/40 rounded-2xl w-full max-w-lg p-6 space-y-4 shadow-2xl relative z-50">
+            <div class="flex justify-between items-center border-b border-[#1e307d] pb-3">
+                <div>
+                    <h3 id="picker-title" class="font-bold text-lg text-[#05fda3]">Výběr Rozhodčího</h3>
+                </div>
+                <button onclick="closeSpecificModal('modal-referee-picker')" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div id="picker-list" class="space-y-2 max-h-80 overflow-y-auto text-xs"></div>
+        </div>
+
+        <!-- ADD SUSPENSION MODAL -->
+        <div id="modal-add-suspension" class="hidden bg-[#0e1a4f] border border-[#f33332]/40 rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl relative z-50">
+            <div class="flex justify-between items-center border-b border-[#1e307d] pb-3">
+                <h3 class="font-bold text-lg text-[#f33332] flex items-center gap-2"><i class="fa-solid fa-gavel"></i> Udělit Trest Hráči</h3>
+                <button onclick="closeSpecificModal('modal-add-suspension')" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="space-y-3 text-xs">
+                <div>
+                    <label class="block text-gray-400 mb-1">1. Vyberte Tým:</label>
+                    <select id="suspension-team-select" onchange="updateSuspensionPlayers()" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white"></select>
+                </div>
+                <div>
+                    <label class="block text-gray-400 mb-1">2. Vyberte Hráče Týmu:</label>
+                    <select id="suspension-player-select" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white"></select>
+                </div>
+                <div>
+                    <label class="block text-gray-400 mb-1">Typ Trestu:</label>
+                    <select id="suspension-type-select" onchange="toggleSuspensionInputs()" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-bold">
+                        <option value="Match_Count">Na Počet Zápasů</option>
+                        <option value="Time_Period">Na Časové Období (Do data)</option>
+                    </select>
+                </div>
+                <div id="suspension-input-matches">
+                    <label class="block text-gray-400 mb-1">Počet Zápasů Stopky:</label>
+                    <input type="number" id="suspension-matches-count" value="1" min="1" max="20" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white">
+                </div>
+                <div id="suspension-input-time" class="hidden">
+                    <label class="block text-gray-400 mb-1">Trest Vyprší Dne a V Čase:</label>
+                    <input type="datetime-local" id="suspension-until-date" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white">
+                </div>
+                <div>
+                    <label class="block text-gray-400 mb-1">Důvod Trestu (Povinný):</label>
+                    <textarea id="suspension-reason-text" rows="3" placeholder="Zadejte odůvodnění disciplinární komise..." class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white"></textarea>
+                </div>
+                <button onclick="submitNewSuspension()" class="w-full py-2 bg-[#f33332] hover:bg-opacity-90 text-white font-bold rounded-lg shadow-lg">Potvrdit a Udělit Trest</button>
+            </div>
+        </div>
+
+        <!-- PLAYER CAREER PROFIL MODAL -->
+        <div id="modal-player-card" class="hidden bg-[#0e1a4f] border border-[#aefb12]/40 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl relative z-[120]">
+            <div id="player-card-content"></div>
+        </div>
+
+        <!-- MATCH PROTOCOL MODAL (FIS ZOU) -->
+        <div id="modal-match-protocol" class="hidden bg-[#0e1a4f] border border-[#1e307d] rounded-2xl w-full max-w-5xl max-h-[92vh] overflow-y-auto shadow-2xl p-6 space-y-6 relative z-40">
+            <div id="match-protocol-content"></div>
+        </div>
+
+        <!-- KONTUMACE UTKÁNÍ MODAL -->
+        <div id="modal-forfeit" class="hidden bg-[#0e1a4f] border border-[#f33332]/40 rounded-2xl w-full max-w-lg p-6 space-y-4 shadow-2xl relative z-50">
+            <div class="flex justify-between items-center border-b border-[#1e307d] pb-3">
+                <h3 class="font-bold text-lg text-[#f33332] flex items-center gap-2"><i class="fa-solid fa-gavel"></i> Kontumace Utkání (3:0)</h3>
+                <button onclick="closeSpecificModal('modal-forfeit')" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="space-y-4 text-xs">
+                <div>
+                    <label class="block text-gray-400 mb-1">1. Vyberte Soutěž:</label>
+                    <select id="forfeit-comp-select" onchange="onForfeitCompChange()" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-bold">
+                        <option value="CVFL 1. Liga">CVFL 1. Liga</option>
+                        <option value="CVFL 2. Liga">CVFL 2. Liga</option>
+                        <option value="MOL Cup">MOL Cup</option>
+                        <option value="Baráž o 1. Ligu">Baráž o 1. Ligu</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-gray-400 mb-1">2. Vyberte Kolo / Fázi:</label>
+                    <select id="forfeit-round-select" onchange="onForfeitRoundChange()" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-bold"></select>
+                </div>
+                <div>
+                    <label class="block text-gray-400 mb-1">3. Vyberte Utkání:</label>
+                    <select id="forfeit-match-select" onchange="updateForfeitTeamsOptions()" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-bold"></select>
+                </div>
+                <div>
+                    <label class="block text-gray-400 mb-1">4. Vítězný Tým Kontumačně (3:0):</label>
+                    <select id="forfeit-winner-team" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-bold"></select>
+                </div>
+                <div>
+                    <label class="block text-gray-400 mb-1">Důvod Kontumace (Povinné):</label>
+                    <input type="text" id="forfeit-reason-input" placeholder="Zadejte odůvodnění..." class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white">
+                </div>
+                <button onclick="executeForfeit()" class="w-full py-2.5 bg-[#f33332] hover:bg-opacity-90 font-bold rounded-lg text-white shadow-lg">Potvrdit a Kontumovat (3:0)</button>
+            </div>
+        </div>
+
+        <!-- POSTPONE MATCH MODAL (ODLOŽENÍ UTKÁNÍ DO TBA) -->
+        <div id="modal-postpone" class="hidden bg-[#0e1a4f] border border-blue-500/40 rounded-2xl w-full max-w-lg p-6 space-y-4 shadow-2xl relative z-50">
+            <div class="flex justify-between items-center border-b border-[#1e307d] pb-3">
+                <h3 class="font-bold text-lg text-blue-400 flex items-center gap-2"><i class="fa-solid fa-clock-rotate-left"></i> Odložit Utkání</h3>
+                <button onclick="closeSpecificModal('modal-postpone')" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="space-y-4 text-xs">
+                <div>
+                    <label class="block text-gray-400 mb-1">1. Vyberte Soutěž:</label>
+                    <select id="postpone-comp-select" onchange="onPostponeCompChange()" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-bold">
+                        <option value="CVFL 1. Liga">CVFL 1. Liga</option>
+                        <option value="CVFL 2. Liga">CVFL 2. Liga</option>
+                        <option value="MOL Cup">MOL Cup</option>
+                        <option value="Baráž o 1. Ligu">Baráž o 1. Ligu</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-gray-400 mb-1">2. Vyberte Kolo / Fázi:</label>
+                    <select id="postpone-round-select" onchange="onPostponeRoundChange()" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-bold"></select>
+                </div>
+                <div>
+                    <label class="block text-gray-400 mb-1">3. Vyberte Utkání:</label>
+                    <select id="postpone-match-select" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-bold"></select>
+                </div>
+                <div>
+                    <label class="block text-gray-400 mb-1">Důvod Odložení (Povinné):</label>
+                    <input type="text" id="postpone-reason-input" placeholder="Zadejte odůvodnění..." class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white">
+                </div>
+                <button onclick="executePostpone()" class="w-full py-2.5 bg-blue-600 hover:bg-opacity-90 font-bold rounded-lg text-white shadow-lg">Potvrdit a Odložit Utkání</button>
+            </div>
+        </div>
+
+        <!-- RESCHEDULE MATCH MODAL (PŘELOŽENÍ UTKÁNÍ S NOVÝM DATEM) -->
+        <div id="modal-reschedule" class="hidden bg-[#0e1a4f] border border-emerald-500/40 rounded-2xl w-full max-w-lg p-6 space-y-4 shadow-2xl relative z-50">
+            <div class="flex justify-between items-center border-b border-[#1e307d] pb-3">
+                <h3 class="font-bold text-lg text-emerald-400 flex items-center gap-2"><i class="fa-solid fa-calendar-days"></i> Přeložit Utkání</h3>
+                <button onclick="closeSpecificModal('modal-reschedule')" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="space-y-4 text-xs">
+                <div>
+                    <label class="block text-gray-400 mb-1">1. Vyberte Soutěž:</label>
+                    <select id="reschedule-comp-select" onchange="onRescheduleCompChange()" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-bold">
+                        <option value="CVFL 1. Liga">CVFL 1. Liga</option>
+                        <option value="CVFL 2. Liga">CVFL 2. Liga</option>
+                        <option value="MOL Cup">MOL Cup</option>
+                        <option value="Baráž o 1. Ligu">Baráž o 1. Ligu</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-gray-400 mb-1">2. Vyberte Kolo / Fázi:</label>
+                    <select id="reschedule-round-select" onchange="onRescheduleRoundChange()" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-bold"></select>
+                </div>
+                <div>
+                    <label class="block text-gray-400 mb-1">3. Vyberte Utkání:</label>
+                    <select id="reschedule-match-select" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-bold"></select>
+                </div>
+                <div>
+                    <label class="block text-gray-400 mb-1">Nové Datum a Čas Utkání (Povinné):</label>
+                    <input type="datetime-local" id="reschedule-new-date-input" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-bold">
+                </div>
+                <div>
+                    <label class="block text-gray-400 mb-1">Důvod Přeložení (Povinné):</label>
+                    <input type="text" id="reschedule-reason-input" placeholder="Zadejte odůvodnění..." class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white">
+                </div>
+                <button onclick="executeReschedule()" class="w-full py-2.5 bg-emerald-600 hover:bg-opacity-90 font-bold rounded-lg text-white shadow-lg">Potvrdit a Přeložit Utkání</button>
+            </div>
+        </div>
+
+        <!-- TRANSFER BAN LIST MODAL -->
+        <div id="modal-transfer-ban" class="hidden bg-[#0e1a4f] border border-red-500/50 rounded-2xl w-full max-w-2xl p-6 space-y-4 shadow-2xl relative z-50">
+            <div class="flex justify-between items-center border-b border-[#1e307d] pb-3">
+                <h3 class="font-bold text-lg text-red-400 flex items-center gap-2"><i class="fa-solid fa-ban"></i> Seznam hráčů s Transfer Banem</h3>
+                <button onclick="closeSpecificModal('modal-transfer-ban')" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="overflow-x-auto max-h-80 overflow-y-auto">
+                <table class="w-full text-xs text-left">
+                    <thead class="bg-[#13236b] text-red-300 uppercase">
+                        <tr>
+                            <th class="p-2">Roblox Nick</th>
+                            <th class="p-2">Discord Nick</th>
+                            <th class="p-2 text-right">Transfer Ban</th>
+                        </tr>
+                    </thead>
+                    <tbody id="transfer-ban-table-body" class="divide-y divide-[#1e307d]"></tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- TOAST NOTIFICATIONS -->
+    <div id="toast-container" class="fixed bottom-5 right-5 z-[120] space-y-2 pointer-events-none flex flex-col items-end"></div>
+
+    <!-- JAVASCRIPT APLIKACE (ES MODULY) -->
+    <script type="module" src="js/main.js"></script>
+</body>
+</html>
