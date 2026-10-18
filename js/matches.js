@@ -928,11 +928,6 @@ export function togglePlayerStarterInRoster(matchId, side, playerId, checked) {
     const roster = side === 'home' ? match.homeRoster : match.awayRoster;
     const target = roster.find(r => r.playerId === playerId);
     if (target) {
-        if (checked && roster.filter(player => player.isStarter).length >= 5) {
-            showToast("V základní sestavě může být nejvýše 5 hráčů.", true);
-            openMatchProtocol(matchId);
-            return;
-        }
         target.isStarter = checked;
         state.unsavedChangesGuard = true;
     }
@@ -951,20 +946,6 @@ export function updatePeriodChecks(matchId) {
     const penaltiesEnded = document.getElementById('check-penalties-ended');
 
     const startsMatch = h1s?.checked && !match.periodChecks.h1Started;
-    const homeStarters = match.homeRoster.filter(player => player.isStarter).length;
-    const awayStarters = match.awayRoster.filter(player => player.isStarter).length;
-    if (startsMatch && (match.homeRoster.length > 10 || match.awayRoster.length > 10 ||
-        homeStarters < 3 || homeStarters > 5 || awayStarters < 3 || awayStarters > 5)) {
-        h1s.checked = false;
-        showToast("Každý tým musí mít na soupisce nejvýše 10 hráčů a 3 až 5 hráčů v základu.", true);
-        return;
-    }
-    if (startsMatch && (match.homeRoster.filter(player => player.isGK).length !== 1 ||
-        match.awayRoster.filter(player => player.isGK).length !== 1)) {
-        h1s.checked = false;
-        showToast("Před zahájením musí mít každý tým určeného právě jednoho brankáře.", true);
-        return;
-    }
     if (startsMatch && [...match.homeRoster, ...match.awayRoster].some(item => isPlayerSuspended(item.playerId))) {
         h1s.checked = false;
         showToast("Hráč s aktivní stopkou nemůže nastoupit do utkání.", true);
@@ -1084,11 +1065,6 @@ export function openAddPlayerToRosterModal(matchId, side) {
 
     const roster = side === 'home' ? match.homeRoster : match.awayRoster;
 
-    if (roster.length >= 10) {
-        showToast("Na zápasové soupisce může být maximálně 10 hráčů!", true);
-        return;
-    }
-
     const teamId = side === 'home' ? match.homeTeamId : match.awayTeamId;
     const team = teamsData.find(t => t.id === teamId);
     const teamPlayers = playersData.filter(p => !p.isArchived && p.teamId === teamId);
@@ -1131,11 +1107,6 @@ export function addPlayerToRoster(playerId) {
     if (!match) return;
 
     const roster = state.activeRosterSide === 'home' ? match.homeRoster : match.awayRoster;
-    
-    if (roster.length >= 10) {
-        showToast("Na zápasové soupisce může být maximálně 10 hráčů!", true);
-        return;
-    }
 
     if (isPlayerSuspended(playerId)) {
         showToast("Hráč má aktivní stopku a nemůže být přidán do sestavy.", true);
@@ -1794,18 +1765,32 @@ export async function saveMatchProtocol(matchId) {
 
     const homeGKs = match.homeRoster.filter(r => r.isGK).length;
     const awayGKs = match.awayRoster.filter(r => r.isGK).length;
-
-    if (homeGKs !== 1 || awayGKs !== 1) {
-        showToast("V sestavě každého týmu musí být určen právě 1 brankář!", true);
-        return;
-    }
-
     const homeStarters = match.homeRoster.filter(player => player.isStarter).length;
     const awayStarters = match.awayRoster.filter(player => player.isStarter).length;
-    if (match.homeRoster.length > 10 || match.awayRoster.length > 10 ||
-        homeStarters < 3 || homeStarters > 5 || awayStarters < 3 || awayStarters > 5) {
-        showToast("Každý tým může mít na soupisce nejvýše 10 hráčů a musí mít 3 až 5 hráčů v základu.", true);
-        return;
+
+    const isTeamMgr = (state.currentUserRole || '').startsWith('Team_Manager');
+    const myTeamId = isTeamMgr ? state.activeTeamManagerTeamId : null;
+
+    let rosterWarnings = [];
+
+    // Kontrola domácích
+    if (!isTeamMgr || myTeamId === match.homeTeamId) {
+        const homeName = teamsData.find(t => t.id === match.homeTeamId)?.name || 'Domácí';
+        if (homeGKs !== 1) rosterWarnings.push(`${homeName}: má ${homeGKs} brankářů (požadován 1)`);
+        if (homeStarters < 3 || homeStarters > 5) rosterWarnings.push(`${homeName}: má ${homeStarters} hráčů v základu (požadováno 3–5)`);
+        if (match.homeRoster.length > 10) rosterWarnings.push(`${homeName}: má ${match.homeRoster.length} hráčů na soupisce (max 10)`);
+    }
+
+    // Kontrola hostů
+    if (!isTeamMgr || myTeamId === match.awayTeamId) {
+        const awayName = teamsData.find(t => t.id === match.awayTeamId)?.name || 'Hosté';
+        if (awayGKs !== 1) rosterWarnings.push(`${awayName}: má ${awayGKs} brankářů (požadován 1)`);
+        if (awayStarters < 3 || awayStarters > 5) rosterWarnings.push(`${awayName}: má ${awayStarters} hráčů v základu (požadováno 3–5)`);
+        if (match.awayRoster.length > 10) rosterWarnings.push(`${awayName}: má ${match.awayRoster.length} hráčů na soupisce (max 10)`);
+    }
+
+    if (rosterWarnings.length > 0) {
+        showToast(`Varování k soupisce: ${rosterWarnings.join('; ')}`, true);
     }
 
     for (const roster of [match.homeRoster, match.awayRoster]) {
