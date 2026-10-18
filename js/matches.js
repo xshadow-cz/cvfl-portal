@@ -167,7 +167,6 @@ export function openMatchProtocol(matchId) {
     const canViewDelegateTab = isDelegate || ['Referee_Manager', 'Admin'].includes(state.currentUserRole);
     const canEditDelegate = isDelegate || state.currentUserRole === 'Admin';
 
-    // Neukládat varování o neuložených změnách hned při pouhém otevření protokolu
     state.unsavedChangesGuard = false;
 
     const dateObj = (match.matchDate && match.matchDate !== 'TBA') ? new Date(match.matchDate) : null;
@@ -381,8 +380,8 @@ export function openMatchProtocol(matchId) {
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
                     <label class="text-gray-300">Tým
                         <select id="sub-team-select" onchange="renderSubstitutionPlayerOptions(${match.id})" class="mt-1 w-full rounded border border-[#1e307d] bg-[#0e1a4f] p-2 text-white">
-                            <option value="home" onchange="renderSubstitutionPlayerOptions(${match.id})">Domácí (${home ? escapeTeamName(home.name) : 'Domácí'})</option>
-                            <option value="away" onchange="renderSubstitutionPlayerOptions(${match.id})">Hosté (${away ? escapeTeamName(away.name) : 'Hosté'})</option>
+                            <option value="home">Domácí (${home ? escapeTeamName(home.name) : 'Domácí'})</option>
+                            <option value="away">Hosté (${away ? escapeTeamName(away.name) : 'Hosté'})</option>
                         </select>
                     </label>
                     <label class="text-gray-300">Hráč odchází ze hřiště
@@ -1057,7 +1056,7 @@ export function renderStaffList(match, side, canEdit = true) {
                 <span class="text-[10px] bg-[#aefb12]/20 text-[#aefb12] font-bold px-1.5 py-0.5 rounded">${s.role}</span>
             </div>
             ${canEdit && !match.isLocked ? `
-            <button onclick="removeStaffMemberWithConfirm(${match.id}, '${side}', ${s.id})" class="text-[#f33332] hover:text-red-400 p-1">
+            <button onclick="removeStaffMemberWithConfirm(${match.id}, '${side}',${s.id})" class="text-[#f33332] hover:text-red-400 p-1">
                 <i class="fa-solid fa-trash"></i>
             </button>` : ''}
         </div>
@@ -1288,7 +1287,7 @@ export function updateMatchChecks(matchId) {
     if (!match) return;
 
     match.checks = {
-        fansIssue: document.getElementById('check-fans') ? document.getElementById('check-fans').checked : match.checks.fansIssue,
+        fansIssue: document.getElementById('check-[#fans]') ? document.getElementById('check-[#fans]').checked : (document.getElementById('check-fans') ? document.getElementById('check-fans').checked : match.checks.fansIssue),
         systemIssue: document.getElementById('check-system') ? document.getElementById('check-system').checked : match.checks.systemIssue,
         playersIssue: document.getElementById('check-players') ? document.getElementById('check-players').checked : match.checks.playersIssue,
         homeIdentityChecked: document.getElementById('check-home-identity') ? document.getElementById('check-home-identity').checked : match.checks.homeIdentityChecked,
@@ -1347,9 +1346,6 @@ export function renderGoalForm(matchId, side, goalType = 'Regular') {
     const opposingSide = side === 'home' ? 'away' : 'home';
     const opposingTeamName = opposingSide === 'home' ? (home ? home.name : 'Domácí') : (away ? away.name : 'Hosté');
 
-    // Scorer selection logic:
-    // If Own goal: scorer must be selected from the OPPOSING team
-    // If Regular or Penalty: scorer selected from the SCORING team
     const scorerTeamSide = goalType === 'Own' ? opposingSide : side;
     const scorerRoster = scorerTeamSide === 'home' ? match.homeRoster : match.awayRoster;
     const activeScorers = getPlayersOnFieldAtTime(match, scorerTeamSide, '00:00');
@@ -1358,7 +1354,6 @@ export function renderGoalForm(matchId, side, goalType = 'Regular') {
         return `<option value="${r.playerId}">#${r.jersey} ${escapeTeamName(p ? p.robloxNick : 'Hráč')} ${r.isStarter ? '(Základ)' : ''}</option>`;
     }).join('') || '<option value="">(Na hřišti není žádný hráč)</option>';
 
-    // Assist selection logic: only offered for Regular goals
     const assistRoster = side === 'home' ? match.homeRoster : match.awayRoster;
     const activeAssists = getPlayersOnFieldAtTime(match, side, '00:00');
     const assistOptions = `<option value="">Bez asistence</option>` + assistRoster.filter(r => activeAssists.has(r.playerId)).map(r => {
@@ -1396,7 +1391,7 @@ export function renderGoalForm(matchId, side, goalType = 'Regular') {
                 <!-- STŘELEC -->
                 <div>
                     <label class="block text-gray-400 mb-1">
-                        Střelec                         ${goalType === 'Own' ? `<span class="text-purple-400 font-bold">(${escapeTeamName(opposingTeamName)})</span>` : `(${escapeTeamName(scoringTeamName)})`}:
+                        Střelec ${goalType === 'Own' ? `<span class="text-purple-400 font-bold">(${escapeTeamName(opposingTeamName)})</span>` : `(${escapeTeamName(scoringTeamName)})`}:
                     </label>
                     <select id="goal-scorer-select" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-bold">
                         ${scorerOptions}
@@ -1823,7 +1818,6 @@ export async function saveMatchProtocol(matchId) {
         }
     }
 
-    // Uložit také hodnocení delegáta, pokud bylo vyplněno
     const reviewEl = document.getElementById('delegate-review-text');
     const alertEl = document.getElementById('check-alert-ref-mgr');
     if (reviewEl) match.delegateReview = reviewEl.value;
@@ -1870,3 +1864,49 @@ export async function saveMatchProtocol(matchId) {
         renderRefereesTab();
     }
 }
+
+// ==================== GLOBÁLNÍ REGISTRACE PRO HTML EVENTS ====================
+Object.assign(window, {
+    onCompetitionFilterChange,
+    renderMatches,
+    openMatchProtocol,
+    closeMatchProtocolWithCheck,
+    closeMatchProtocolWithoutSave,
+    switchFISTab,
+    updateMatchDetails,
+    updatePeriodChecks,
+    updatePenaltyScores,
+    updateMatchChecks,
+    toggleSendToDK,
+    toggleMatchReady,
+    lockMatchRecord,
+    unlockMatchRecord,
+    renderRosterList,
+    updatePlayerJerseyInRoster,
+    togglePlayerGKInRoster,
+    togglePlayerStarterInRoster,
+    openAddPlayerToRosterModal,
+    addPlayerToRoster,
+    removePlayerFromRosterWithConfirm,
+    renderStaffList,
+    openAddStaffModal,
+    submitStaffMember,
+    removeStaffMemberWithConfirm,
+    renderSubstitutionPlayerOptions,
+    submitSubstitution,
+    openGoalForm,
+    closeGoalForm,
+    onGoalTypeChange,
+    onGoalTimeChange,
+    submitGoal,
+    openCardForm,
+    closeCardForm,
+    onCardTeamChange,
+    onCardTimeChange,
+    submitCard,
+    deleteMatchEvent,
+    saveDelegateReview,
+    saveMatchProtocol,
+    markUnsavedChanges,
+    cancelForfeitWithConfirm
+});
