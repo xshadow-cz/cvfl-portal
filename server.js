@@ -12,7 +12,7 @@
  * Návod k použití:
  *   1. Nainstalujte závislosti:  npm install
  *   2. Spusťte server:           npm start   (nebo: node server.js)
- *   3. Otevřete v prohlížeči:   http://localhost:3000
+ *   3. Otevřete v prohlížeči:   https://portal.cvfl.cz
  */
 
 const express = require('express');
@@ -49,23 +49,26 @@ let resolveDatabaseReady;
 const databaseReady = new Promise(resolve => { resolveDatabaseReady = resolve; });
 
 // Middleware
-const configuredAppOrigin = process.env.APP_ORIGIN || `http://localhost:${PORT}`;
+const allowedOrigins = [
+    'https://portal.cvfl.cz',
+    process.env.APP_ORIGIN
+].filter(Boolean);
+
 app.use(cors({
     origin(origin, callback) {
-        if (!origin || origin === configuredAppOrigin) return callback(null, origin || true);
-        try {
-            const parsedOrigin = new URL(origin);
-            if (parsedOrigin.protocol === 'http:' &&
-                ['localhost', '127.0.0.1', '[::1]'].includes(parsedOrigin.hostname)) {
-                return callback(null, origin);
-            }
-        } catch {
-            return callback(null, false);
+        // Povolit požadavky bez origin hlavičky (např. mobilní aplikace nebo Postman)
+        if (!origin) return callback(null, true);
+
+        // Povolit pouze produkční doménu cvfl
+        if (allowedOrigins.includes(origin)) {
+            return callback(null, origin);
         }
+
         callback(null, false);
     },
     credentials: true
 }));
+
 app.use(express.json({ limit: '15mb' }));
 app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 
