@@ -167,8 +167,6 @@ export function openMatchProtocol(matchId) {
     const canViewDelegateTab = isDelegate || ['Referee_Manager', 'Admin'].includes(state.currentUserRole);
     const canEditDelegate = isDelegate || state.currentUserRole === 'Admin';
 
-    state.unsavedChangesGuard = false;
-
     const dateObj = (match.matchDate && match.matchDate !== 'TBA') ? new Date(match.matchDate) : null;
     const dateOnlyFormatted = match.matchDate === 'TBA' ? 'TBA' : (dateObj ? `${dateObj.getDate()}.${dateObj.getMonth() + 1}.` : '16.10.');
     const timeOnlyFormatted = match.matchDate === 'TBA' ? 'TBA' : (dateObj ? dateObj.toLocaleTimeString('cs-CZ', {hour: '2-digit', minute:'2-digit'}) : '18:00');
@@ -196,7 +194,7 @@ export function openMatchProtocol(matchId) {
                     <span class="px-3 py-1 bg-amber-500/20 text-amber-400 border border-amber-500/30 text-xs font-bold rounded-lg">
                         Stav: ${match.isLocked ? 'Uzamčeno' : getMatchStatusLabel(match.status)}
                     </span>
-                    <button onclick="closeMatchProtocolWithCheck(${match.id})" class="text-gray-400 hover:text-white ml-2"><i class="fa-solid fa-xmark text-xl"></i></button>
+                    <button onclick="closeMatchProtocolWithCheck(${match.id})" class="text-gray-400 hover:text-white ml-2 p-1"><i class="fa-solid fa-xmark text-xl"></i></button>
                 </div>
             </div>
             ${teamMgrNotice}
@@ -774,6 +772,7 @@ export function toggleSendToDK(matchId, checked) {
     const match = matchesData.find(m => m.id === matchId);
     if (match) {
         match.sendStatementToDK = checked;
+        state.unsavedChangesGuard = true;
         if (checked) {
             showToast("Zpráva bude při uložení odeslána k DK.");
         }
@@ -784,6 +783,7 @@ export function toggleMatchReady(matchId, checked) {
     const match = matchesData.find(m => m.id === matchId);
     if (match) {
         match.isReady = checked;
+        state.unsavedChangesGuard = true;
         const lockBtn = document.getElementById('btn-lock-match');
         if (lockBtn) {
             lockBtn.disabled = !checked || match.isLocked || !['Admin', 'Referee_Manager', 'Referee'].includes(state.currentUserRole);
@@ -795,7 +795,8 @@ export function lockMatchRecord(matchId) {
     const match = matchesData.find(m => m.id === matchId);
     if (match) {
         match.isLocked = true;
-        showToast("Zápis byl úspěšně uzamčen!");
+        state.unsavedChangesGuard = true;
+        showToast("Zápis byl označen jako uzamčený (uložte zápas).");
         openMatchProtocol(matchId);
     }
 }
@@ -804,7 +805,8 @@ export function unlockMatchRecord(matchId) {
     const match = matchesData.find(m => m.id === matchId);
     if (match) {
         match.isLocked = false;
-        showToast("Zápis byl úspěšně odemčen!");
+        state.unsavedChangesGuard = true;
+        showToast("Zápis byl označen jako odemčený (uložte zápas).");
         openMatchProtocol(matchId);
     }
 }
@@ -831,7 +833,7 @@ export function updateMatchDetails(matchId) {
     const statementEl = document.getElementById('referee-punishment-statement');
     if (statementEl) match.punishmentStatement = statementEl.value;
 
-    showToast("Detaily zápasu aktualizovány.");
+    state.unsavedChangesGuard = true;
 }
 
 export function renderRosterList(match, side, canEdit = true) {
@@ -1680,16 +1682,17 @@ export function submitCard(matchId) {
 
 export function closeMatchProtocolWithCheck(matchId) {
     if (state.unsavedChangesGuard) {
-        openConfirmModal("Opustit Zápis O Utkání?", "Máte rozdělaný zápis s neuloženými změnami! Opravdu chcete zápis zavřít bez uložení?", (reason) => {
-            const match = matchesData.find(item => item.id === matchId);
-            if (match && state.matchProtocolSnapshotId === matchId && state.matchProtocolSnapshot) {
-                Object.assign(match, state.matchProtocolSnapshot);
+        openConfirmModal("Opustit Zápis O Utkání?", "Máte rozdělaný zápis s neuloženými změnami! Opravdu chcete zápis zavřít bez uložení?", () => {
+            const matchIndex = matchesData.findIndex(item => item.id === matchId);
+            if (matchIndex !== -1 && state.matchProtocolSnapshotId === matchId && state.matchProtocolSnapshot) {
+                matchesData[matchIndex] = JSON.parse(JSON.stringify(state.matchProtocolSnapshot));
             }
             state.unsavedChangesGuard = false;
             state.matchProtocolSnapshot = null;
             state.matchProtocolSnapshotId = null;
             closeSpecificModal('modal-match-protocol');
-            showToast("Zápis byl opuštěn bez uložení.");
+            showToast("Zápis byl opuštěn a neuložené změny byly zrušeny.");
+            renderMatches();
         }, false);
     } else {
         state.matchProtocolSnapshot = null;
@@ -1718,12 +1721,8 @@ export function saveDelegateReview(matchId) {
     if (reviewEl) match.delegateReview = reviewEl.value;
     if (alertEl) match.delegateAlertRefMgr = alertEl.checked;
 
-    state.unsavedChangesGuard = false;
-    showToast("Hodnocení delegáta bylo úspěšně uloženo!");
-    if (match.delegateAlertRefMgr) {
-        showToast("Vedení rozhodčích bylo upozorněno v sekci Rozhodčí.");
-    }
-    renderRefereesTab();
+    state.unsavedChangesGuard = true;
+    showToast("Hodnocení delegáta bylo zapsáno do rozpracovaného protokolu (uložte zápas).");
 }
 
 export function calculateMatchStats(match) {
