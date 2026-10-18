@@ -1,6 +1,6 @@
 /**
  * ====================================================================
- * CVFL Portál - Backend Server (Node.js + Express + SQLite)
+ * CVFL Portál - Backend Server (Node.js + Express + better-sqlite3)
  * ====================================================================
  * 
  * Tento server zajišťuje:
@@ -16,7 +16,7 @@
  */
 
 const express = require('express');
-const sqlite3 = require('sqlite3').verbose();
+const Database = require('better-sqlite3');
 const cors = require('cors');
 const crypto = require('crypto');
 const fs = require('fs');
@@ -45,8 +45,6 @@ const playerSyncStatus = {
     archivedPlayers: 0
 };
 let playerSyncInProgress = false;
-let resolveDatabaseReady;
-const databaseReady = new Promise(resolve => { resolveDatabaseReady = resolve; });
 
 // Middleware
 const allowedOrigins = [
@@ -85,100 +83,96 @@ app.use((req, res, next) => {
 });
 app.use(express.static(__dirname, { dotfiles: 'deny' }));
 
-// Připojení k SQLite databázi
-const db = new sqlite3.Database(DB_PATH, (err) => {
-    if (err) {
-        console.error('❌ Chyba při otevírání SQLite databáze:', err.message);
-        resolveDatabaseReady(false);
-    } else {
-        console.log(`✅ SQLite databáze úspěšně připojena: ${DB_PATH}`);
-        db.run('PRAGMA foreign_keys = ON');
-        initDatabase();
-    }
-});
+// Připojení k SQLite databázi (better-sqlite3)
+let db;
+let isDatabaseReady = false;
+
+try {
+    db = new Database(DB_PATH);
+    db.pragma('foreign_keys = ON');
+    console.log(`✅ SQLite databáze úspěšně připojena: ${DB_PATH}`);
+    initDatabase();
+} catch (err) {
+    console.error('❌ Chyba při otevírání SQLite databáze:', err.message);
+}
 
 // Inicializace databázového schématu ze schema.sql
 function initDatabase() {
     if (!fs.existsSync(SCHEMA_PATH)) {
         console.warn(`⚠️ Soubor schema.sql nebyl nalezen na cestě: ${SCHEMA_PATH}`);
-        resolveDatabaseReady(false);
         return;
     }
 
-    const schemaSql = fs.readFileSync(SCHEMA_PATH, 'utf8');
-    db.exec(schemaSql, async (err) => {
-        if (err) {
-            console.error('❌ Chyba při aplikaci schema.sql:', err.message);
-            resolveDatabaseReady(false);
-            return;
-        }
-        try {
-            await ensureDatabaseColumn('teams', 'logo', 'TEXT');
-            const playerColumns = await dbAll('PRAGMA table_info(players)');
-            await ensureDatabaseColumn('players', 'is_transfer_banned', 'BOOLEAN DEFAULT 0');
-            await ensureDatabaseColumn('players', 'discord_id', 'TEXT');
-            await ensureDatabaseColumn('players', 'roblox_id', 'TEXT');
-            await ensureDatabaseColumn('players', 'transfer_ban_until', 'TEXT');
-            await ensureDatabaseColumn('players', 'is_archived', 'BOOLEAN NOT NULL DEFAULT 0');
-            await dbRun('CREATE UNIQUE INDEX IF NOT EXISTS idx_players_discord_id ON players(discord_id) WHERE discord_id IS NOT NULL');
-            await dbRun('CREATE UNIQUE INDEX IF NOT EXISTS idx_players_roblox_id ON players(roblox_id) WHERE roblox_id IS NOT NULL');
-            const transferBanMigration = await dbGet(
-                "SELECT value FROM site_settings WHERE key = 'migration_transfer_ban_from_free_agent_v1'"
-            );
-            if (!transferBanMigration) {
-                if (playerColumns.some(column => column.name === 'is_free_agent')) {
-                    await dbRun('UPDATE players SET is_transfer_banned = is_free_agent');
-                }
-                await dbRun(
-                    "INSERT OR IGNORE INTO site_settings (key, value) VALUES ('migration_transfer_ban_from_free_agent_v1', '1')"
-                );
+    try {
+        const schemaSql = fs.readFileSync(SCHEMA_PATH, 'utf8');
+        db.exec(schemaSql);
+
+        ensureDatabaseColumn('teams', 'logo', 'TEXT');
+        const playerColumns = dbAll('PRAGMA table_info(players)');
+        ensureDatabaseColumn('players', 'is_transfer_banned', 'BOOLEAN DEFAULT 0');
+        ensureDatabaseColumn('players', 'discord_id', 'TEXT');
+        ensureDatabaseColumn('players', 'roblox_id', 'TEXT');
+        ensureDatabaseColumn('players', 'transfer_ban_until', 'TEXT');
+        ensureDatabaseColumn('players', 'is_archived', 'BOOLEAN NOT NULL DEFAULT 0');
+        dbRun('CREATE UNIQUE INDEX IF NOT EXISTS idx_players_discord_id ON players(discord_id) WHERE discord_id IS NOT NULL');
+        dbRun('CREATE UNIQUE INDEX IF NOT EXISTS idx_players_roblox_id ON players(roblox_id) WHERE roblox_id IS NOT NULL');
+        
+        const transferBanMigration = dbGet(
+            "SELECT value FROM site_settings WHERE key = 'migration_transfer_ban_from_free_agent_v1'"
+        );
+        if (!transferBanMigration) {
+            if (playerColumns.some(column => column.name === 'is_free_agent')) {
+                dbRun('UPDATE players SET is_transfer_banned = is_free_agent');
             }
-            await dbRun(
-                "INSERT OR IGNORE INTO site_settings (key, value) VALUES ('system_announcement', 'Vítejte v oficiálním CVFL Portálu!')"
+            dbRun(
+                "INSERT OR IGNORE INTO site_settings (key, value) VALUES ('migration_transfer_ban_from_free_agent_v1', '1')"
             );
-            await ensureDatabaseColumn('matches', 'home_penalty_score', 'INTEGER DEFAULT 0');
-            await ensureDatabaseColumn('matches', 'away_penalty_score', 'INTEGER DEFAULT 0');
-            await ensureDatabaseColumn('discord_invites', 'revoked_at', 'DATETIME');
-            await ensureDatabaseColumn('trainers', 'role', "TEXT NOT NULL DEFAULT 'Coach'");
-            await ensureDatabaseColumn('referees', 'discord_id', 'TEXT');
-            await dbRun('CREATE UNIQUE INDEX IF NOT EXISTS idx_referees_discord_id ON referees(discord_id)');
-            const registeredReferees = await dbAll('SELECT discord_id, is_delegate FROM referees WHERE discord_id IS NOT NULL');
-            for (const referee of registeredReferees) {
-                await syncRegisteredRefereeRole(referee.discord_id, true);
-                await syncRegisteredDelegateRole(referee.discord_id, Boolean(referee.is_delegate));
-            }
-            await dbRun(
-                `DELETE FROM discord_user_roles
-                 WHERE role IN ('Referee', 'Delegate')
-                   AND NOT EXISTS (
-                       SELECT 1 FROM referees
-                       WHERE referees.discord_id = discord_user_roles.discord_id
-                         AND (discord_user_roles.role = 'Referee' OR referees.is_delegate = 1)
-                   )`
-            );
-            const rolelessAccounts = await dbAll(
-                `SELECT discord_users.discord_id FROM discord_users
-                 WHERE discord_users.discord_id != ?
-                   AND NOT EXISTS (
-                       SELECT 1 FROM discord_user_roles
-                       WHERE discord_user_roles.discord_id = discord_users.discord_id
-                   )`,
-                [OWNER_DISCORD_ID]
-            );
-            for (const account of rolelessAccounts) await pruneRolelessDiscordAccount(account.discord_id);
-            console.log('✅ Schéma databáze bylo ověřeno a inicializováno.');
-            resolveDatabaseReady(true);
-        } catch (migrationError) {
-            console.error('❌ Nepodařilo se aktualizovat schéma databáze:', migrationError.message);
-            resolveDatabaseReady(false);
         }
-    });
+        dbRun(
+            "INSERT OR IGNORE INTO site_settings (key, value) VALUES ('system_announcement', 'Vítejte v oficiálním CVFL Portálu!')"
+        );
+        ensureDatabaseColumn('matches', 'home_penalty_score', 'INTEGER DEFAULT 0');
+        ensureDatabaseColumn('matches', 'away_penalty_score', 'INTEGER DEFAULT 0');
+        ensureDatabaseColumn('discord_invites', 'revoked_at', 'DATETIME');
+        ensureDatabaseColumn('trainers', 'role', "TEXT NOT NULL DEFAULT 'Coach'");
+        ensureDatabaseColumn('referees', 'discord_id', 'TEXT');
+        dbRun('CREATE UNIQUE INDEX IF NOT EXISTS idx_referees_discord_id ON referees(discord_id)');
+        
+        const registeredReferees = dbAll('SELECT discord_id, is_delegate FROM referees WHERE discord_id IS NOT NULL');
+        for (const referee of registeredReferees) {
+            syncRegisteredRefereeRole(referee.discord_id, true);
+            syncRegisteredDelegateRole(referee.discord_id, Boolean(referee.is_delegate));
+        }
+        dbRun(
+            `DELETE FROM discord_user_roles
+             WHERE role IN ('Referee', 'Delegate')
+               AND NOT EXISTS (
+                   SELECT 1 FROM referees
+                   WHERE referees.discord_id = discord_user_roles.discord_id
+                     AND (discord_user_roles.role = 'Referee' OR referees.is_delegate = 1)
+               )`
+        );
+        const rolelessAccounts = dbAll(
+            `SELECT discord_users.discord_id FROM discord_users
+             WHERE discord_users.discord_id != ?
+               AND NOT EXISTS (
+                   SELECT 1 FROM discord_user_roles
+                   WHERE discord_user_roles.discord_id = discord_users.discord_id
+               )`,
+            [OWNER_DISCORD_ID]
+        );
+        for (const account of rolelessAccounts) pruneRolelessDiscordAccount(account.discord_id);
+        console.log('✅ Schéma databáze bylo ověřeno a inicializováno.');
+        isDatabaseReady = true;
+    } catch (migrationError) {
+        console.error('❌ Nepodařilo se aktualizovat schéma databáze:', migrationError.message);
+    }
 }
 
-async function ensureDatabaseColumn(table, column, declaration) {
-    const columns = await dbAll(`PRAGMA table_info(${table})`);
+function ensureDatabaseColumn(table, column, declaration) {
+    const columns = dbAll(`PRAGMA table_info(${table})`);
     if (!columns.some(item => item.name === column)) {
-        await dbRun(`ALTER TABLE ${table} ADD COLUMN ${column} ${declaration}`);
+        dbRun(`ALTER TABLE ${table} ADD COLUMN ${column} ${declaration}`);
     }
 }
 
@@ -197,50 +191,23 @@ function validateTeamLogo(logo) {
     return { valid: true, value: logo };
 }
 
-// Pomocné funkce pro SQLite (Promise wrappers)
-const dbAll = (sql, params = []) => new Promise((resolve, reject) => {
-    db.all(sql, params, (err, rows) => err ? reject(err) : resolve(rows));
-});
+// Synchrónní pomocné funkce pro better-sqlite3
+function dbAll(sql, params = []) {
+    return db.prepare(sql).all(params);
+}
 
-const dbGet = (sql, params = []) => new Promise((resolve, reject) => {
-    db.get(sql, params, (err, row) => err ? reject(err) : resolve(row));
-});
+function dbGet(sql, params = []) {
+    return db.prepare(sql).get(params);
+}
 
-const dbRun = (sql, params = []) => new Promise((resolve, reject) => {
-    db.run(sql, params, function (err) {
-        if (err) reject(err);
-        else resolve({ lastID: this.lastID, changes: this.changes });
-    });
-});
+function dbRun(sql, params = []) {
+    const info = db.prepare(sql).run(params);
+    return { lastID: info.lastInsertRowid, changes: info.changes };
+}
 
-let databaseTransactionQueue = Promise.resolve();
-
-async function withDatabaseTransaction(callback) {
-    const previousTransaction = databaseTransactionQueue;
-    let releaseTransaction;
-    databaseTransactionQueue = new Promise(resolve => { releaseTransaction = resolve; });
-    await previousTransaction;
-
-    let transactionStarted = false;
-    try {
-        await dbRun('BEGIN IMMEDIATE');
-        transactionStarted = true;
-        const result = await callback();
-        await dbRun('COMMIT');
-        transactionStarted = false;
-        return result;
-    } catch (error) {
-        if (transactionStarted) {
-            try {
-                await dbRun('ROLLBACK');
-            } catch (rollbackError) {
-                console.error('Rollback SQLite se nezdařil:', rollbackError);
-            }
-        }
-        throw error;
-    } finally {
-        releaseTransaction();
-    }
+function withDatabaseTransaction(callback) {
+    const transaction = db.transaction(callback);
+    return transaction();
 }
 
 function normalizeTeamName(name) {
@@ -324,7 +291,6 @@ async function synchronizePlayersFromBot() {
         throw new Error('PLAYER_BOT_API_URL nesmí obsahovat přihlašovací údaje, query parametry ani fragment.');
     }
     
-    // Vyžadovat výhradně HTTPS (localhost / HTTP je odebrán)
     if (apiUrl.protocol !== 'https:') {
         throw new Error('PLAYER_BOT_API_URL musí používat HTTPS.');
     }
@@ -366,15 +332,15 @@ async function synchronizePlayersFromBot() {
         throw new Error('Hráčský bot vrátil neplatný JSON.');
     }
     const players = validateBotPlayers(payload);
-    const result = await withDatabaseTransaction(async () => {
-        const teams = await dbAll('SELECT id, name FROM teams');
+    const result = withDatabaseTransaction(() => {
+        const teams = dbAll('SELECT id, name FROM teams');
         const teamsByName = new Map();
         for (const team of teams) {
             const key = normalizeTeamName(team.name);
             if (teamsByName.has(key)) throw new Error(`Názvy týmů jsou nejednoznačné: ${team.name}.`);
             teamsByName.set(key, team.id);
         }
-        const existingPlayers = await dbAll(
+        const existingPlayers = dbAll(
             'SELECT id, discord_id, roblox_id, roblox_nick, is_archived FROM players'
         );
         const byDiscordId = new Map(existingPlayers.filter(player => player.discord_id)
@@ -418,7 +384,7 @@ async function synchronizePlayersFromBot() {
             if (player.id) {
                 const current = existingPlayers.find(existing => existing.id === player.id);
                 if (current && current.roblox_nick !== player.robloxNick) {
-                    await dbRun('UPDATE players SET roblox_nick = ? WHERE id = ?', [
+                    dbRun('UPDATE players SET roblox_nick = ? WHERE id = ?', [
                         `__cvfl_sync_pending_${player.id}_${crypto.randomUUID()}`, player.id
                     ]);
                 }
@@ -427,7 +393,7 @@ async function synchronizePlayersFromBot() {
 
         for (const player of updates) {
             if (player.id) {
-                await dbRun(
+                dbRun(
                     `UPDATE players SET team_id = ?, roblox_nick = ?, discord_nick = ?, discord_id = ?,
                         roblox_id = ?, is_transfer_banned = ?, transfer_ban_until = ?, is_archived = 0,
                         updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
@@ -435,7 +401,7 @@ async function synchronizePlayersFromBot() {
                         player.robloxId, player.isTransferBanned ? 1 : 0, player.transferBanUntil, player.id]
                 );
             } else {
-                const inserted = await dbRun(
+                const inserted = dbRun(
                     `INSERT INTO players
                         (team_id, roblox_nick, discord_nick, discord_id, roblox_id,
                          is_transfer_banned, transfer_ban_until, is_archived)
@@ -450,7 +416,7 @@ async function synchronizePlayersFromBot() {
         let archivedPlayers = 0;
         for (const player of existingPlayers) {
             if (!activePlayerIds.has(player.id)) {
-                const archived = await dbRun(
+                const archived = dbRun(
                     `UPDATE players SET team_id = NULL, is_transfer_banned = 0,
                         transfer_ban_until = NULL, is_archived = 1, updated_at = CURRENT_TIMESTAMP
                      WHERE id = ? AND is_archived = 0`,
@@ -539,25 +505,25 @@ function hasDiscordOAuthConfig() {
         process.env.DISCORD_REDIRECT_URI && Buffer.byteLength(process.env.SESSION_SECRET || '') >= 32);
 }
 
-async function getAssignableRoles() {
+function getAssignableRoles() {
     const baseRoles = ['Admin', 'Referee_Manager', 'DK', 'Delegate', 'Referee'];
-    const teams = await dbAll('SELECT id FROM teams');
+    const teams = dbAll('SELECT id FROM teams');
     return new Set([...baseRoles, ...teams.map(team => `Team_Manager_${team.id}`)]);
 }
 
-async function validateAssignedRoles(roles) {
+function validateAssignedRoles(roles) {
     if (!Array.isArray(roles) || roles.length > 100 || roles.some(role => typeof role !== 'string')) return null;
-    const validRoles = await getAssignableRoles();
+    const validRoles = getAssignableRoles();
     if (roles.some(role => !validRoles.has(role))) return null;
     return [...new Set(roles)];
 }
 
-async function availableRolesFor(discordId) {
-    const validRoles = await getAssignableRoles();
+function availableRolesFor(discordId) {
+    const validRoles = getAssignableRoles();
     if (discordId === OWNER_DISCORD_ID) return [...validRoles];
-    const assigned = await dbAll('SELECT role FROM discord_user_roles WHERE discord_id = ?', [discordId]);
+    const assigned = dbAll('SELECT role FROM discord_user_roles WHERE discord_id = ?', [discordId]);
     const roles = assigned.map(row => row.role).filter(role => validRoles.has(role));
-    const referee = await dbGet('SELECT is_delegate FROM referees WHERE discord_id = ?', [discordId]);
+    const referee = dbGet('SELECT is_delegate FROM referees WHERE discord_id = ?', [discordId]);
     if (referee && validRoles.has('Referee') && !roles.includes('Referee')) roles.push('Referee');
     if (!referee) return roles.filter(role => !['Referee', 'Delegate'].includes(role));
     if (referee?.is_delegate && validRoles.has('Delegate') && !roles.includes('Delegate')) roles.push('Delegate');
@@ -565,47 +531,47 @@ async function availableRolesFor(discordId) {
     return roles;
 }
 
-async function pruneRolelessDiscordAccount(discordId) {
+function pruneRolelessDiscordAccount(discordId) {
     if (!discordId || discordId === OWNER_DISCORD_ID) return;
-    const remainingRoles = await dbGet('SELECT COUNT(*) AS count FROM discord_user_roles WHERE discord_id = ?', [discordId]);
+    const remainingRoles = dbGet('SELECT COUNT(*) AS count FROM discord_user_roles WHERE discord_id = ?', [discordId]);
     if (remainingRoles.count === 0) {
-        await dbRun('DELETE FROM auth_sessions WHERE discord_id = ?', [discordId]);
-        await dbRun('UPDATE referees SET discord_id = NULL WHERE discord_id = ?', [discordId]);
-        await dbRun('DELETE FROM discord_users WHERE discord_id = ?', [discordId]);
+        dbRun('DELETE FROM auth_sessions WHERE discord_id = ?', [discordId]);
+        dbRun('UPDATE referees SET discord_id = NULL WHERE discord_id = ?', [discordId]);
+        dbRun('DELETE FROM discord_users WHERE discord_id = ?', [discordId]);
     }
 }
 
-async function syncRegisteredDelegateRole(discordId, isDelegate) {
+function syncRegisteredDelegateRole(discordId, isDelegate) {
     if (!discordId) return;
-    const account = await dbGet('SELECT discord_id FROM discord_users WHERE discord_id = ?', [discordId]);
+    const account = dbGet('SELECT discord_id FROM discord_users WHERE discord_id = ?', [discordId]);
     if (!account) return;
     if (isDelegate) {
-        await dbRun('INSERT OR IGNORE INTO discord_user_roles (discord_id, role) VALUES (?, ?)', [discordId, 'Delegate']);
+        dbRun('INSERT OR IGNORE INTO discord_user_roles (discord_id, role) VALUES (?, ?)', [discordId, 'Delegate']);
         return;
     }
-    await dbRun('DELETE FROM discord_user_roles WHERE discord_id = ? AND role = ?', [discordId, 'Delegate']);
-    await pruneRolelessDiscordAccount(discordId);
+    dbRun('DELETE FROM discord_user_roles WHERE discord_id = ? AND role = ?', [discordId, 'Delegate']);
+    pruneRolelessDiscordAccount(discordId);
 }
 
-async function syncRegisteredRefereeRole(discordId, isRegistered) {
+function syncRegisteredRefereeRole(discordId, isRegistered) {
     if (!discordId) return;
-    const account = await dbGet('SELECT discord_id FROM discord_users WHERE discord_id = ?', [discordId]);
+    const account = dbGet('SELECT discord_id FROM discord_users WHERE discord_id = ?', [discordId]);
     if (!account) return;
     if (isRegistered) {
-        await dbRun('INSERT OR IGNORE INTO discord_user_roles (discord_id, role) VALUES (?, ?)', [discordId, 'Referee']);
+        dbRun('INSERT OR IGNORE INTO discord_user_roles (discord_id, role) VALUES (?, ?)', [discordId, 'Referee']);
         return;
     }
-    await dbRun('DELETE FROM discord_user_roles WHERE discord_id = ? AND role = ?', [discordId, 'Referee']);
-    await pruneRolelessDiscordAccount(discordId);
+    dbRun('DELETE FROM discord_user_roles WHERE discord_id = ? AND role = ?', [discordId, 'Referee']);
+    pruneRolelessDiscordAccount(discordId);
 }
 
-async function removeRefereeRoles(discordId) {
+function removeRefereeRoles(discordId) {
     if (!discordId) return;
-    await dbRun(
+    dbRun(
         "DELETE FROM discord_user_roles WHERE discord_id = ? AND role IN ('Referee', 'Delegate')",
         [discordId]
     );
-    await pruneRolelessDiscordAccount(discordId);
+    pruneRolelessDiscordAccount(discordId);
 }
 
 function refereeUniqueConflict(error) {
@@ -619,8 +585,8 @@ function refereeUniqueConflict(error) {
     return null;
 }
 
-async function resolveAuthenticatedUser(req) {
-    if (!await databaseReady || !hasDiscordOAuthConfig()) return null;
+function resolveAuthenticatedUser(req) {
+    if (!isDatabaseReady || !hasDiscordOAuthConfig()) return null;
     const token = parseCookies(req).cvfl_session;
     if (!token || !/^[a-f0-9]{64}$/.test(token)) return null;
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
@@ -633,21 +599,21 @@ async function resolveAuthenticatedUser(req) {
     );
 }
 
-async function requireAuthenticated(req, res, next) {
+function requireAuthenticated(req, res, next) {
     try {
-        if (!await databaseReady) {
+        if (!isDatabaseReady) {
             return res.status(503).json({ success: false, error: 'Databáze není připravena.' });
         }
         if (!hasDiscordOAuthConfig()) {
             return res.status(503).json({ success: false, error: 'Discord OAuth není nakonfigurován.' });
         }
-        const user = await resolveAuthenticatedUser(req);
+        const user = resolveAuthenticatedUser(req);
         if (!user) return res.status(401).json({ success: false, error: 'Přihlášení přes Discord je vyžadováno.' });
         req.auth = {
             discordId: user.discord_id,
             username: user.username,
             avatarHash: user.avatar_hash,
-            roles: await availableRolesFor(user.discord_id)
+            roles: availableRolesFor(user.discord_id)
         };
         next();
     } catch (err) {
@@ -663,14 +629,14 @@ function requireRoles(...roles) {
     };
 }
 
-async function matchesVisibleToUser(matches, auth) {
+function matchesVisibleToUser(matches, auth) {
     const privilegedRoles = ['Admin', 'DK', 'Referee_Manager'];
     if (auth.roles.some(role => privilegedRoles.includes(role))) return matches;
     const teamIds = auth.roles
         .filter(role => role.startsWith('Team_Manager_'))
         .map(role => Number(role.slice('Team_Manager_'.length)));
     const official = auth.roles.some(role => role === 'Referee' || role === 'Delegate')
-        ? await dbGet("SELECT roblox_nick, is_delegate FROM referees WHERE discord_id = ? AND status = 'Active'", [auth.discordId])
+        ? dbGet("SELECT roblox_nick, is_delegate FROM referees WHERE discord_id = ? AND status = 'Active'", [auth.discordId])
         : null;
     return matches.filter(match =>
         teamIds.includes(match.home_team_id) || teamIds.includes(match.away_team_id) ||
@@ -681,15 +647,15 @@ async function matchesVisibleToUser(matches, auth) {
     );
 }
 
-async function requireMatchEditor(req, res, next) {
+function requireMatchEditor(req, res, next) {
     const privilegedRoles = ['Admin', 'DK', 'Referee_Manager'];
     if (req.auth.roles.some(role => privilegedRoles.includes(role))) return next();
 
-    const match = await dbGet('SELECT * FROM matches WHERE id = ?', [req.params.id]);
+    const match = dbGet('SELECT * FROM matches WHERE id = ?', [req.params.id]);
     if (!match) return res.status(404).json({ success: false, error: 'Zápas nebyl nalezen.' });
     if (req.auth.roles.some(role => ['Referee', 'Delegate'].includes(role))) {
         try {
-            const assignedReferee = await dbGet(
+            const assignedReferee = dbGet(
                 "SELECT roblox_nick, is_delegate FROM referees WHERE discord_id = ? AND status = 'Active'",
                 [req.auth.discordId]
             );
@@ -737,17 +703,17 @@ async function requireMatchEditor(req, res, next) {
 // REST API ENDPOINTY
 // ====================================================================
 
-app.get('/api/auth/discord', async (req, res) => {
+app.get('/api/auth/discord', (req, res) => {
     if (!hasDiscordOAuthConfig()) {
         return res.status(503).json({ success: false, error: 'Nastavte Discord OAuth proměnné v .env.' });
     }
-    if (!await databaseReady) return res.status(503).json({ success: false, error: 'Databáze není připravena.' });
+    if (!isDatabaseReady) return res.status(503).json({ success: false, error: 'Databáze není připravena.' });
     const inviteToken = typeof req.query.invite === 'string' ? req.query.invite : '';
     if (inviteToken && !/^[a-f0-9]{64}$/.test(inviteToken)) {
         return res.redirect('/?authError=invite_invalid');
     }
     if (inviteToken) {
-        const invite = await dbGet(
+        const invite = dbGet(
             "SELECT token_hash FROM discord_invites WHERE token_hash = ? AND used_at IS NULL AND revoked_at IS NULL AND expires_at > datetime('now')",
             [crypto.createHash('sha256').update(inviteToken).digest('hex')]
         );
@@ -800,8 +766,8 @@ app.get('/api/auth/discord/callback', async (req, res) => {
         }
         const existingUser = profile.id === OWNER_DISCORD_ID
             ? { discord_id: profile.id, username: profile.global_name || profile.username }
-            : await dbGet('SELECT discord_id, username FROM discord_users WHERE discord_id = ?', [profile.id]);
-        const refereeRegistration = await dbGet(
+            : dbGet('SELECT discord_id, username FROM discord_users WHERE discord_id = ?', [profile.id]);
+        const refereeRegistration = dbGet(
             'SELECT is_delegate FROM referees WHERE discord_id = ?',
             [profile.id]
         );
@@ -811,54 +777,54 @@ app.get('/api/auth/discord/callback', async (req, res) => {
             throw new Error('invite_required');
         }
         if (!inviteToken && profile.id !== OWNER_DISCORD_ID &&
-            (await availableRolesFor(profile.id)).length === 0 && !refereeRegistration) {
+            (availableRolesFor(profile.id)).length === 0 && !refereeRegistration) {
             throw new Error('access_revoked');
         }
 
         if (inviteToken) {
             const inviteHash = crypto.createHash('sha256').update(inviteToken).digest('hex');
-            const invite = await dbGet(
+            const invite = dbGet(
                 "SELECT roles_json FROM discord_invites WHERE token_hash = ? AND used_at IS NULL AND revoked_at IS NULL AND expires_at > datetime('now')",
                 [inviteHash]
             );
             if (!invite) throw new Error('invite_expired');
             const roles = JSON.parse(invite.roles_json);
-            const assignableRoles = await getAssignableRoles();
+            const assignableRoles = getAssignableRoles();
             const rolesToAssign = [...new Set(roles)].filter(
                 role => assignableRoles.has(role) && !['Delegate', 'Referee'].includes(role)
             );
-            const refereeRegistration = await dbGet('SELECT is_delegate FROM referees WHERE discord_id = ?', [profile.id]);
+            const refereeRegistration = dbGet('SELECT is_delegate FROM referees WHERE discord_id = ?', [profile.id]);
             if (refereeRegistration && assignableRoles.has('Referee')) rolesToAssign.push('Referee');
             if (refereeRegistration?.is_delegate && assignableRoles.has('Delegate')) rolesToAssign.push('Delegate');
             if (!rolesToAssign.length) throw new Error('invite_roles_invalid');
 
-            await withDatabaseTransaction(async () => {
-                const claimedInvite = await dbRun(
+            withDatabaseTransaction(() => {
+                const claimedInvite = dbRun(
                     "UPDATE discord_invites SET used_at = CURRENT_TIMESTAMP, used_by = ? WHERE token_hash = ? AND used_at IS NULL AND revoked_at IS NULL AND expires_at > datetime('now')",
                     [profile.id, inviteHash]
                 );
                 if (!claimedInvite.changes) throw new Error('invite_expired');
                 if (isUnclaimedPlaceholder) {
-                    await dbRun(
+                    dbRun(
                         `UPDATE discord_users SET username = ?, avatar_hash = ?, updated_at = CURRENT_TIMESTAMP
                          WHERE discord_id = ?`,
                         [profile.global_name || profile.username, profile.avatar || null, profile.id]
                     );
-                    await dbRun('DELETE FROM discord_user_roles WHERE discord_id = ?', [profile.id]);
+                    dbRun('DELETE FROM discord_user_roles WHERE discord_id = ?', [profile.id]);
                 } else {
-                    await dbRun(
+                    dbRun(
                         `INSERT INTO discord_users (discord_id, username, avatar_hash)
                          VALUES (?, ?, ?)`,
                         [profile.id, profile.global_name || profile.username, profile.avatar || null]
                     );
                 }
                 for (const role of rolesToAssign) {
-                    await dbRun('INSERT INTO discord_user_roles (discord_id, role) VALUES (?, ?)', [profile.id, role]);
+                    dbRun('INSERT INTO discord_user_roles (discord_id, role) VALUES (?, ?)', [profile.id, role]);
                 }
             });
         } else {
-            await withDatabaseTransaction(async () => {
-                await dbRun(
+            withDatabaseTransaction(() => {
+                dbRun(
                     `INSERT INTO discord_users (discord_id, username, avatar_hash)
                      VALUES (?, ?, ?)
                      ON CONFLICT(discord_id) DO UPDATE SET
@@ -867,7 +833,7 @@ app.get('/api/auth/discord/callback', async (req, res) => {
                         updated_at = CURRENT_TIMESTAMP`,
                     [profile.id, profile.global_name || profile.username, profile.avatar || null]
                 );
-                const currentRefereeRegistration = await dbGet(
+                const currentRefereeRegistration = dbGet(
                     'SELECT is_delegate FROM referees WHERE discord_id = ?',
                     [profile.id]
                 );
@@ -875,16 +841,16 @@ app.get('/api/auth/discord/callback', async (req, res) => {
                     throw new Error('invite_required');
                 }
                 if (currentRefereeRegistration) {
-                    await syncRegisteredRefereeRole(profile.id, true);
-                    await syncRegisteredDelegateRole(profile.id, Boolean(currentRefereeRegistration.is_delegate));
+                    syncRegisteredRefereeRole(profile.id, true);
+                    syncRegisteredDelegateRole(profile.id, Boolean(currentRefereeRegistration.is_delegate));
                 }
             });
         }
-        await dbRun('DELETE FROM auth_sessions WHERE expires_at <= datetime(\'now\')');
+        dbRun('DELETE FROM auth_sessions WHERE expires_at <= datetime(\'now\')');
         const sessionToken = crypto.randomBytes(32).toString('hex');
         const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
             .toISOString().replace('T', ' ').slice(0, 19);
-        await dbRun(
+        dbRun(
             'INSERT INTO auth_sessions (token_hash, discord_id, expires_at) VALUES (?, ?, ?)',
             [crypto.createHash('sha256').update(sessionToken).digest('hex'), profile.id, expiresAt]
         );
@@ -917,10 +883,10 @@ app.get('/api/auth/me', requireAuthenticated, (req, res) => {
     });
 });
 
-app.post('/api/auth/logout', requireAuthenticated, async (req, res) => {
+app.post('/api/auth/logout', requireAuthenticated, (req, res) => {
     try {
         const token = parseCookies(req).cvfl_session;
-        await dbRun('DELETE FROM auth_sessions WHERE token_hash = ?', [
+        dbRun('DELETE FROM auth_sessions WHERE token_hash = ?', [
             crypto.createHash('sha256').update(token).digest('hex')
         ]);
         res.setHeader('Set-Cookie', `cvfl_session=; ${authCookieOptions(0)}`);
@@ -930,12 +896,12 @@ app.post('/api/auth/logout', requireAuthenticated, async (req, res) => {
     }
 });
 
-app.get('/api/announcement', async (req, res) => {
+app.get('/api/announcement', (req, res) => {
     try {
-        if (!await databaseReady) {
+        if (!isDatabaseReady) {
             return res.status(503).json({ success: false, error: 'Databáze není připravena.' });
         }
-        const setting = await dbGet("SELECT value FROM site_settings WHERE key = 'system_announcement'");
+        const setting = dbGet("SELECT value FROM site_settings WHERE key = 'system_announcement'");
         res.json({ success: true, announcement: setting?.value ?? '' });
     } catch (err) {
         res.status(500).json({ success: false, error: 'Oznámení se nepodařilo načíst.' });
@@ -953,14 +919,14 @@ app.get('/api/health', (req, res) => {
 
 app.use('/api', requireAuthenticated);
 
-app.put('/api/announcement', requireRoles('Admin'), async (req, res) => {
+app.put('/api/announcement', requireRoles('Admin'), (req, res) => {
     try {
         const announcement = req.body.announcement;
         if (typeof announcement !== 'string' || announcement.length > 500) {
             return res.status(400).json({ success: false, error: 'Oznámení musí být text do 500 znaků.' });
         }
         const value = announcement.trim();
-        await dbRun(
+        dbRun(
             "INSERT INTO site_settings (key, value) VALUES ('system_announcement', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
             [value]
         );
@@ -970,9 +936,9 @@ app.put('/api/announcement', requireRoles('Admin'), async (req, res) => {
     }
 });
 
-app.get('/api/admin/discord-users', requireRoles('Admin'), async (req, res) => {
+app.get('/api/admin/discord-users', requireRoles('Admin'), (req, res) => {
     try {
-        const users = await dbAll(`
+        const users = dbAll(`
             SELECT discord_users.discord_id AS discordId, discord_users.username,
                    discord_user_roles.role
             FROM discord_users
@@ -992,11 +958,11 @@ app.get('/api/admin/discord-users', requireRoles('Admin'), async (req, res) => {
             if (user.role) accounts.get(user.discordId).roles.push(user.role);
         });
         if (accounts.has(OWNER_DISCORD_ID)) {
-            accounts.get(OWNER_DISCORD_ID).roles = await availableRolesFor(OWNER_DISCORD_ID);
+            accounts.get(OWNER_DISCORD_ID).roles = availableRolesFor(OWNER_DISCORD_ID);
         }
         for (const account of accounts.values()) {
-            if (!account.isOwner) account.roles = await availableRolesFor(account.discordId);
-            const referee = await dbGet('SELECT is_delegate FROM referees WHERE discord_id = ?', [account.discordId]);
+            if (!account.isOwner) account.roles = availableRolesFor(account.discordId);
+            const referee = dbGet('SELECT is_delegate FROM referees WHERE discord_id = ?', [account.discordId]);
             account.isRegisteredReferee = Boolean(referee);
             account.isRegisteredDelegate = Boolean(referee?.is_delegate);
         }
@@ -1006,18 +972,18 @@ app.get('/api/admin/discord-users', requireRoles('Admin'), async (req, res) => {
     }
 });
 
-app.get('/api/admin/discord-users/:discordId', requireRoles('Admin'), async (req, res) => {
+app.get('/api/admin/discord-users/:discordId', requireRoles('Admin'), (req, res) => {
     try {
         const { discordId } = req.params;
         if (!/^\d{17,20}$/.test(discordId)) {
             return res.status(400).json({ success: false, error: 'Zadejte platné Discord ID.' });
         }
-        const account = await dbGet(
+        const account = dbGet(
             'SELECT discord_id AS discordId, username FROM discord_users WHERE discord_id = ?',
             [discordId]
         );
         if (!account) return res.status(404).json({ success: false, error: 'Discord účet v databázi nebyl nalezen.' });
-        const referee = await dbGet('SELECT is_delegate FROM referees WHERE discord_id = ?', [discordId]);
+        const referee = dbGet('SELECT is_delegate FROM referees WHERE discord_id = ?', [discordId]);
         res.json({
             success: true,
             data: {
@@ -1025,7 +991,7 @@ app.get('/api/admin/discord-users/:discordId', requireRoles('Admin'), async (req
                 isOwner: discordId === OWNER_DISCORD_ID,
                 isRegisteredReferee: Boolean(referee),
                 isRegisteredDelegate: Boolean(referee?.is_delegate),
-                roles: await availableRolesFor(discordId)
+                roles: availableRolesFor(discordId)
             }
         });
     } catch (err) {
@@ -1033,9 +999,9 @@ app.get('/api/admin/discord-users/:discordId', requireRoles('Admin'), async (req
     }
 });
 
-app.post('/api/admin/discord-invites', requireRoles('Admin'), async (req, res) => {
+app.post('/api/admin/discord-invites', requireRoles('Admin'), (req, res) => {
     try {
-        const roles = await validateAssignedRoles(req.body.roles);
+        const roles = validateAssignedRoles(req.body.roles);
         if (!roles || roles.length === 0 || roles.some(role => ['Delegate', 'Referee'].includes(role))) {
             return res.status(400).json({ success: false, error: 'Vyberte alespoň jednu platnou roli.' });
         }
@@ -1043,7 +1009,7 @@ app.post('/api/admin/discord-invites', requireRoles('Admin'), async (req, res) =
         const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
         const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
             .toISOString().replace('T', ' ').slice(0, 19);
-        await dbRun(
+        dbRun(
             'INSERT INTO discord_invites (token_hash, roles_json, expires_at, created_by) VALUES (?, ?, ?, ?)',
             [tokenHash, JSON.stringify(roles), expiresAt, req.auth.discordId]
         );
@@ -1058,9 +1024,9 @@ app.post('/api/admin/discord-invites', requireRoles('Admin'), async (req, res) =
     }
 });
 
-app.get('/api/admin/discord-invites', requireRoles('Admin'), async (req, res) => {
+app.get('/api/admin/discord-invites', requireRoles('Admin'), (req, res) => {
     try {
-        const invites = await dbAll(
+        const invites = dbAll(
             `SELECT token_hash AS id, roles_json AS rolesJson, expires_at AS expiresAt, created_at AS createdAt
              FROM discord_invites
              WHERE used_at IS NULL AND revoked_at IS NULL
@@ -1079,13 +1045,13 @@ app.get('/api/admin/discord-invites', requireRoles('Admin'), async (req, res) =>
     }
 });
 
-app.delete('/api/admin/discord-invites/:id', requireRoles('Admin'), async (req, res) => {
+app.delete('/api/admin/discord-invites/:id', requireRoles('Admin'), (req, res) => {
     try {
         const inviteId = req.params.id;
         if (!/^[a-f0-9]{64}$/.test(inviteId)) {
             return res.status(400).json({ success: false, error: 'Pozvánka nebyla nalezena.' });
         }
-        const result = await dbRun(
+        const result = dbRun(
             `UPDATE discord_invites SET revoked_at = CURRENT_TIMESTAMP
              WHERE token_hash = ? AND used_at IS NULL AND revoked_at IS NULL`,
             [inviteId]
@@ -1099,31 +1065,31 @@ app.delete('/api/admin/discord-invites/:id', requireRoles('Admin'), async (req, 
     }
 });
 
-app.put('/api/admin/discord-users/:discordId/roles', requireRoles('Admin'), async (req, res) => {
+app.put('/api/admin/discord-users/:discordId/roles', requireRoles('Admin'), (req, res) => {
     try {
         const { discordId } = req.params;
-        const roles = await validateAssignedRoles(req.body.roles);
+        const roles = validateAssignedRoles(req.body.roles);
         if (!/^\d{17,20}$/.test(discordId) || !roles) {
             return res.status(400).json({ success: false, error: 'Zadejte platné Discord ID a seznam rolí.' });
         }
         if (discordId === OWNER_DISCORD_ID) {
             return res.status(400).json({ success: false, error: 'Role vlastníka nelze upravit.' });
         }
-        const account = await dbGet('SELECT discord_id FROM discord_users WHERE discord_id = ?', [discordId]);
+        const account = dbGet('SELECT discord_id FROM discord_users WHERE discord_id = ?', [discordId]);
         if (!account) return res.status(404).json({ success: false, error: 'Discord účet nebyl nalezen.' });
-        const referee = await dbGet('SELECT is_delegate FROM referees WHERE discord_id = ?', [discordId]);
+        const referee = dbGet('SELECT is_delegate FROM referees WHERE discord_id = ?', [discordId]);
         const effectiveRoles = new Set(roles.filter(role => !['Referee', 'Delegate'].includes(role)));
         if (referee) effectiveRoles.add('Referee');
         if (referee?.is_delegate) effectiveRoles.add('Delegate');
-        await withDatabaseTransaction(async () => {
-            await dbRun('DELETE FROM discord_user_roles WHERE discord_id = ?', [discordId]);
+        withDatabaseTransaction(() => {
+            dbRun('DELETE FROM discord_user_roles WHERE discord_id = ?', [discordId]);
             for (const role of effectiveRoles) {
-                await dbRun('INSERT INTO discord_user_roles (discord_id, role) VALUES (?, ?)', [discordId, role]);
+                dbRun('INSERT INTO discord_user_roles (discord_id, role) VALUES (?, ?)', [discordId, role]);
             }
             if (effectiveRoles.size === 0) {
-                await dbRun('DELETE FROM auth_sessions WHERE discord_id = ?', [discordId]);
-                await dbRun('UPDATE referees SET discord_id = NULL WHERE discord_id = ?', [discordId]);
-                await dbRun('DELETE FROM discord_users WHERE discord_id = ?', [discordId]);
+                dbRun('DELETE FROM auth_sessions WHERE discord_id = ?', [discordId]);
+                dbRun('UPDATE referees SET discord_id = NULL WHERE discord_id = ?', [discordId]);
+                dbRun('DELETE FROM discord_users WHERE discord_id = ?', [discordId]);
             }
         });
         res.json({ success: true, deleted: effectiveRoles.size === 0, roles: [...effectiveRoles] });
@@ -1132,7 +1098,7 @@ app.put('/api/admin/discord-users/:discordId/roles', requireRoles('Admin'), asyn
     }
 });
 
-app.delete('/api/admin/discord-users/:discordId', requireRoles('Admin'), async (req, res) => {
+app.delete('/api/admin/discord-users/:discordId', requireRoles('Admin'), (req, res) => {
     try {
         const { discordId } = req.params;
         if (!/^\d{17,20}$/.test(discordId)) {
@@ -1141,11 +1107,11 @@ app.delete('/api/admin/discord-users/:discordId', requireRoles('Admin'), async (
         if (discordId === OWNER_DISCORD_ID) {
             return res.status(400).json({ success: false, error: 'Přístup vlastníka nelze odebrat.' });
         }
-        const account = await dbGet('SELECT discord_id FROM discord_users WHERE discord_id = ?', [discordId]);
+        const account = dbGet('SELECT discord_id FROM discord_users WHERE discord_id = ?', [discordId]);
         if (!account) return res.status(404).json({ success: false, error: 'Discord účet nebyl nalezen.' });
-        await withDatabaseTransaction(async () => {
-            await dbRun('UPDATE referees SET discord_id = NULL WHERE discord_id = ?', [discordId]);
-            await dbRun('DELETE FROM discord_users WHERE discord_id = ?', [discordId]);
+        withDatabaseTransaction(() => {
+            dbRun('UPDATE referees SET discord_id = NULL WHERE discord_id = ?', [discordId]);
+            dbRun('DELETE FROM discord_users WHERE discord_id = ?', [discordId]);
         });
         res.json({ success: true });
     } catch (err) {
@@ -1157,12 +1123,12 @@ app.delete('/api/admin/discord-users/:discordId', requireRoles('Admin'), async (
  * GET /api/state
  * Vrátí kompletní aplikační stav kompatibilní s frontendem
  */
-app.get('/api/state', async (req, res) => {
+app.get('/api/state', (req, res) => {
     try {
-        const teamsRaw = await dbAll('SELECT * FROM teams ORDER BY id ASC');
-        const playersRaw = await dbAll('SELECT * FROM players ORDER BY id ASC');
-        const trainersRaw = await dbAll('SELECT * FROM trainers ORDER BY id ASC');
-        const refereesRaw = await dbAll(
+        const teamsRaw = dbAll('SELECT * FROM teams ORDER BY id ASC');
+        const playersRaw = dbAll('SELECT * FROM players ORDER BY id ASC');
+        const trainersRaw = dbAll('SELECT * FROM trainers ORDER BY id ASC');
+        const refereesRaw = dbAll(
             `SELECT referees.*,
                     (referees.discord_id = ? OR EXISTS (
                         SELECT 1 FROM discord_user_roles
@@ -1171,21 +1137,21 @@ app.get('/api/state', async (req, res) => {
              FROM referees ORDER BY id ASC`,
             [OWNER_DISCORD_ID]
         );
-        const matchesRaw = await matchesVisibleToUser(
-            await dbAll('SELECT * FROM matches ORDER BY round ASC, id ASC'),
+        const matchesRaw = matchesVisibleToUser(
+            dbAll('SELECT * FROM matches ORDER BY round ASC, id ASC'),
             req.auth
         );
-        const suspensionsRaw = await dbAll('SELECT * FROM suspensions ORDER BY id DESC');
-        const deductionsRaw = await dbAll(`
+        const suspensionsRaw = dbAll('SELECT * FROM suspensions ORDER BY id DESC');
+        const deductionsRaw = dbAll(`
             SELECT points_deductions.*, teams.name AS team_name
             FROM points_deductions
             LEFT JOIN teams ON teams.id = points_deductions.team_id
             ORDER BY points_deductions.id DESC
         `);
-        const auditLogsRaw = await dbAll('SELECT * FROM dk_audit_logs ORDER BY id DESC LIMIT 200');
-        const maintenanceSetting = await dbGet("SELECT value FROM site_settings WHERE key = 'maintenance_mode'");
-        const maintenanceNoticeSetting = await dbGet("SELECT value FROM site_settings WHERE key = 'maintenance_notice'");
-        const announcementSetting = await dbGet("SELECT value FROM site_settings WHERE key = 'system_announcement'");
+        const auditLogsRaw = dbAll('SELECT * FROM dk_audit_logs ORDER BY id DESC LIMIT 200');
+        const maintenanceSetting = dbGet("SELECT value FROM site_settings WHERE key = 'maintenance_mode'");
+        const maintenanceNoticeSetting = dbGet("SELECT value FROM site_settings WHERE key = 'maintenance_notice'");
+        const announcementSetting = dbGet("SELECT value FROM site_settings WHERE key = 'system_announcement'");
 
         // Mapování týmů
         const teams = teamsRaw.map(t => ({
@@ -1295,9 +1261,9 @@ app.get('/api/state', async (req, res) => {
         });
 
         // Mapování disciplinárních trestů
-        const suspensions = await Promise.all(suspensionsRaw.map(async s => {
+        const suspensions = suspensionsRaw.map(s => {
             const served = s.type === 'Match_Count'
-                ? await dbGet('SELECT COUNT(*) AS count FROM suspension_served_matches WHERE suspension_id = ?', [s.id])
+                ? dbGet('SELECT COUNT(*) AS count FROM suspension_served_matches WHERE suspension_id = ?', [s.id])
                 : { count: 0 };
             const remainingMatches = s.type === 'Match_Count'
                 ? Math.max(0, (s.matches_count || 0) - served.count)
@@ -1320,7 +1286,7 @@ app.get('/api/state', async (req, res) => {
                 isActive,
                 dateAdded: s.created_at
             };
-        }));
+        });
 
         // Mapování odečtů bodů
         const pointsDeductions = deductionsRaw.map(d => ({
@@ -1366,7 +1332,7 @@ app.get('/api/state', async (req, res) => {
     }
 });
 
-app.put('/api/maintenance', requireRoles('Admin'), async (req, res) => {
+app.put('/api/maintenance', requireRoles('Admin'), (req, res) => {
     try {
         if (typeof req.body.enabled !== 'boolean') {
             return res.status(400).json({ success: false, error: 'Pole enabled musí být boolean.' });
@@ -1375,12 +1341,12 @@ app.put('/api/maintenance', requireRoles('Admin'), async (req, res) => {
             (typeof req.body.notice !== 'string' || req.body.notice.length > 500)) {
             return res.status(400).json({ success: false, error: 'Poznámka k údržbě musí být text do 500 znaků.' });
         }
-        await dbRun(
+        dbRun(
             "INSERT INTO site_settings (key, value) VALUES ('maintenance_mode', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
             [req.body.enabled ? '1' : '0']
         );
         if (req.body.notice !== undefined) {
-            await dbRun(
+            dbRun(
                 "INSERT INTO site_settings (key, value) VALUES ('maintenance_notice', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                 [req.body.notice.trim()]
             );
@@ -1391,7 +1357,7 @@ app.put('/api/maintenance', requireRoles('Admin'), async (req, res) => {
     }
 });
 
-app.post('/api/trainers', requireRoles('Admin'), async (req, res) => {
+app.post('/api/trainers', requireRoles('Admin'), (req, res) => {
     try {
         const robloxNick = typeof req.body.robloxNick === 'string' ? req.body.robloxNick.trim() : '';
         const discordNick = typeof req.body.discordNick === 'string' ? req.body.discordNick.trim() : '';
@@ -1400,7 +1366,7 @@ app.post('/api/trainers', requireRoles('Admin'), async (req, res) => {
         if (!robloxNick || !discordNick || !Number.isInteger(teamId) || !['Owner', 'Coach'].includes(role)) {
             return res.status(400).json({ success: false, error: 'Vyplňte platný Roblox/Discord username, tým a roli.' });
         }
-        const result = await dbRun(
+        const result = dbRun(
             `INSERT INTO trainers (team_id, roblox_nick, discord_nick, role)
              SELECT ?, ?, ?, ?
              WHERE ? != 'Coach' OR (SELECT COUNT(*) FROM trainers WHERE team_id = ? AND role = 'Coach') < 3`,
@@ -1417,7 +1383,7 @@ app.post('/api/trainers', requireRoles('Admin'), async (req, res) => {
 // CRUD: TÝMY (TEAMS)
 // ====================================================================
 
-app.post('/api/teams', requireRoles('Admin'), async (req, res) => {
+app.post('/api/teams', requireRoles('Admin'), (req, res) => {
     try {
         const name = typeof req.body.name === 'string' ? req.body.name.trim() : '';
         const league = req.body.league;
@@ -1426,7 +1392,7 @@ app.post('/api/teams', requireRoles('Admin'), async (req, res) => {
             return res.status(400).json({ success: false, error: 'Název týmu a platná liga jsou povinné.' });
         }
         if (!logo.valid) return res.status(400).json({ success: false, error: 'Logo musí být čtvercový PNG do 1 MB.' });
-        const result = await dbRun(
+        const result = dbRun(
             'INSERT INTO teams (name, league, logo) VALUES (?, ?, ?)',
             [name, league, logo.value]
         );
@@ -1436,7 +1402,7 @@ app.post('/api/teams', requireRoles('Admin'), async (req, res) => {
     }
 });
 
-app.put('/api/teams/:id', requireRoles('Admin'), async (req, res) => {
+app.put('/api/teams/:id', requireRoles('Admin'), (req, res) => {
     try {
         const name = typeof req.body.name === 'string' ? req.body.name.trim() : '';
         const league = req.body.league;
@@ -1447,12 +1413,12 @@ app.put('/api/teams/:id', requireRoles('Admin'), async (req, res) => {
         if (req.body.logo !== undefined) {
             const logo = validateTeamLogo(req.body.logo);
             if (!logo.valid) return res.status(400).json({ success: false, error: 'Logo musí být čtvercový PNG do 1 MB.' });
-            result = await dbRun(
+            result = dbRun(
                 'UPDATE teams SET name = ?, league = ?, logo = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
                 [name, league, logo.value, req.params.id]
             );
         } else {
-            result = await dbRun(
+            result = dbRun(
                 'UPDATE teams SET name = ?, league = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
                 [name, league, req.params.id]
             );
@@ -1464,20 +1430,20 @@ app.put('/api/teams/:id', requireRoles('Admin'), async (req, res) => {
     }
 });
 
-app.delete('/api/teams/:id', requireRoles('Admin'), async (req, res) => {
+app.delete('/api/teams/:id', requireRoles('Admin'), (req, res) => {
     try {
         const teamId = req.params.id;
-        const matches = await dbGet(
+        const matches = dbGet(
             'SELECT COUNT(*) AS count FROM matches WHERE home_team_id = ? OR away_team_id = ?',
             [teamId, teamId]
         );
         if (matches.count > 0) {
             return res.status(409).json({ success: false, error: 'Tým nelze smazat, dokud má naplánované nebo odehrané zápasy.' });
         }
-        await dbRun('UPDATE players SET team_id = NULL WHERE team_id = ?', [teamId]);
-        const result = await dbRun('DELETE FROM teams WHERE id = ?', [teamId]);
+        dbRun('UPDATE players SET team_id = NULL WHERE team_id = ?', [teamId]);
+        const result = dbRun('DELETE FROM teams WHERE id = ?', [teamId]);
         if (!result.changes) return res.status(404).json({ success: false, error: 'Tým nebyl nalezen.' });
-        await dbRun('DELETE FROM discord_user_roles WHERE role = ?', [`Team_Manager_${teamId}`]);
+        dbRun('DELETE FROM discord_user_roles WHERE role = ?', [`Team_Manager_${teamId}`]);
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
@@ -1488,16 +1454,16 @@ app.delete('/api/teams/:id', requireRoles('Admin'), async (req, res) => {
 // CRUD: HRÁČI (PLAYERS)
 // ====================================================================
 
-app.get('/api/players', async (req, res) => {
+app.get('/api/players', (req, res) => {
     try {
-        const rows = await dbAll('SELECT * FROM players ORDER BY roblox_nick ASC');
+        const rows = dbAll('SELECT * FROM players ORDER BY roblox_nick ASC');
         res.json({ success: true, data: rows });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
     }
 });
 
-app.post('/api/players', requireRoles('Admin'), async (req, res) => {
+app.post('/api/players', requireRoles('Admin'), (req, res) => {
     try {
         if (playerSyncStatus.enabled) {
             return res.status(409).json({ success: false, error: 'Hráčská data spravuje Discord bot; upravte hráče přímo v botovi.' });
@@ -1506,7 +1472,7 @@ app.post('/api/players', requireRoles('Admin'), async (req, res) => {
         if (!robloxNick || !discordNick) {
             return res.status(400).json({ success: false, error: 'Roblox Nick i Discord Nick jsou povinné!' });
         }
-        const result = await dbRun(
+        const result = dbRun(
             `INSERT INTO players (team_id, roblox_nick, discord_nick, is_transfer_banned) VALUES (?, ?, ?, ?)`,
             [teamId || null, robloxNick.trim(), discordNick.trim(), isTransferBanned ? 1 : 0]
         );
@@ -1516,7 +1482,7 @@ app.post('/api/players', requireRoles('Admin'), async (req, res) => {
     }
 });
 
-app.put('/api/players/:id', requireRoles('Admin'), async (req, res) => {
+app.put('/api/players/:id', requireRoles('Admin'), (req, res) => {
     try {
         const id = req.params.id;
         const { teamId, isTransferBanned, goals, assists, cleanSheets, motm } = req.body;
@@ -1525,7 +1491,7 @@ app.put('/api/players/:id', requireRoles('Admin'), async (req, res) => {
             return res.status(409).json({ success: false, error: 'Tým a Transfer Ban spravuje Discord bot.' });
         }
         const transferBanned = isTransferBanned !== undefined ? (isTransferBanned ? 1 : 0) : null;
-        await dbRun(
+        dbRun(
             `UPDATE players SET 
                 team_id = COALESCE(?, team_id),
                 is_transfer_banned = COALESCE(?, is_transfer_banned),
@@ -1543,12 +1509,12 @@ app.put('/api/players/:id', requireRoles('Admin'), async (req, res) => {
     }
 });
 
-app.delete('/api/players/:id', requireRoles('Admin'), async (req, res) => {
+app.delete('/api/players/:id', requireRoles('Admin'), (req, res) => {
     try {
         if (playerSyncStatus.enabled) {
             return res.status(409).json({ success: false, error: 'Hráčský seznam spravuje Discord bot.' });
         }
-        await dbRun('DELETE FROM players WHERE id = ?', [req.params.id]);
+        dbRun('DELETE FROM players WHERE id = ?', [req.params.id]);
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
@@ -1559,9 +1525,9 @@ app.delete('/api/players/:id', requireRoles('Admin'), async (req, res) => {
 // CRUD: ROZHODČÍ (REFEREES)
 // ====================================================================
 
-app.get('/api/referees', async (req, res) => {
+app.get('/api/referees', (req, res) => {
     try {
-        const rows = await dbAll(
+        const rows = dbAll(
             `SELECT id, roblox_nick AS robloxNick, discord_nick AS discordNick,
                     license, status, suspension_reason AS suspensionReason, is_delegate AS isDelegate,
                     (discord_id = ? OR EXISTS (
@@ -1577,24 +1543,24 @@ app.get('/api/referees', async (req, res) => {
     }
 });
 
-app.post('/api/referees', requireRoles('Admin', 'Referee_Manager'), async (req, res) => {
+app.post('/api/referees', requireRoles('Admin', 'Referee_Manager'), (req, res) => {
     try {
         const { robloxNick, discordNick, license, isDelegate, discordId } = req.body;
         if (!robloxNick || !discordNick || !/^\d{17,20}$/.test(String(discordId || ''))) {
             return res.status(400).json({ success: false, error: 'Roblox Nick, Discord Nick a platné Discord ID jsou povinné.' });
         }
-        const existingRegistration = await dbGet('SELECT id FROM referees WHERE discord_id = ?', [discordId]);
+        const existingRegistration = dbGet('SELECT id FROM referees WHERE discord_id = ?', [discordId]);
         if (existingRegistration) return res.status(409).json({ success: false, error: 'Tento Discord účet už má profil rozhodčího nebo delegáta.' });
-        const result = await withDatabaseTransaction(async () => {
-            const registration = await dbGet('SELECT id FROM referees WHERE discord_id = ?', [discordId]);
+        const result = withDatabaseTransaction(() => {
+            const registration = dbGet('SELECT id FROM referees WHERE discord_id = ?', [discordId]);
             if (registration) throw Object.assign(new Error('Tento Discord účet už má profil rozhodčího nebo delegáta.'), { code: 'REFEREE_DISCORD_CONFLICT' });
-            const linkedAccount = await dbGet('SELECT discord_id FROM discord_users WHERE discord_id = ?', [discordId]);
-            const inserted = await dbRun(
+            const linkedAccount = dbGet('SELECT discord_id FROM discord_users WHERE discord_id = ?', [discordId]);
+            const inserted = dbRun(
                 `INSERT INTO referees (roblox_nick, discord_nick, license, is_delegate, discord_id) VALUES (?, ?, ?, ?, ?)`,
                 [robloxNick.trim(), discordNick.trim(), license || 'C', isDelegate ? 1 : 0, discordId]
             );
-            await syncRegisteredRefereeRole(discordId, true);
-            await syncRegisteredDelegateRole(discordId, Boolean(isDelegate));
+            syncRegisteredRefereeRole(discordId, true);
+            syncRegisteredDelegateRole(discordId, Boolean(isDelegate));
             return { ...inserted, isRegistered: Boolean(linkedAccount) };
         });
         res.status(201).json({ success: true, id: result.lastID, isRegistered: result.isRegistered });
@@ -1608,11 +1574,11 @@ app.post('/api/referees', requireRoles('Admin', 'Referee_Manager'), async (req, 
     }
 });
 
-app.put('/api/referees/:id', requireRoles('Admin', 'Referee_Manager'), async (req, res) => {
+app.put('/api/referees/:id', requireRoles('Admin', 'Referee_Manager'), (req, res) => {
     try {
         const id = req.params.id;
         const { license, status, suspensionReason, isDelegate } = req.body;
-        const existing = await dbGet('SELECT discord_id, is_delegate FROM referees WHERE id = ?', [id]);
+        const existing = dbGet('SELECT discord_id, is_delegate FROM referees WHERE id = ?', [id]);
         if (!existing) return res.status(404).json({ success: false, error: 'Profil rozhodčího nebyl nalezen.' });
         const newDiscordId = typeof req.body.discordId === 'string' && req.body.discordId.trim()
             ? req.body.discordId.trim()
@@ -1621,12 +1587,12 @@ app.put('/api/referees/:id', requireRoles('Admin', 'Referee_Manager'), async (re
             if (!/^\d{17,20}$/.test(newDiscordId)) {
                 return res.status(400).json({ success: false, error: 'Zadejte platné Discord ID.' });
             }
-            const duplicate = await dbGet('SELECT id FROM referees WHERE discord_id = ? AND id != ?', [newDiscordId, id]);
+            const duplicate = dbGet('SELECT id FROM referees WHERE discord_id = ? AND id != ?', [newDiscordId, id]);
             if (duplicate) return res.status(409).json({ success: false, error: 'Tento Discord účet už je propojen s jiným profilem.' });
         }
         const delegateValue = isDelegate === undefined ? Boolean(existing.is_delegate) : Boolean(isDelegate);
-        await withDatabaseTransaction(async () => {
-            await dbRun(
+        withDatabaseTransaction(() => {
+            dbRun(
                 `UPDATE referees SET
                     license = COALESCE(?, license),
                     status = COALESCE(?, status),
@@ -1638,10 +1604,10 @@ app.put('/api/referees/:id', requireRoles('Admin', 'Referee_Manager'), async (re
                 [license, status, suspensionReason, delegateValue ? 1 : 0, newDiscordId, id]
             );
             if (existing.discord_id !== newDiscordId) {
-                await removeRefereeRoles(existing.discord_id);
+                removeRefereeRoles(existing.discord_id);
             }
-            await syncRegisteredRefereeRole(newDiscordId, true);
-            await syncRegisteredDelegateRole(newDiscordId, delegateValue);
+            syncRegisteredRefereeRole(newDiscordId, true);
+            syncRegisteredDelegateRole(newDiscordId, delegateValue);
         });
         res.json({ success: true });
     } catch (err) {
@@ -1651,13 +1617,13 @@ app.put('/api/referees/:id', requireRoles('Admin', 'Referee_Manager'), async (re
     }
 });
 
-app.delete('/api/referees/:id', requireRoles('Admin', 'Referee_Manager'), async (req, res) => {
+app.delete('/api/referees/:id', requireRoles('Admin', 'Referee_Manager'), (req, res) => {
     try {
-        const referee = await dbGet('SELECT discord_id FROM referees WHERE id = ?', [req.params.id]);
+        const referee = dbGet('SELECT discord_id FROM referees WHERE id = ?', [req.params.id]);
         if (!referee) return res.status(404).json({ success: false, error: 'Profil rozhodčího nebyl nalezen.' });
-        await withDatabaseTransaction(async () => {
-            await dbRun('DELETE FROM referees WHERE id = ?', [req.params.id]);
-            await removeRefereeRoles(referee.discord_id);
+        withDatabaseTransaction(() => {
+            dbRun('DELETE FROM referees WHERE id = ?', [req.params.id]);
+            removeRefereeRoles(referee.discord_id);
         });
         res.json({ success: true });
     } catch (err) {
@@ -1669,10 +1635,10 @@ app.delete('/api/referees/:id', requireRoles('Admin', 'Referee_Manager'), async 
 // CRUD: ZÁPASY (MATCHES & PROTOKOL)
 // ====================================================================
 
-app.get('/api/matches', async (req, res) => {
+app.get('/api/matches', (req, res) => {
     try {
-        const rows = await matchesVisibleToUser(
-            await dbAll('SELECT * FROM matches ORDER BY round ASC, id ASC'),
+        const rows = matchesVisibleToUser(
+            dbAll('SELECT * FROM matches ORDER BY round ASC, id ASC'),
             req.auth
         );
         res.json({ success: true, data: rows });
@@ -1681,10 +1647,10 @@ app.get('/api/matches', async (req, res) => {
     }
 });
 
-app.post('/api/matches', requireRoles('Admin'), async (req, res) => {
+app.post('/api/matches', requireRoles('Admin'), (req, res) => {
     try {
         const m = req.body || {};
-        const result = await dbRun(
+        const result = dbRun(
             `INSERT INTO matches (
                 round, competition, cup_stage, home_team_id, away_team_id,
                 home_score, away_score, stadium, match_date, status,
@@ -1717,7 +1683,7 @@ app.post('/api/matches', requireRoles('Admin'), async (req, res) => {
     }
 });
 
-app.put('/api/matches/:id', requireMatchEditor, async (req, res) => {
+app.put('/api/matches/:id', requireMatchEditor, (req, res) => {
     try {
         const id = req.params.id;
         const m = req.body || {};
@@ -1778,17 +1744,17 @@ app.put('/api/matches/:id', requireMatchEditor, async (req, res) => {
                 }
             }
         }
-        const penaltyError = await validatePromotionPlayoffPenalties(m, id);
+        const penaltyError = validatePromotionPlayoffPenalties(m, id);
         if (penaltyError) return res.status(400).json({ success: false, error: penaltyError });
         if (m.status === 'Completed' && !m.isForfeited || m.periodChecks && m.periodChecks.h1Started) {
-            const lineupError = await validateMatchLineups(m);
+            const lineupError = validateMatchLineups(m);
             if (lineupError) return res.status(400).json({ success: false, error: lineupError });
         } else if (m.homeRoster !== undefined || m.awayRoster !== undefined) {
-            const suspensionError = await validateMatchSuspensions(m);
+            const suspensionError = validateMatchSuspensions(m);
             if (suspensionError) return res.status(400).json({ success: false, error: suspensionError });
         }
         const previousMatch = m.status === 'Completed'
-            ? await dbGet('SELECT status FROM matches WHERE id = ?', [id])
+            ? dbGet('SELECT status FROM matches WHERE id = ?', [id])
             : null;
 
         const updateFields = [];
@@ -1828,10 +1794,10 @@ app.put('/api/matches/:id', requireMatchEditor, async (req, res) => {
 
         if (updateFields.length > 1) {
             const completionGuard = m.status === 'Completed' ? " AND status != 'Completed'" : '';
-            const result = await dbRun(`UPDATE matches SET ${updateFields.join(', ')} WHERE id = ?${completionGuard}`, params);
+            const result = dbRun(`UPDATE matches SET ${updateFields.join(', ')} WHERE id = ?${completionGuard}`, params);
             if (m.status === 'Completed' && !m.isForfeited && previousMatch && previousMatch.status !== 'Completed' && result.changes) {
-                await recordSuspensionMatches(id, m.homeTeamId, m.homeRoster || []);
-                await recordSuspensionMatches(id, m.awayTeamId, m.awayRoster || []);
+                recordSuspensionMatches(id, m.homeTeamId, m.homeRoster || []);
+                recordSuspensionMatches(id, m.awayTeamId, m.awayRoster || []);
             }
         }
         res.json({ success: true });
@@ -1840,8 +1806,8 @@ app.put('/api/matches/:id', requireMatchEditor, async (req, res) => {
     }
 });
 
-async function validatePromotionPlayoffPenalties(match, matchId) {
-    const current = await dbGet(
+function validatePromotionPlayoffPenalties(match, matchId) {
+    const current = dbGet(
         'SELECT competition, cup_stage, round, home_team_id, away_team_id, home_score, away_score, status FROM matches WHERE id = ?',
         [matchId]
     );
@@ -1869,7 +1835,7 @@ async function validatePromotionPlayoffPenalties(match, matchId) {
     }
     if (!penaltyActivity) return null;
 
-    const priorLegs = await dbAll(
+    const priorLegs = dbAll(
         `SELECT round, home_team_id, away_team_id, home_score, away_score, status
          FROM matches
          WHERE competition = ? AND cup_stage = ? AND id != ?
@@ -1903,7 +1869,7 @@ async function validatePromotionPlayoffPenalties(match, matchId) {
     return null;
 }
 
-async function validateMatchLineups(match) {
+function validateMatchLineups(match) {
     for (const roster of [match.homeRoster, match.awayRoster]) {
         if (!Array.isArray(roster) || roster.length > 10) {
             return 'Zápasová soupiska může obsahovat nejvýše 10 hráčů.';
@@ -1913,13 +1879,13 @@ async function validateMatchLineups(match) {
             return 'Sestava obsahuje neplatného nebo duplicitního hráče.';
         }
         const starters = roster.filter(player => player.isStarter).length;
-        if (starters < 3 || starters > 5) return 'Každý tým musí mít 3 až 5 hráčů v základní sestavě.';
+        if (starters < 3 || starters > 5) return 'Každý týmy musí mít 3 až 5 hráčů v základní sestavě.';
         if (roster.filter(player => player.isGK).length !== 1) return 'Každý tým musí mít určeného právě jednoho brankáře.';
     }
     return validateMatchSuspensions(match);
 }
 
-async function validateMatchSuspensions(match) {
+function validateMatchSuspensions(match) {
     for (const [teamId, roster] of [[match.homeTeamId, match.homeRoster || []], [match.awayTeamId, match.awayRoster || []]]) {
         if (!Array.isArray(roster) || roster.length > 10) {
             return 'Zápasová soupiska může obsahovat nejvýše 10 hráčů.';
@@ -1932,7 +1898,7 @@ async function validateMatchSuspensions(match) {
             return 'V základní sestavě může být nejvýše 5 hráčů.';
         }
         if (playerIds.length) {
-            const registeredPlayers = await dbGet(
+            const registeredPlayers = dbGet(
                 `SELECT COUNT(*) AS count FROM players WHERE team_id = ? AND id IN (${playerIds.map(() => '?').join(', ')})`,
                 [teamId, ...playerIds]
             );
@@ -1940,7 +1906,7 @@ async function validateMatchSuspensions(match) {
                 return 'Sestava obsahuje hráče, který není registrován za daný tým.';
             }
         }
-        if (playerIds.length && await dbGet(
+        if (playerIds.length && dbGet(
             `SELECT id FROM suspensions
              WHERE is_active = 1 AND team_id = ? AND player_id IN (${playerIds.map(() => '?').join(', ')})
              AND (
@@ -1957,12 +1923,12 @@ async function validateMatchSuspensions(match) {
     return null;
 }
 
-async function recordSuspensionMatches(matchId, teamId, roster) {
+function recordSuspensionMatches(matchId, teamId, roster) {
     const playerIds = roster.map(player => Number(player.playerId)).filter(Number.isInteger);
     const exclusion = playerIds.length
         ? `AND player_id NOT IN (${playerIds.map(() => '?').join(', ')})`
         : '';
-    await dbRun(
+    dbRun(
         `INSERT OR IGNORE INTO suspension_served_matches (suspension_id, match_id)
          SELECT id, ? FROM suspensions
          WHERE is_active = 1 AND team_id = ? AND type = 'Match_Count' AND matches_count > 0 ${exclusion}`,
@@ -1970,9 +1936,9 @@ async function recordSuspensionMatches(matchId, teamId, roster) {
     );
 }
 
-app.delete('/api/matches/:id', requireRoles('Admin'), async (req, res) => {
+app.delete('/api/matches/:id', requireRoles('Admin'), (req, res) => {
     try {
-        await dbRun('DELETE FROM matches WHERE id = ?', [req.params.id]);
+        dbRun('DELETE FROM matches WHERE id = ?', [req.params.id]);
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
@@ -1983,7 +1949,7 @@ app.delete('/api/matches/:id', requireRoles('Admin'), async (req, res) => {
 // CRUD: DISCIPLINÁRNÍ TRESTY & ODEČTY BODŮ
 // ====================================================================
 
-app.post('/api/suspensions', requireRoles('Admin', 'DK'), async (req, res) => {
+app.post('/api/suspensions', requireRoles('Admin', 'DK'), (req, res) => {
     try {
         const { playerId, teamId, playerNick, teamName, type, matchesLeft, untilDate, reason } = req.body;
         if (!playerId || !teamId || !playerNick || !reason ||
@@ -1992,7 +1958,7 @@ app.post('/api/suspensions', requireRoles('Admin', 'DK'), async (req, res) => {
             (type === 'Time_Period' && (!untilDate || Number.isNaN(Date.parse(untilDate))))) {
             return res.status(400).json({ success: false, error: 'Vyplňte platné údaje pro udělení trestu.' });
         }
-        const upcomingMatches = await dbAll(
+        const upcomingMatches = dbAll(
             `SELECT id, home_team_id, away_team_id, home_roster_json, away_roster_json
              FROM matches WHERE status != 'Completed' AND (home_team_id = ? OR away_team_id = ?)`,
             [teamId, teamId]
@@ -2006,13 +1972,13 @@ app.post('/api/suspensions', requireRoles('Admin', 'DK'), async (req, res) => {
             const source = upcomingMatches[index];
             return match.roster.length !== JSON.parse(source[match.rosterColumn] || '[]').length;
         });
-        const result = await dbRun(
+        const result = dbRun(
             `INSERT INTO suspensions (player_id, team_id, player_nick, team_name, type, matches_count, duration_time, reason) 
              VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
             [playerId || null, teamId || null, playerNick, teamName, type, matchesLeft || 0, untilDate || null, reason]
         );
         for (const match of affectedMatches) {
-            await dbRun(
+            dbRun(
                 `UPDATE matches SET ${match.rosterColumn} = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
                 [JSON.stringify(match.roster), match.id]
             );
@@ -2023,16 +1989,16 @@ app.post('/api/suspensions', requireRoles('Admin', 'DK'), async (req, res) => {
     }
 });
 
-app.delete('/api/suspensions/:id', requireRoles('Admin', 'DK'), async (req, res) => {
+app.delete('/api/suspensions/:id', requireRoles('Admin', 'DK'), (req, res) => {
     try {
-        await dbRun('DELETE FROM suspensions WHERE id = ?', [req.params.id]);
+        dbRun('DELETE FROM suspensions WHERE id = ?', [req.params.id]);
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
     }
 });
 
-app.post('/api/deductions', requireRoles('Admin', 'DK'), async (req, res) => {
+app.post('/api/deductions', requireRoles('Admin', 'DK'), (req, res) => {
     try {
         const teamId = Number(req.body.teamId);
         const points = Number(req.body.points);
@@ -2040,18 +2006,18 @@ app.post('/api/deductions', requireRoles('Admin', 'DK'), async (req, res) => {
         if (!Number.isInteger(teamId) || teamId <= 0 || !Number.isInteger(points) || points <= 0 || reason.length > 500) {
             return res.status(400).json({ success: false, error: 'Zadejte platný tým, kladný počet bodů a důvod do 500 znaků.' });
         }
-        const result = await withDatabaseTransaction(async () => {
-            const team = await dbGet('SELECT id FROM teams WHERE id = ?', [teamId]);
+        const result = withDatabaseTransaction(() => {
+            const team = dbGet('SELECT id FROM teams WHERE id = ?', [teamId]);
             if (!team) {
                 const error = new Error('Tým nebyl nalezen.');
                 error.status = 404;
                 throw error;
             }
-            const deduction = await dbRun(
+            const deduction = dbRun(
                 'INSERT INTO points_deductions (team_id, points, reason) VALUES (?, ?, ?)',
                 [teamId, points, reason || 'Rozhodnutí svazu']
             );
-            await dbRun(
+            dbRun(
                 'UPDATE teams SET deducted_points = COALESCE(deducted_points, 0) + ?, deduction_reason = ? WHERE id = ?',
                 [points, reason || 'Rozhodnutí svazu', teamId]
             );
@@ -2063,21 +2029,21 @@ app.post('/api/deductions', requireRoles('Admin', 'DK'), async (req, res) => {
     }
 });
 
-app.delete('/api/deductions/team/:teamId', requireRoles('Admin', 'DK'), async (req, res) => {
+app.delete('/api/deductions/team/:teamId', requireRoles('Admin', 'DK'), (req, res) => {
     try {
         const teamId = Number(req.params.teamId);
         if (!Number.isInteger(teamId) || teamId <= 0) {
             return res.status(400).json({ success: false, error: 'Neplatné ID týmu.' });
         }
-        await withDatabaseTransaction(async () => {
-            const team = await dbGet('SELECT id FROM teams WHERE id = ?', [teamId]);
+        withDatabaseTransaction(() => {
+            const team = dbGet('SELECT id FROM teams WHERE id = ?', [teamId]);
             if (!team) {
                 const error = new Error('Tým nebyl nalezen.');
                 error.status = 404;
                 throw error;
             }
-            await dbRun('DELETE FROM points_deductions WHERE team_id = ?', [teamId]);
-            await dbRun("UPDATE teams SET deducted_points = 0, deduction_reason = '' WHERE id = ?", [teamId]);
+            dbRun('DELETE FROM points_deductions WHERE team_id = ?', [teamId]);
+            dbRun("UPDATE teams SET deducted_points = 0, deduction_reason = '' WHERE id = ?", [teamId]);
         });
         res.json({ success: true });
     } catch (err) {
@@ -2085,21 +2051,21 @@ app.delete('/api/deductions/team/:teamId', requireRoles('Admin', 'DK'), async (r
     }
 });
 
-app.delete('/api/deductions/:id', requireRoles('Admin', 'DK'), async (req, res) => {
+app.delete('/api/deductions/:id', requireRoles('Admin', 'DK'), (req, res) => {
     try {
-        const deduction = await dbGet('SELECT * FROM points_deductions WHERE id = ?', [req.params.id]);
+        const deduction = dbGet('SELECT * FROM points_deductions WHERE id = ?', [req.params.id]);
         if (deduction) {
-            await withDatabaseTransaction(async () => {
-                await dbRun('DELETE FROM points_deductions WHERE id = ?', [req.params.id]);
-                const remaining = await dbGet(
+            withDatabaseTransaction(() => {
+                dbRun('DELETE FROM points_deductions WHERE id = ?', [req.params.id]);
+                const remaining = dbGet(
                     'SELECT COALESCE(SUM(points), 0) AS points FROM points_deductions WHERE team_id = ?',
                     [deduction.team_id]
                 );
-                const latest = await dbGet(
+                const latest = dbGet(
                     'SELECT reason FROM points_deductions WHERE team_id = ? ORDER BY id DESC LIMIT 1',
                     [deduction.team_id]
                 );
-                await dbRun(
+                dbRun(
                     'UPDATE teams SET deducted_points = ?, deduction_reason = ? WHERE id = ?',
                     [remaining.points, latest?.reason || '', deduction.team_id]
                 );
@@ -2111,10 +2077,10 @@ app.delete('/api/deductions/:id', requireRoles('Admin', 'DK'), async (req, res) 
     }
 });
 
-app.post('/api/audit-logs', requireRoles('Admin', 'DK'), async (req, res) => {
+app.post('/api/audit-logs', requireRoles('Admin', 'DK'), (req, res) => {
     try {
         const { action, target, details } = req.body;
-        const result = await dbRun(
+        const result = dbRun(
             `INSERT INTO dk_audit_logs (time, type, target, details) VALUES (?, ?, ?, ?)`,
             [new Date().toLocaleString('cs-CZ'), action, target, details]
         );
@@ -2145,17 +2111,11 @@ app.use('/api', (req, res) => {
 // SPUŠTĚNÍ SERVERU
 // ====================================================================
 
-databaseReady.then(ready => {
-    if (!ready || (!PLAYER_BOT_API_URL && !PLAYER_BOT_API_TOKEN)) return;
-    if (!PLAYER_BOT_API_URL || !PLAYER_BOT_API_TOKEN) {
-        playerSyncStatus.lastError = 'Nastavte současně PLAYER_BOT_API_URL a PLAYER_BOT_API_TOKEN.';
-        console.error(`[CVFL Player Sync] ${playerSyncStatus.lastError}`);
-        return;
-    }
+if (isDatabaseReady && PLAYER_BOT_API_URL && PLAYER_BOT_API_TOKEN) {
     runPlayerSync().catch(() => {});
     const syncTimer = setInterval(() => runPlayerSync().catch(() => {}), PLAYER_BOT_SYNC_INTERVAL_MS);
     syncTimer.unref();
-});
+}
 
 app.listen(PORT, () => {
     const publicUrl = process.env.APP_ORIGIN || 'https://portal.cvfl.cz';
