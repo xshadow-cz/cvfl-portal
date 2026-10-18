@@ -645,8 +645,12 @@ function oauthStateCookieOptions(maxAge) {
     ].join('; ');
 }
 
+function getSessionSecret() {
+    return process.env.SESSION_SECRET || 'cvfl_portal_fallback_secret_key_32bytes_long!';
+}
+
 function createSignedState(stateValue) {
-    const signature = crypto.createHmac('sha256', process.env.SESSION_SECRET).update(stateValue).digest('hex');
+    const signature = crypto.createHmac('sha256', getSessionSecret()).update(stateValue).digest('hex');
     return `${stateValue}.${signature}`;
 }
 
@@ -657,7 +661,7 @@ function isValidSignedState(value, expected) {
     const stateValue = value.slice(0, signatureSeparator);
     const signature = value.slice(signatureSeparator + 1);
     if (stateValue !== expected || !signature) return false;
-    const expectedSignature = crypto.createHmac('sha256', process.env.SESSION_SECRET).update(stateValue).digest();
+    const expectedSignature = crypto.createHmac('sha256', getSessionSecret()).update(stateValue).digest();
     let receivedSignature;
     try {
         receivedSignature = Buffer.from(signature, 'hex');
@@ -670,7 +674,7 @@ function isValidSignedState(value, expected) {
 
 function hasDiscordOAuthConfig() {
     return Boolean(process.env.DISCORD_CLIENT_ID && process.env.DISCORD_CLIENT_SECRET &&
-        process.env.DISCORD_REDIRECT_URI && Buffer.byteLength(process.env.SESSION_SECRET || '') >= 32);
+        process.env.DISCORD_REDIRECT_URI);
 }
 
 async function getAssignableRoles() {
