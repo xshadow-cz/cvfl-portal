@@ -122,8 +122,18 @@ export function renderMatches() {
 }
 
 export function openMatchProtocol(matchId) {
-    const match = matchesData.find(m => m.id === matchId);
-    if (!match) return;
+    const match = matchesData.find(m => String(m.id) === String(matchId));
+    if (!match) {
+        showToast('Zápas se nepodařilo najít. Obnovte stránku a zkuste to znovu.', true);
+        return;
+    }
+
+    if (!Array.isArray(match.events)) match.events = [];
+    if (!Array.isArray(match.homeRoster)) match.homeRoster = [];
+    if (!Array.isArray(match.awayRoster)) match.awayRoster = [];
+    if (!Array.isArray(match.homeStaff)) match.homeStaff = [];
+    if (!Array.isArray(match.awayStaff)) match.awayStaff = [];
+
     const protocolModal = document.getElementById('modal-match-protocol');
     if (!protocolModal || protocolModal.classList.contains('hidden') || state.matchProtocolSnapshotId !== matchId) {
         state.matchProtocolSnapshotId = matchId;
@@ -148,7 +158,7 @@ export function openMatchProtocol(matchId) {
     const isDelegate = state.currentUserRole === 'Delegate';
     const canEditEverything = isAdminOrDK || isRefereeOrMgr;
 
-    const isTeamMgr = state.currentUserRole.startsWith('Team_Manager');
+    const isTeamMgr = (state.currentUserRole || '').startsWith('Team_Manager');
     const myTeamId = isTeamMgr ? state.activeTeamManagerTeamId : null;
 
     const canEditHome = canEditEverything || (isTeamMgr && myTeamId === match.homeTeamId);
