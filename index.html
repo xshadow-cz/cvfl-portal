@@ -42,13 +42,13 @@
         <button onclick="toggleMaintenance(false)" class="underline text-xs hover:text-gray-900">Vypnout</button>
     </div>
 
-    <div id="auth-gate-overlay" class="fixed inset-0 z-[300] bg-[#0a1238] flex items-center justify-center p-6 text-center">
+<div id="auth-gate-overlay" class="fixed inset-0 z-[300] bg-[#0a1238] flex items-center justify-center p-6 text-center">
         <div class="max-w-md w-full space-y-4">
             <i class="fa-brands fa-discord text-5xl text-[#5865f2]"></i>
             <h2 id="auth-gate-title" class="text-xl font-black text-white">Přihlášení do CVFL portálu</h2>
             <p id="auth-gate-message" class="text-sm text-gray-300">Pro pokračování se přihlaste svým Discord účtem.</p>
             <p id="auth-gate-error" class="hidden text-sm text-red-400"></p>
-            <a id="discord-login-link" href="http://localhost:3000/api/auth/discord" class="inline-block px-5 py-2 bg-[#5865f2] hover:bg-[#4752c4] text-white font-black rounded-lg">
+            <a id="discord-login-link" href="https://cvfl-backend.onrender.com/api/auth/discord" class="inline-block px-5 py-2 bg-[#5865f2] hover:bg-[#4752c4] text-white font-black rounded-lg">
                 <i class="fa-brands fa-discord mr-2"></i>Přihlásit přes Discord
             </a>
             <button id="discord-logout-button" onclick="logoutDiscord()" class="hidden px-5 py-2 bg-[#1e307d] text-white font-bold rounded-lg">Odhlásit</button>
