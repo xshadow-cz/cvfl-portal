@@ -305,7 +305,7 @@ export async function refreshDiscordInvites() {
         unusedDiscordInvites = await apiGetDiscordInvites();
         renderDiscordInvites();
     } catch (error) {
-        if (list) list.innerHTML = `<p class="p-3 text-xs text-red-400">Pozvánky se nepodařilo načíst: ${escapeHtml(error.message)}</p>`;
+        if (list) list.innerHTML = `<p class="text-xs text-red-400">Pozvánky se nepodařilo načíst: ${escapeHtml(error.message)}</p>`;
         showToast(`Pozvánky se nepodařilo načíst: ${error.message}`, true);
     }
 }
