@@ -124,11 +124,6 @@ export function renderMatches() {
 export function openMatchProtocol(matchId) {
     const match = matchesData.find(m => m.id === matchId);
     if (!match) return;
-    const scorerSide = goalType === 'Own' ? (side === 'home' ? 'away' : 'home') : side;
-    if (!getPlayersOnFieldAtTime(match, scorerSide, timeStr).has(scorerId)) {
-        showToast('Střelcem může být pouze hráč, který byl v daném čase na hřišti.', true);
-        return;
-    }
     const protocolModal = document.getElementById('modal-match-protocol');
     if (!protocolModal || protocolModal.classList.contains('hidden') || state.matchProtocolSnapshotId !== matchId) {
         state.matchProtocolSnapshotId = matchId;
@@ -1450,6 +1445,12 @@ export function submitGoal(matchId, side) {
 
     const match = matchesData.find(m => m.id === matchId);
     if (!match) return;
+
+    const scorerSide = goalType === 'Own' ? (side === 'home' ? 'away' : 'home') : side;
+    if (!getPlayersOnFieldAtTime(match, scorerSide, timeStr).has(scorerId)) {
+        showToast('Střelcem může být pouze hráč, který byl v daném čase na hřišti.', true);
+        return;
+    }
 
     if (side === 'home') {
         match.homeScore += 1;
