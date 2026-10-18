@@ -23,12 +23,10 @@ import {
 const configuredApiOrigin = typeof window.CVFL_API_ORIGIN === 'string'
     ? window.CVFL_API_ORIGIN.trim().replace(/\/+$/, '')
     : '';
-const isLocalHost = ['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname);
-const defaultApiOrigin = window.location.protocol === 'file:'
-    ? 'http://localhost:3000'
-    : isLocalHost && window.location.port !== '3000'
-        ? `${window.location.protocol}//${window.location.hostname}:3000`
-        : window.location.origin;
+
+// Výchozí adresa směřuje vždy na produkční doménu
+const defaultApiOrigin = 'https://portal.cvfl.cz';
+
 let API_ORIGIN = configuredApiOrigin || defaultApiOrigin;
 let isBackendConnected = false;
 
@@ -37,11 +35,7 @@ export function getApiOrigin() {
 }
 
 function localFallbackApiOrigin() {
-    if (configuredApiOrigin || window.location.protocol === 'file:') return null;
-    const { hostname, port, protocol } = window.location;
-    if (!['localhost', '127.0.0.1', '[::1]'].includes(hostname) || port === '3000') return null;
-    const fallbackOrigin = `${protocol}//${hostname}:3000`;
-    return fallbackOrigin === API_ORIGIN ? null : fallbackOrigin;
+    return null;
 }
 
 async function fetchApi(path, options = {}) {

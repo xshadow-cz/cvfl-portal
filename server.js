@@ -318,12 +318,14 @@ function validateBotPlayers(payload) {
 async function synchronizePlayersFromBot() {
     playerSyncStatus.lastAttemptAt = new Date().toISOString();
     if (!playerSyncStatus.enabled) throw new Error('Hráčská synchronizace není nakonfigurována.');
+    
     const apiUrl = new URL(PLAYER_BOT_API_URL);
     if (apiUrl.username || apiUrl.password || apiUrl.search || apiUrl.hash) {
         throw new Error('PLAYER_BOT_API_URL nesmí obsahovat přihlašovací údaje, query parametry ani fragment.');
     }
-    if (apiUrl.protocol !== 'https:' &&
-        !(['localhost', '127.0.0.1'].includes(apiUrl.hostname) && apiUrl.protocol === 'http:')) {
+    
+    // Vyžadovat výhradně HTTPS (localhost / HTTP je odebrán)
+    if (apiUrl.protocol !== 'https:') {
         throw new Error('PLAYER_BOT_API_URL musí používat HTTPS.');
     }
     const response = await fetch(apiUrl, {
@@ -1045,7 +1047,11 @@ app.post('/api/admin/discord-invites', requireRoles('Admin'), async (req, res) =
             'INSERT INTO discord_invites (token_hash, roles_json, expires_at, created_by) VALUES (?, ?, ?, ?)',
             [tokenHash, JSON.stringify(roles), expiresAt, req.auth.discordId]
         );
-        const inviteUrl = new URL(`/api/auth/discord?invite=${token}`, process.env.APP_ORIGIN || `http://localhost:${PORT}`).toString();
+        
+        // Použití domény portal.cvfl.cz místo localhostu
+        const baseUrl = process.env.APP_ORIGIN || 'https://portal.cvfl.cz';
+        const inviteUrl = new URL(`/api/auth/discord?invite=${token}`, baseUrl).toString();
+
         res.status(201).json({ success: true, inviteUrl, expiresAt });
     } catch (err) {
         res.status(500).json({ success: false, error: 'Pozvánku se nepodařilo vytvořit.' });
@@ -2152,9 +2158,10 @@ databaseReady.then(ready => {
 });
 
 app.listen(PORT, () => {
+    const publicUrl = process.env.APP_ORIGIN || 'https://portal.cvfl.cz';
     console.log(`====================================================`);
     console.log(`🚀 CVFL Web Backend úspěšně běží na portu: ${PORT}`);
-    console.log(`🌐 Lokální adresa: http://localhost:${PORT}`);
+    console.log(`🌐 Produkční adresa: ${publicUrl}`);
     console.log(`📂 Databáze: ${DB_PATH}`);
     console.log(`====================================================`);
 });
