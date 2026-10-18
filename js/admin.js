@@ -305,7 +305,7 @@ export async function refreshDiscordInvites() {
         unusedDiscordInvites = await apiGetDiscordInvites();
         renderDiscordInvites();
     } catch (error) {
-        if (list) list.innerHTML = `<p class="text-xs text-red-400">Pozvánky se nepodařilo načíst: ${escapeHtml(error.message)}</p>`;
+        if (list) list.innerHTML = `<p class="p-3 text-xs text-red-400">Pozvánky se nepodařilo načíst: ${escapeHtml(error.message)}</p>`;
         showToast(`Pozvánky se nepodařilo načíst: ${error.message}`, true);
     }
 }
@@ -332,9 +332,25 @@ function renderDiscordInvites() {
                     <div class="font-bold text-white">${invite.roles.map(escapeHtml).join(', ')}</div>
                     <div class="${invite.expired ? 'text-amber-300' : 'text-gray-400'}">${invite.expired ? 'Platnost vypršela' : 'Platí do'}: ${expiryText}</div>
                 </div>
-                <button type="button" onclick="revokeDiscordInvite('${invite.id}')" class="shrink-0 rounded bg-[#f33332] px-3 py-1.5 font-bold text-white">Zrušit pozvánku</button>
+                <div class="flex gap-2 shrink-0">
+                    <button type="button" onclick="copySpecificDiscordInviteLink('${escapeHtml(invite.inviteUrl || '')}')" class="rounded bg-[#5865f2] px-3 py-1.5 font-bold text-white">Kopírovat</button>
+                    <button type="button" onclick="revokeDiscordInvite('${invite.id}')" class="rounded bg-[#f33332] px-3 py-1.5 font-bold text-white">Zrušit pozvánku</button>
+                </div>
             </div>`;
     }).join('');
+}
+
+export async function copySpecificDiscordInviteLink(url) {
+    if (!url) {
+        showToast('Odkaz pozvánky není k dispozici.', true);
+        return;
+    }
+    try {
+        await navigator.clipboard.writeText(url);
+        showToast('Odkaz na pozvánku byl zkopírován.');
+    } catch (error) {
+        showToast('Odkaz se nepodařilo zkopírovat.', true);
+    }
 }
 
 export async function revokeDiscordInvite(inviteId) {
