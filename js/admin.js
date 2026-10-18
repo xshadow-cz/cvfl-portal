@@ -314,12 +314,18 @@ function renderDiscordInvites() {
     const list = document.getElementById('admin-discord-invite-list');
     if (!list) return;
     if (!unusedDiscordInvites.length) {
-        list.innerHTML = '<p class="text-xs text-gray-400">Žádné nepoužité pozvánky.</p>';
+        list.innerHTML = '<p class="p-3 text-xs text-gray-400">Žádné nepoužité pozvánky.</p>';
         return;
     }
     list.innerHTML = unusedDiscordInvites.map(invite => {
-        const expiry = new Date(`${invite.expiresAt.replace(' ', 'T')}Z`);
-        const expiryText = expiry.toLocaleString('cs-CZ');
+        let expiryText = 'Neznámo';
+        if (invite.expiresAt) {
+            const cleanDateStr = invite.expiresAt.includes('T') ? invite.expiresAt : invite.expiresAt.replace(' ', 'T');
+            const expiry = new Date(cleanDateStr.endsWith('Z') ? cleanDateStr : cleanDateStr + 'Z');
+            if (!isNaN(expiry.getTime())) {
+                expiryText = expiry.toLocaleString('cs-CZ');
+            }
+        }
         return `
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded border border-[#1e307d] bg-[#0e1a4f] p-3 text-xs">
                 <div class="min-w-0">
