@@ -806,7 +806,23 @@ export function unlockMatchRecord(matchId) {
     if (match) {
         match.isLocked = false;
         state.unsavedChangesGuard = true;
-        showToast("Zápis byl označen jako odemčený (uložte zápas).");
+        
+        // Zpracování logiky odemknutí zápisu: pokud byl zápis dosud hotový/dokončený, vrátíme stopky zpět (+1 zápas)
+        if (match.status === 'Completed') {
+            for (const [teamId, roster] of [[match.homeTeamId, match.homeRoster], [match.awayTeamId, match.awayRoster]]) {
+                const activePlayerIds = new Set(roster.map(item => item.playerId));
+                suspensionsData.forEach(suspension => {
+                    if (suspension.teamId !== teamId || suspension.type !== 'Match_Count') return;
+                    if (activePlayerIds.has(suspension.playerId)) {
+                        suspension.remainingMatches = (suspension.remainingMatches || 0) + 1;
+                        suspension.matchesLeft = suspension.remainingMatches;
+                        suspension.isActive = true;
+                    }
+                });
+            }
+        }
+
+        showToast("Zápis byl označen jako odemčený a stopky byly vráceny (uložte zápas).");
         openMatchProtocol(matchId);
     }
 }
@@ -947,9 +963,7 @@ export function updatePeriodChecks(matchId) {
 
     const startsMatch = h1s?.checked && !match.periodChecks.h1Started;
     if (startsMatch && [...match.homeRoster, ...match.awayRoster].some(item => isPlayerSuspended(item.playerId))) {
-        h1s.checked = false;
-        showToast("Hráč s aktivní stopkou nemůže nastoupit do utkání.", true);
-        return;
+        showToast("Varování: Na soupisce se nachází hráč s aktivní stopkou.", true);
     }
     if ((penaltiesStarted?.checked || penaltiesEnded?.checked)) {
         const aggregate = getPromotionPlayoffAggregate(match, matchesData);
@@ -1070,7 +1084,7 @@ export function openAddPlayerToRosterModal(matchId, side) {
     const teamPlayers = playersData.filter(p => !p.isArchived && p.teamId === teamId);
 
     const activeIds = roster.map(r => r.playerId);
-    const available = teamPlayers.filter(p => !activeIds.includes(p.id) && !isPlayerSuspended(p.id));
+    const available = teamPlayers.filter(p => !activeIds.includes(p.id));
 
     const titleEl = document.getElementById('roster-picker-title');
     const listEl = document.getElementById('roster-picker-list');
@@ -1078,13 +1092,14 @@ export function openAddPlayerToRosterModal(matchId, side) {
     titleEl.textContent = `Přidat Hráče — ${team ? team.name : ''}`;
 
     if (available.length === 0) {
-        listEl.innerHTML = `<div class="p-3 text-center text-gray-400">Všichni dostupní hráči jsou již v sestavě nebo mají aktivní stopku.</div>`;
+        listEl.innerHTML = `<div class="p-3 text-center text-gray-400">Všichni dostupní hráči jsou již v sestavě.</div>`;
     } else {
         listEl.innerHTML = available.map(p => `
             <div class="p-2.5 bg-[#13236b] hover:bg-[#1e307d] rounded-xl border border-[#1e307d] flex justify-between items-center transition">
                 <div>
                     <button type="button" onclick="openPlayerCard(${p.id})" class="font-bold text-white hover:underline">${escapeTeamName(p.robloxNick)}</button>
                     <span class="text-[10px] text-gray-400 block">${escapeTeamName(p.discordNick)}</span>
+                    ${isPlayerSuspended(p.id) ? '<span class="text-[9px] text-amber-400 font-bold block">Varování: Hráč má aktivní stopku</span>' : ''}
                 </div>
                 <button type="button" onclick="addPlayerToRoster(${p.id})" class="px-2 py-0.5 bg-[#aefb12]/20 text-[#aefb12] rounded font-bold text-[10px]">+ Přidat</button>
             </div>
@@ -1109,8 +1124,7 @@ export function addPlayerToRoster(playerId) {
     const roster = state.activeRosterSide === 'home' ? match.homeRoster : match.awayRoster;
 
     if (isPlayerSuspended(playerId)) {
-        showToast("Hráč má aktivní stopku a nemůže být přidán do sestavy.", true);
-        return;
+        showToast("Varování: Přidáváte hráče, který má aktivní stopku.", true);
     }
 
     const isFirst = roster.length === 0;
@@ -1189,13 +1203,11 @@ export function submitStaffMember() {
 
     if (staffList.length >= 5) {
         showToast("Realizační tým může mít maximálně 5 členů!", true);
-        return;
     }
 
     const mainCoachCount = staffList.filter(s => s.role === 'Hlavní trenér').length;
     if (role === 'Hlavní trenér' && mainCoachCount >= 1) {
-        showToast("V realizačním týmu může být maximálně 1 Hlavní trenér!", true);
-        return;
+        showToast("Varování: V realizačním týmu je již registrován Hlavní trenér.", true);
     }
 
     staffList.push({
@@ -1759,8 +1771,7 @@ export async function saveMatchProtocol(matchId) {
     const awayCoach = match.awayStaff.filter(s => s.role === 'Hlavní trenér').length;
 
     if (homeCoach === 0 || awayCoach === 0) {
-        showToast("Obě mužstva musí mít v realizačním týmu právě jednoho Hlavního trenéra!", true);
-        return;
+        showToast("Varování: Některý z týmů nemá v realizačním týmu Hlavního trenéra.", true);
     }
 
     const homeGKs = match.homeRoster.filter(r => r.isGK).length;
@@ -1797,8 +1808,7 @@ export async function saveMatchProtocol(matchId) {
         const suspendedPlayer = roster.find(item => isPlayerSuspended(item.playerId));
         if (suspendedPlayer) {
             const player = playersData.find(item => item.id === suspendedPlayer.playerId);
-            showToast(`Hráč ${player?.robloxNick || ''} má aktivní stopku a musí být odebrán ze sestavy.`, true);
-            return;
+            showToast(`Varování: Hráč ${player?.robloxNick || ''} má aktivní stopku, ale zápas lze uložit.`, true);
         }
     }
 
@@ -1823,21 +1833,24 @@ export async function saveMatchProtocol(matchId) {
     if (!saved) {
         match.status = wasCompleted ? 'Completed' : 'Scheduled';
         state.unsavedChangesGuard = true;
-        showToast("Zápis se nepodařilo uložit do databáze. Stopky nebyly započítány.", true);
+        showToast("Zápis se nepodařilo uložit do databáze.", true);
         return;
     }
+    
+    // Započtení stopky (-1 zápas) se provede pouze po uzamčení / prvním dokončení zápisu
     if (!wasCompleted) {
         for (const [teamId, roster] of [[match.homeTeamId, match.homeRoster], [match.awayTeamId, match.awayRoster]]) {
             const activePlayerIds = new Set(roster.map(item => item.playerId));
             suspensionsData.forEach(suspension => {
                 if (suspension.teamId !== teamId || suspension.type !== 'Match_Count' ||
-                    activePlayerIds.has(suspension.playerId) || !suspension.isActive) return;
-                suspension.remainingMatches = Math.max(0, suspension.remainingMatches - 1);
+                    !activePlayerIds.has(suspension.playerId) || !suspension.isActive) return;
+                suspension.remainingMatches = Math.max(0, (suspension.remainingMatches ?? suspension.matchesLeft ?? 0) - 1);
                 suspension.matchesLeft = suspension.remainingMatches;
                 if (suspension.remainingMatches === 0) suspension.isActive = false;
             });
         }
     }
+
     showToast("Zápas byl úspěšně zkontrolován a uložen.");
     state.matchProtocolSnapshot = null;
     state.matchProtocolSnapshotId = null;
