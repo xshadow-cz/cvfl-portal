@@ -2,12 +2,6 @@
  * ====================================================================
  * CVFL Portál - Backend Server (Node.js + Express + PostgreSQL / SQLite)
  * ====================================================================
- * 
- * Tento server zajišťuje:
- * 1. REST API pro ukládání a načítání dat ligy, hráčů, rozhodčích, zápasů a DK
- * 2. Automatickou inicializaci PostgreSQL (Supabase) nebo SQLite databáze
- * 3. CORS podporu pro snadné propojení s webovým frontendem
- * 4. Možnost spuštění celého portálu přímo přes tento server
  */
 
 const express = require('express');
@@ -20,7 +14,6 @@ require('dotenv').config();
 
 const app = express();
 
-// Povolit důvěryhodnou proxy na Renderu (nutné pro detekci HTTPS a doručování Secure cookies)
 app.set('trust proxy', 1);
 
 const PORT = process.env.PORT || 3000;
@@ -46,7 +39,6 @@ const playerSyncStatus = {
 };
 let playerSyncInProgress = false;
 
-// Middleware CORS
 const allowedOrigins = [
     'https://portal.cvfl.cz',
     process.env.APP_ORIGIN
@@ -66,7 +58,6 @@ app.use(cors({
 app.use(express.json({ limit: '15mb' }));
 app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 
-// Servírování statických souborů
 const databaseRelativePath = path.relative(__dirname, DB_PATH).split(path.sep).join('/');
 app.use((req, res, next) => {
     const requestedPath = req.path.replace(/^\/+/, '');
@@ -78,10 +69,6 @@ app.use((req, res, next) => {
     next();
 });
 app.use(express.static(__dirname, { dotfiles: 'deny' }));
-
-// ====================================================================
-// DATABÁZOVÁ VRSTVA (HYBRIDNÍ POSTGRESQL / SQLITE WRAPPER)
-// ====================================================================
 
 let isPostgres = false;
 let dbClient = null;
@@ -108,7 +95,6 @@ if (process.env.DATABASE_URL) {
     }
 }
 
-// Asynchronní wrapper pro SQL dotazy (kompatibilní s PG i SQLite)
 async function dbAll(sql, params = []) {
     if (isPostgres) {
         let paramIndex = 1;
@@ -326,7 +312,7 @@ async function initPostgresDatabase() {
             );
         `);
         
-        await dbRun("INSERT INTO site_settings (key, value) VALUES ('system_announcement', 'Vítejte v oficiálním CVFL Portálu!') ON CONFLICT DO NOTHING");
+        await dbClient.query("INSERT INTO site_settings (key, value) VALUES ('system_announcement', 'Vítejte v oficiálním CVFL Portálu!') ON CONFLICT DO NOTHING");
         console.log('✅ PostgreSQL databáze na Supabase byla úspěšně inicializována.');
         isDatabaseReady = true;
     } catch (err) {
@@ -883,10 +869,6 @@ async function requireMatchEditor(req, res, next) {
     }
 }
 
-// ====================================================================
-// REST API ENDPOINTY
-// ====================================================================
-
 app.get('/api/auth/discord', async (req, res) => {
     if (!hasDiscordOAuthConfig()) {
         return res.status(503).json({ success: false, error: 'Nastavte Discord OAuth proměnné v .env.' });
@@ -1098,6 +1080,7 @@ app.get('/api/health', (req, res) => {
     res.json({
         status: 'ok',
         dbType: isPostgres ? 'PostgreSQL (Supabase)' : 'SQLite',
+        isReady: isDatabaseReady,
         timestamp: new Date().toISOString()
     });
 });
@@ -2266,10 +2249,6 @@ app.use('/api', (req, res) => {
         error: 'API endpoint nebyl nalezen. Ověřte verzi backendu a případně jej restartujte.'
     });
 });
-
-// ====================================================================
-// SPUŠTĚNÍ SERVERU
-// ====================================================================
 
 if (PLAYER_BOT_API_URL && PLAYER_BOT_API_TOKEN) {
     runPlayerSync().catch(() => {});
