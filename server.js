@@ -862,17 +862,19 @@ app.get('/api/auth/discord/callback', async (req, res) => {
         res.setHeader('Set-Cookie', [
             `cvfl_oauth_state=; ${oauthStateCookieOptions(0)}`,
             `cvfl_session=${sessionToken}; ${authCookieOptions(7 * 24 * 60 * 60)}`
-        ]);
-        res.redirect('/');
-    } catch (err) {
-        console.error('Chyba během Discord OAuth přihlášení:', err);
-        const supportedErrors = new Set([
-            'discord_already_registered', 'invite_required', 'invite_expired',
-            'invite_roles_invalid', 'access_revoked'
-        ]);
-        const code = supportedErrors.has(err.message) ? err.message : 'discord_login';
-        res.redirect(`/?authError=${code}`);
-    }
+]);
+    const redirectOrigin = process.env.APP_ORIGIN || 'https://portal.cvfl.cz';
+    res.redirect(redirectOrigin);
+} catch (err) {
+    console.error('Chyba během Discord OAuth přihlášení:', err);
+    const supportedErrors = new Set([
+        'discord_already_registered', 'invite_required', 'invite_expired',
+        'invite_roles_invalid', 'access_revoked'
+    ]);
+    const code = supportedErrors.has(err.message) ? err.message : 'discord_login';
+    const redirectOrigin = process.env.APP_ORIGIN || 'https://portal.cvfl.cz';
+    res.redirect(`${redirectOrigin}/?authError=${code}`);
+}
 });
 
 app.get('/api/auth/me', requireAuthenticated, (req, res) => {
