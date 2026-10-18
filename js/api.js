@@ -25,8 +25,7 @@ const configuredApiOrigin = typeof window.CVFL_API_ORIGIN === 'string'
     : '';
 
 // Výchozí adresa směřuje vždy na produkční doménu
-const defaultApiOrigin = 'https://cvfl-backend.onrender.com';
-
+const defaultApiOrigin = 'https://api.portal.cvfl.cz';
 let API_ORIGIN = configuredApiOrigin || defaultApiOrigin;
 let isBackendConnected = false;
 
