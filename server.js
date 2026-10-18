@@ -25,6 +25,10 @@ const { isDeepStrictEqual } = require('util');
 require('dotenv').config();
 
 const app = express();
+
+// Povolit důvěryhodnou proxy na Renderu (nutné pro detekci HTTPS a doručování Secure cookies)
+app.set('trust proxy', 1);
+
 const PORT = process.env.PORT || 3000;
 const DB_PATH = process.env.DATABASE_FILE ? path.resolve(__dirname, process.env.DATABASE_FILE) : path.join(__dirname, 'cvfl.db');
 const SCHEMA_PATH = path.join(__dirname, 'schema.sql');
@@ -457,23 +461,24 @@ function parseCookies(req) {
     }).filter(([key]) => key));
 }
 
+// Úprava pro spolehlivé cross-site cookies na odlišných doménách
 function authCookieOptions(maxAge) {
     return [
-        'Path=/api',
+        'Path=/',
         'HttpOnly',
-        'SameSite=Lax',
-        `Max-Age=${maxAge}`,
-        ...(process.env.NODE_ENV === 'production' ? ['Secure'] : [])
+        'SameSite=None',
+        'Secure',
+        `Max-Age=${maxAge}`
     ].join('; ');
 }
 
 function oauthStateCookieOptions(maxAge) {
     return [
-        'Path=/api/auth/discord/callback',
+        'Path=/',
         'HttpOnly',
-        'SameSite=Lax',
-        `Max-Age=${maxAge}`,
-        ...(process.env.NODE_ENV === 'production' ? ['Secure'] : [])
+        'SameSite=None',
+        'Secure',
+        `Max-Age=${maxAge}`
     ].join('; ');
 }
 
