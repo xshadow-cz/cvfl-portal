@@ -333,11 +333,18 @@ function renderDiscordInvites() {
                     <div class="${invite.expired ? 'text-amber-300' : 'text-gray-400'}">${invite.expired ? 'Platnost vypršela' : 'Platí do'}: ${expiryText}</div>
                 </div>
                 <div class="flex gap-2 shrink-0">
-                    <button type="button" onclick="copySpecificDiscordInviteLink('${escapeHtml(String(invite.id))}')" class="rounded bg-[#5865f2] px-3 py-1.5 font-bold text-white">Kopírovat</button>
+                    <button type="button" data-copy-invite-id="${escapeHtml(String(invite.id))}" class="rounded bg-[#5865f2] px-3 py-1.5 font-bold text-white">Kopírovat</button>
                     <button type="button" onclick="revokeDiscordInvite('${invite.id}')" class="rounded bg-[#f33332] px-3 py-1.5 font-bold text-white">Zrušit pozvánku</button>
                 </div>
             </div>`;
     }).join('');
+
+    list.querySelectorAll('[data-copy-invite-id]').forEach(button => {
+        button.addEventListener('click', () => {
+            const inviteId = button.getAttribute('data-copy-invite-id');
+            copySpecificDiscordInviteLink(inviteId);
+        });
+    });
 }
 
 export async function copySpecificDiscordInviteLink(inviteId) {
