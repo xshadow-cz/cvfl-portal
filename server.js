@@ -930,9 +930,11 @@ app.get('/api/auth/discord/callback', async (req, res) => {
         if (!profileResponse.ok || !/^\d{17,20}$/.test(profile.id || '')) {
             throw new Error('Discord did not return a valid user profile.');
         }
+
         const existingUser = profile.id === OWNER_DISCORD_ID
             ? { discord_id: profile.id, username: profile.global_name || profile.username }
             : await dbGet('SELECT discord_id, username FROM discord_users WHERE discord_id = ?', [profile.id]);
+            
         const refereeRegistration = await dbGet(
             'SELECT is_delegate FROM referees WHERE discord_id = ?',
             [profile.id]
@@ -942,8 +944,9 @@ app.get('/api/auth/discord/callback', async (req, res) => {
         if (!inviteToken && (!existingUser || isUnclaimedPlaceholder) && !refereeRegistration) {
             throw new Error('invite_required');
         }
-        if (!inviteToken && profile.id !== OWNER_DISCORD_ID &&
-            (await availableRolesFor(profile.id)).length === 0 && !refereeRegistration) {
+        
+        const userRoles = await availableRolesFor(profile.id);
+        if (!inviteToken && profile.id !== OWNER_DISCORD_ID && userRoles.length === 0 && !refereeRegistration) {
             throw new Error('access_revoked');
         }
 
