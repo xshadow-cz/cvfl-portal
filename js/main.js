@@ -146,9 +146,7 @@ import {
     renderTeams,
     selectTeam,
     renderSelectedTeamView,
-    openPlayerCard,
-    openTransferBanList,
-    removePlayerTransferBan
+    openPlayerCard
 } from './teams.js';
 
 import {
@@ -327,8 +325,6 @@ Object.assign(window, {
     selectTeam,
     renderSelectedTeamView,
     openPlayerCard,
-    openTransferBanList,
-    removePlayerTransferBan,
 
     // Admin
     updateCreateMatchTeams,

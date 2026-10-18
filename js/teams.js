@@ -1,13 +1,10 @@
 /**
- * CVFL Portál - Týmy, Soupiska Hráčů, Hráčské Karty a Transfer Bans
+ * CVFL Portál - Týmy, Soupiska Hráčů a Hráčské Karty
  */
 
 import { state, teamsData, playersData, trainersData } from './state.js';
-import { openModal, closeSpecificModal, showToast } from './ui.js';
-import { updateAdminStats } from './admin.js';
-import { renderDashboard } from './dashboard.js';
+import { openModal, closeSpecificModal } from './ui.js';
 import { getTeamLogoMarkup, escapeTeamName } from './team-logo.js';
-import { apiUpdatePlayer } from './api.js';
 
 export function renderTeams() {
     const selector = document.getElementById('teams-selector');
@@ -141,44 +138,4 @@ export function openPlayerCard(playerId) {
     `;
 
     openModal('modal-player-card');
-}
-
-export function openTransferBanList() {
-    const body = document.getElementById('transfer-ban-table-body');
-    const transferBannedPlayers = playersData.filter(player => !player.isArchived && player.isTransferBanned);
-    const canManageTransferBans = state.currentUserRole === 'Admin';
-
-    if (body) {
-        body.innerHTML = transferBannedPlayers.length ? transferBannedPlayers.map(player => `
-            <tr class="hover:bg-[#13236b]/60">
-                <td class="p-2 font-mono text-red-400 font-bold">${escapeTeamName(player.robloxNick)}</td>
-                <td class="p-2 text-gray-300">${escapeTeamName(player.discordNick)}</td>
-                <td class="p-2 text-right">
-                    <span class="mr-2 rounded border border-red-500/40 bg-red-500/15 px-2 py-1 text-[10px] font-black uppercase text-red-300">Transfer Ban</span>
-                    ${canManageTransferBans && !state.playerSyncEnabled ? `<button onclick="removePlayerTransferBan(${player.id})" class="px-2 py-1 bg-[#f33332] text-white rounded font-black">Odebrat ban</button>` : ''}
-                    ${state.playerSyncEnabled && player.transferBanUntil ? `<span class="text-gray-400">do ${new Date(player.transferBanUntil).toLocaleDateString('cs-CZ')}</span>` : ''}
-                </td>
-            </tr>
-        `).join('') : '<tr><td colspan="3" class="p-4 text-center text-gray-400">Žádní hráči s Transfer Banem.</td></tr>';
-    }
-    openModal('modal-transfer-ban');
-}
-
-export async function removePlayerTransferBan(playerId) {
-    const player = playersData.find(p => p.id === playerId);
-    if (!player?.isTransferBanned) return;
-    if (state.playerSyncEnabled) {
-        showToast('Transfer Bany spravuje připojený Discord bot.', true);
-        return;
-    }
-    try {
-        await apiUpdatePlayer({ id: player.id, isTransferBanned: false });
-        player.isTransferBanned = false;
-        openTransferBanList();
-        updateAdminStats();
-        renderDashboard();
-        showToast(`Transfer Ban hráče ${player.robloxNick} byl odebrán.`);
-    } catch (error) {
-        showToast(`Transfer Ban hráče se nepodařilo odebrat: ${error.message}`, true);
-    }
 }

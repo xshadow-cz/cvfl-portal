@@ -124,11 +124,20 @@ export function renderCompetitions() {
                 </thead>
                 <tbody class="divide-y divide-[#1e307d]">
                     ${tableRows.map((t, idx) => {
-                        const badgeBgClass = 'bg-[#13236b] text-gray-300';
+                        let badgeStyle = '';
+                        if (t && state.activeCompTab === 'liga1' && idx < 4) {
+                            badgeStyle = 'background-color: #aefb12; color: #13236b;';
+                        } else if (t && state.activeCompTab === 'liga1' && idx >= 4) {
+                            badgeStyle = 'background-color: #f33332; color: #ffffff;';
+                        } else if (t && state.activeCompTab === 'liga2' && idx === 0) {
+                            badgeStyle = 'background-color: #aefb12; color: #13236b;';
+                        } else if (t && state.activeCompTab === 'liga2' && idx < 3) {
+                            badgeStyle = 'background-color: #05fda3; color: #13236b;';
+                        }
                         return `
                         <tr class="hover:bg-[#13236b]/60 ${t ? '' : 'h-11'}">
                             <td class="p-2.5 text-center font-bold">
-                                <span class="inline-flex min-w-6 h-6 items-center justify-center gap-0.5 rounded-full px-1 text-center ${badgeBgClass}">
+                                <span class="inline-flex min-w-6 h-6 items-center justify-center gap-0.5 rounded-full bg-[#13236b] px-1 text-center text-gray-300" style="${badgeStyle}">
                                     ${idx + 1}
                                 </span>
                             </td>
@@ -205,8 +214,8 @@ export function renderCompetitions() {
                         </tr></thead>
                         <tbody class="divide-y divide-[#1e307d]">
                             ${Array.from({ length: 4 }, (_, index) => `
-                                <tr class="${dangerType === 'relegation' && index === 3 ? 'bg-red-600/20' : dangerType === 'relegation' && index > 0 ? 'bg-red-500/10' : ''}">
-                                    <td class="p-2.5 text-center"><span class="inline-flex h-6 min-w-6 items-center justify-center gap-0.5 rounded-full px-1 ${highlightWinner && index === 0 ? 'bg-[#0e1a4f] text-amber-300' : 'bg-[#0e1a4f] text-gray-400'}">${index + 1}${highlightWinner && index === 0 ? ' <i class="fa-solid fa-trophy text-amber-300"></i>' : ''}</span></td>
+                                <tr>
+                                    <td class="p-2.5 text-center"><span class="inline-flex h-6 min-w-6 items-center justify-center gap-0.5 rounded-full px-1 ${dangerType === 'relegation' && index === 3 ? 'bg-red-600/30 text-red-300' : dangerType === 'relegation' && index > 0 ? 'bg-red-500/20 text-red-300' : highlightWinner && index === 0 ? 'bg-[#0e1a4f] text-amber-300' : 'bg-[#0e1a4f] text-gray-400'}">${index + 1}${highlightWinner && index === 0 ? ' <i class="fa-solid fa-trophy text-amber-300"></i>' : ''}</span></td>
                                     <td class="h-10 p-2.5 text-gray-700">—</td><td></td><td></td><td></td><td></td><td></td><td></td>
                                 </tr>`).join('')}
                         </tbody>
