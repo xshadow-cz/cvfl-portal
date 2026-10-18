@@ -388,22 +388,38 @@ async function initApp() {
     } catch (error) {
         console.error(`Oznámení se nepodařilo načíst: ${error.message}`);
     }
-    const authErrorCode = new URLSearchParams(window.location.search).get('authError');
+    const urlParams = new URLSearchParams(window.location.search);
+    const authErrorCode = urlParams.get('authError');
     if (authErrorCode) {
         authError.textContent = authErrors[authErrorCode] || authErrors.discord_login;
         authError.classList.remove('hidden');
     }
 
+    // --- OPRAVA PRO POZVÁNKY ---
+    // Zjištění, zda je v URL kód pozvánky (např. ?invite=... nebo ?state=...) a uložení do sessionStorage
+    let inviteCode = urlParams.get('invite') || urlParams.get('state');
+    if (inviteCode) {
+        sessionStorage.setItem('cvfl_invite_code', inviteCode);
+    } else {
+        inviteCode = sessionStorage.getItem('cvfl_invite_code');
+    }
+
+    // Sestavení správného přihlašovacího odkazu včetně pozvánky, pokud existuje
+    let loginUrl = `${getApiOrigin()}/api/auth/discord`;
+    if (inviteCode) {
+        loginUrl += `?invite=${encodeURIComponent(inviteCode)}`;
+    }
+    loginLink.href = loginUrl;
+    // ---------------------------
+
     let session;
     try {
         session = await loadDiscordSession();
     } catch (error) {
-        loginLink.href = `${getApiOrigin()}/api/auth/discord`;
         authError.textContent = error.message;
         authError.classList.remove('hidden');
         return;
     }
-    loginLink.href = `${getApiOrigin()}/api/auth/discord`;
     if (!session.authenticated) return;
 
     state.currentUser = session.user;
