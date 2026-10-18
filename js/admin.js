@@ -349,17 +349,26 @@ function renderDiscordInvites() {
 
 export async function copySpecificDiscordInviteLink(inviteId) {
     const invite = unusedDiscordInvites.find(i => String(i.id) === String(inviteId));
-    const url = invite ? invite.inviteUrl : '';
+    
+    if (!invite) {
+        console.warn("Pozvánka s ID nenalezena v lokálním poli:", inviteId, unusedDiscordInvites);
+    }
+
+    let url = invite ? (invite.inviteUrl || invite.url || '') : '';
+    
+    if (!url && invite && invite.code) {
+        url = `https://discord.gg/${invite.code}`;
+    }
 
     if (!url) {
-        showToast('Odkaz pozvánky není k dispozici.', true);
+        showToast('Odkaz pozvánky není k dispozici (chybí v datech ze serveru).', true);
         return;
     }
     try {
         await navigator.clipboard.writeText(url);
         showToast('Odkaz na pozvánku byl zkopírován.');
     } catch (error) {
-        showToast('Odkaz se nepodařilo zkopírovat.', true);
+        showToast('Odkaz se nepodařilo zkopírovat do schránky.', true);
     }
 }
 
