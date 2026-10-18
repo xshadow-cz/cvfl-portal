@@ -119,8 +119,11 @@ async function dbRun(sql, params = []) {
         let pgSql = sql.replace(/\?/g, () => `$${paramIndex++}`)
                        .replace(/datetime\('now'\)/gi, 'CURRENT_TIMESTAMP');
 
-        // RETURNING id se přidává pouze pro tabulky s číselným id
-        if (/^\s*INSERT/i.test(pgSql) && !/RETURNING/i.test(pgSql) && !/INSERT INTO (discord_users|site_settings|auth_sessions|discord_invites|discord_user_roles)/i.test(pgSql)) {
+        // RETURNING id přidáme pouze u tabulek se sekvenčním ID
+        const tablesWithId = ['teams', 'players', 'referees', 'trainers', 'matches', 'suspensions', 'points_deductions', 'dk_audit_logs'];
+        const isInsert = /^\s*INSERT\s+INTO\s+([a-z_]+)/i.exec(pgSql);
+
+        if (isInsert && tablesWithId.includes(isInsert[1].toLowerCase()) && !/RETURNING/i.test(pgSql)) {
             pgSql += ' RETURNING id';
         }
 
