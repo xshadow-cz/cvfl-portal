@@ -119,7 +119,6 @@ async function dbRun(sql, params = []) {
         let pgSql = sql.replace(/\?/g, () => `$${paramIndex++}`)
                        .replace(/datetime\('now'\)/gi, 'CURRENT_TIMESTAMP');
 
-        // RETURNING id přidáme pouze u tabulek se sekvenčním ID
         const tablesWithId = ['teams', 'players', 'referees', 'trainers', 'matches', 'suspensions', 'points_deductions', 'dk_audit_logs'];
         const isInsert = /^\s*INSERT\s+INTO\s+([a-z_]+)/i.exec(pgSql);
 
@@ -629,24 +628,26 @@ function parseCookies(req) {
     }).filter(([key]) => key));
 }
 
-function authCookieOptions(maxAge) {
+function authCookieOptions(maxAge, req) {
+    const isSecure = req?.secure || req?.headers?.['x-forwarded-proto'] === 'https' || process.env.NODE_ENV === 'production';
     return [
         'Path=/',
         'HttpOnly',
-        'SameSite=None',
-        'Secure',
+        isSecure ? 'SameSite=None' : 'SameSite=Lax',
+        isSecure ? 'Secure' : '',
         `Max-Age=${maxAge}`
-    ].join('; ');
+    ].filter(Boolean).join('; ');
 }
 
-function oauthStateCookieOptions(maxAge) {
+function oauthStateCookieOptions(maxAge, req) {
+    const isSecure = req?.secure || req?.headers?.['x-forwarded-proto'] === 'https' || process.env.NODE_ENV === 'production';
     return [
         'Path=/',
         'HttpOnly',
-        'SameSite=None',
-        'Secure',
+        isSecure ? 'SameSite=None' : 'SameSite=Lax',
+        isSecure ? 'Secure' : '',
         `Max-Age=${maxAge}`
-    ].join('; ');
+    ].filter(Boolean).join('; ');
 }
 
 function getSessionSecret() {
@@ -825,58 +826,6 @@ async function matchesVisibleToUser(matches, auth) {
     );
 }
 
-async function requireMatchEditor(req, res, next) {
-    const privilegedRoles = ['Admin', 'DK', 'Referee_Manager'];
-    if (req.auth.roles.some(role => privilegedRoles.includes(role))) return next();
-
-    const match = await dbGet('SELECT * FROM matches WHERE id = ?', [req.params.id]);
-    if (!match) return res.status(404).json({ success: false, error: 'Zápas nebyl nalezen.' });
-    if (req.auth.roles.some(role => ['Referee', 'Delegate'].includes(role))) {
-        try {
-            const assignedReferee = await dbGet(
-                "SELECT roblox_nick, is_delegate FROM referees WHERE discord_id = ? AND status = 'Active'",
-                [req.auth.discordId]
-            );
-            if (assignedReferee) {
-                const isAssignedReferee = req.auth.roles.includes('Referee') &&
-                    [match.referee, match.fourth_ref, match.var].includes(assignedReferee.roblox_nick);
-                const isAssignedDelegate = req.auth.roles.includes('Delegate') && assignedReferee.is_delegate &&
-                    match.delegate === assignedReferee.roblox_nick;
-                if (isAssignedReferee || isAssignedDelegate) {
-                    req.assignedOfficialMatch = true;
-                    req.matchRecord = match;
-                    return next();
-                }
-            }
-        } catch (err) {
-            console.error('Chyba při ověřování nominovaného rozhodčího:', err);
-            return res.status(500).json({ success: false, error: 'Oprávnění k zápasu se nepodařilo ověřit.' });
-        }
-    }
-    const managedTeamIds = req.auth.roles
-        .filter(role => role.startsWith('Team_Manager_'))
-        .map(role => Number(role.slice('Team_Manager_'.length)));
-    if (managedTeamIds.length === 0) {
-        return res.status(403).json({ success: false, error: 'Pro úpravu zápasů nemáte přidělenou roli.' });
-    }
-    try {
-        const canManageMatch = managedTeamIds.includes(match.home_team_id) || managedTeamIds.includes(match.away_team_id);
-        const body = req.body || {};
-        const teamsUnchanged = Number(body.homeTeamId) === match.home_team_id &&
-            Number(body.awayTeamId) === match.away_team_id;
-        if (!canManageMatch || !teamsUnchanged) {
-            return res.status(403).json({ success: false, error: 'Vedoucí mužstva může upravovat pouze zápasy svého týmu.' });
-        }
-
-        req.teamManagerTeamIds = managedTeamIds;
-        req.matchRecord = match;
-        next();
-    } catch (err) {
-        console.error('Chyba při ověřování oprávnění k zápasu:', err);
-        res.status(500).json({ success: false, error: 'Oprávnění k zápasu se nepodařilo ověřit.' });
-    }
-}
-
 app.get('/api/auth/discord', async (req, res) => {
     if (!hasDiscordOAuthConfig()) {
         return res.status(503).json({ success: false, error: 'Nastavte Discord OAuth proměnné v .env.' });
@@ -894,7 +843,7 @@ app.get('/api/auth/discord', async (req, res) => {
         if (!invite) return res.redirect('/?authError=invite_expired');
     }
     const oauthState = `${crypto.randomBytes(32).toString('hex')}${inviteToken ? `~${inviteToken}` : ''}`;
-    res.setHeader('Set-Cookie', `cvfl_oauth_state=${createSignedState(oauthState)}; ${oauthStateCookieOptions(600)}`);
+    res.setHeader('Set-Cookie', `cvfl_oauth_state=${createSignedState(oauthState)}; ${oauthStateCookieOptions(600, req)}`);
     const authorizeUrl = new URL('https://discord.com/oauth2/authorize');
     authorizeUrl.search = new URLSearchParams({
         client_id: process.env.DISCORD_CLIENT_ID,
@@ -908,7 +857,7 @@ app.get('/api/auth/discord', async (req, res) => {
 
 app.get('/api/auth/discord/callback', async (req, res) => {
     const cookies = parseCookies(req);
-    res.setHeader('Set-Cookie', `cvfl_oauth_state=; ${oauthStateCookieOptions(0)}`);
+    res.setHeader('Set-Cookie', `cvfl_oauth_state=; ${oauthStateCookieOptions(0, req)}`);
     if (!hasDiscordOAuthConfig() || !isValidSignedState(cookies.cvfl_oauth_state, req.query.state)) {
         return res.redirect('/?authError=discord_state');
     }
@@ -1032,8 +981,8 @@ app.get('/api/auth/discord/callback', async (req, res) => {
             [crypto.createHash('sha256').update(sessionToken).digest('hex'), profile.id, expiresAt]
         );
         res.setHeader('Set-Cookie', [
-            `cvfl_oauth_state=; ${oauthStateCookieOptions(0)}`,
-            `cvfl_session=${sessionToken}; ${authCookieOptions(7 * 24 * 60 * 60)}`
+            `cvfl_oauth_state=; ${oauthStateCookieOptions(0, req)}`,
+            `cvfl_session=${sessionToken}; ${authCookieOptions(7 * 24 * 60 * 60, req)}`
         ]);
         const redirectOrigin = process.env.APP_ORIGIN || 'https://portal.cvfl.cz';
         res.redirect(redirectOrigin);
@@ -1068,7 +1017,7 @@ app.post('/api/auth/logout', requireAuthenticated, async (req, res) => {
         await dbRun('DELETE FROM auth_sessions WHERE token_hash = ?', [
             crypto.createHash('sha256').update(token).digest('hex')
         ]);
-        res.setHeader('Set-Cookie', `cvfl_session=; ${authCookieOptions(0)}`);
+        res.setHeader('Set-Cookie', `cvfl_session=; ${authCookieOptions(0, req)}`);
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ success: false, error: 'Odhlášení se nepodařilo.' });
