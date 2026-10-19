@@ -4,9 +4,9 @@
  * ====================================================================
  * 
  * Zajišťuje:
- * 1. Automatické načtení dat z Node.js + Express backendu (SQLite databáze)
+ * 1. Automatické načtení dat z Node.js + Express backendu (SQLite / PostgreSQL databáze)
  * 2. Veškerá aplikační data se načítají a ukládají pouze přes backend
- * 3. Odesílání změn na server (zápisy, hráči, rozhodčí, tresty)
+ * 3. Odesílání změn na server (zápisy, hráči, rozhodčí, tresty, odpočty)
  */
 
 import {
@@ -17,6 +17,7 @@ import {
     refereesData,
     matchesData,
     suspensionsData,
+    pointsDeductionsData,
     dkAuditLogs
 } from './state.js';
 
@@ -191,7 +192,7 @@ export async function loadInitialStateFromAPI() {
         const response = await fetchApi('/state', {
             method: 'GET',
             headers: { Accept: 'application/json' },
-            signal: AbortSignal.timeout(3000) // Pokud databáze není dostupná, inicializaci ukončíme.
+            signal: AbortSignal.timeout(10000) // Zvýšeno na 10s pro stabilnější připojení k databázi
         });
 
         if (!response.ok) {
@@ -219,6 +220,7 @@ export async function loadInitialStateFromAPI() {
                 refereesData.push(...data.referees);
             }
 
+            // Naplnění trenérů
             if (Array.isArray(data.trainers)) {
                 trainersData.length = 0;
                 trainersData.push(...data.trainers);
@@ -244,6 +246,12 @@ export async function loadInitialStateFromAPI() {
                 suspensionsData.push(...data.suspensions);
             }
 
+            // Naplnění odečtů bodů
+            if (Array.isArray(data.pointsDeductions) && typeof pointsDeductionsData !== 'undefined') {
+                pointsDeductionsData.length = 0;
+                pointsDeductionsData.push(...data.pointsDeductions);
+            }
+
             // Naplnění audit logů
             if (Array.isArray(data.dkAuditLogs)) {
                 dkAuditLogs.length = 0;
@@ -251,7 +259,7 @@ export async function loadInitialStateFromAPI() {
             }
 
             isBackendConnected = true;
-            console.log(`%c[CVFL API] ✅ Úspěšně připojeno k SQLite databázi na ${API_ORIGIN}/api.`, 'color: #aefb12; font-weight: bold;');
+            console.log(`%c[CVFL API] ✅ Úspěšně připojeno k databázi na ${API_ORIGIN}/api.`, 'color: #aefb12; font-weight: bold;');
             return true;
         }
     } catch (err) {
@@ -318,18 +326,16 @@ export async function apiSaveMatch(match) {
 export async function apiCreateMatch(match) {
     if (!isBackendConnected || !match) return;
     try {
-        const res = await fetchApi('/matches', {
+        const json = await requestJSON('/matches', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
             body: JSON.stringify(match)
         });
-        const json = await res.json();
         if (json && json.id) {
             match.id = json.id;
         }
     } catch (err) {
         console.warn('[CVFL API] Chyba při ukládání nového zápasu:', err.message);
+        throw err;
     }
 }
 
@@ -339,12 +345,12 @@ export async function apiCreateMatch(match) {
 export async function apiDeleteMatch(matchId) {
     if (!isBackendConnected) return;
     try {
-        await fetchApi(`/matches/${matchId}`, {
-            method: 'DELETE',
-            credentials: 'include'
+        await requestJSON(`/matches/${matchId}`, {
+            method: 'DELETE'
         });
     } catch (err) {
         console.warn('[CVFL API] Chyba při mazání zápasu:', err.message);
+        throw err;
     }
 }
 
@@ -366,22 +372,29 @@ export async function apiCreatePlayer(player) {
 export async function apiDeletePlayer(playerId) {
     if (!isBackendConnected) return;
     try {
-        await fetchApi(`/players/${playerId}`, {
-            method: 'DELETE',
-            credentials: 'include'
+        await requestJSON(`/players/${playerId}`, {
+            method: 'DELETE'
         });
     } catch (err) {
         console.warn('[CVFL API] Chyba při mazání hráče:', err.message);
+        throw err;
     }
 }
 
+/**
+ * Aktualizuje údaje a statistiky hráče v databázi
+ */
 export async function apiUpdatePlayer(player) {
     if (!player) throw new Error('Chybí údaje o hráči.');
     await requestJSON(`/players/${player.id}`, {
         method: 'PUT',
         body: JSON.stringify({
             ...(player.teamId !== undefined ? { teamId: player.teamId } : {}),
-            ...(player.isTransferBanned !== undefined ? { isTransferBanned: player.isTransferBanned } : {})
+            ...(player.isTransferBanned !== undefined ? { isTransferBanned: player.isTransferBanned } : {}),
+            ...(player.goals !== undefined ? { goals: player.goals } : {}),
+            ...(player.assists !== undefined ? { assists: player.assists } : {}),
+            ...(player.cleanSheets !== undefined ? { cleanSheets: player.cleanSheets } : {}),
+            ...(player.motm !== undefined ? { motm: player.motm } : {})
         })
     });
 }
