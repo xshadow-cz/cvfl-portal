@@ -826,6 +826,59 @@ async function matchesVisibleToUser(matches, auth) {
     );
 }
 
+// ZDE JE DEFINICE FUNKCE REQUIREMATCHEDITOR (která dříve chyběla):
+async function requireMatchEditor(req, res, next) {
+    const privilegedRoles = ['Admin', 'DK', 'Referee_Manager'];
+    if (req.auth.roles.some(role => privilegedRoles.includes(role))) return next();
+
+    const match = await dbGet('SELECT * FROM matches WHERE id = ?', [req.params.id]);
+    if (!match) return res.status(404).json({ success: false, error: 'Zápas nebyl nalezen.' });
+    if (req.auth.roles.some(role => ['Referee', 'Delegate'].includes(role))) {
+        try {
+            const assignedReferee = await dbGet(
+                "SELECT roblox_nick, is_delegate FROM referees WHERE discord_id = ? AND status = 'Active'",
+                [req.auth.discordId]
+            );
+            if (assignedReferee) {
+                const isAssignedReferee = req.auth.roles.includes('Referee') &&
+                    [match.referee, match.fourth_ref, match.var].includes(assignedReferee.roblox_nick);
+                const isAssignedDelegate = req.auth.roles.includes('Delegate') && assignedReferee.is_delegate &&
+                    match.delegate === assignedReferee.roblox_nick;
+                if (isAssignedReferee || isAssignedDelegate) {
+                    req.assignedOfficialMatch = true;
+                    req.matchRecord = match;
+                    return next();
+                }
+            }
+        } catch (err) {
+            console.error('Chyba při ověřování nominovaného rozhodčího:', err);
+            return res.status(500).json({ success: false, error: 'Oprávnění k zápasu se nepodařilo ověřit.' });
+        }
+    }
+    const managedTeamIds = req.auth.roles
+        .filter(role => role.startsWith('Team_Manager_'))
+        .map(role => Number(role.slice('Team_Manager_'.length)));
+    if (managedTeamIds.length === 0) {
+        return res.status(403).json({ success: false, error: 'Pro úpravu zápasů nemáte přidělenou roli.' });
+    }
+    try {
+        const canManageMatch = managedTeamIds.includes(match.home_team_id) || managedTeamIds.includes(match.away_team_id);
+        const body = req.body || {};
+        const teamsUnchanged = Number(body.homeTeamId) === match.home_team_id &&
+            Number(body.awayTeamId) === match.away_team_id;
+        if (!canManageMatch || !teamsUnchanged) {
+            return res.status(403).json({ success: false, error: 'Vedoucí mužstva může upravovat pouze zápasy svého týmu.' });
+        }
+
+        req.teamManagerTeamIds = managedTeamIds;
+        req.matchRecord = match;
+        next();
+    } catch (err) {
+        console.error('Chyba při ověřování oprávnění k zápasu:', err);
+        res.status(500).json({ success: false, error: 'Oprávnění k zápasu se nepodařilo ověřit.' });
+    }
+}
+
 app.get('/api/auth/discord', async (req, res) => {
     if (!hasDiscordOAuthConfig()) {
         return res.status(503).json({ success: false, error: 'Nastavte Discord OAuth proměnné v .env.' });
