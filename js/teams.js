@@ -2,9 +2,27 @@
  * CVFL Portál - Týmy, Soupiska Hráčů a Hráčské Karty
  */
 
-import { state, teamsData, playersData, trainersData } from './state.js';
+import { state, teamsData, playersData, trainersData, matchesData } from './state.js';
 import { openModal, closeSpecificModal } from './ui.js';
 import { getTeamLogoMarkup, escapeTeamName } from './team-logo.js';
+
+/**
+ * Spočítá statistiky karet hráče ze všech odehraných zápasů
+ */
+function getPlayerCardStats(playerId) {
+    let yellowCards = 0;
+    let redCards = 0;
+    const completedMatches = matchesData.filter(m => m.status === 'Completed' && Array.isArray(m.events));
+    completedMatches.forEach(m => {
+        m.events.forEach(event => {
+            if (event.targetType === 'player' && event.playerId === playerId) {
+                if (event.type === 'Yellow_Card' || event.type === 'Second_Yellow_Card') yellowCards++;
+                if (event.type === 'Red_Card' || event.type === 'Second_Yellow_Card') redCards++;
+            }
+        });
+    });
+    return { yellowCards, redCards };
+}
 
 export function renderTeams() {
     const selector = document.getElementById('teams-selector');
@@ -79,22 +97,28 @@ export function renderSelectedTeamView() {
                             <th class="p-2">Góly</th>
                             <th class="p-2">Asistence</th>
                             <th class="p-2">Čistá konta</th>
+                            <th class="p-2 text-center">🟨</th>
+                            <th class="p-2 text-center">🟥</th>
                             <th class="p-2 text-right">Akce</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-[#1e307d]">
-                        ${roster.map(p => `
+                        ${roster.map(p => {
+                            const cards = getPlayerCardStats(p.id);
+                            return `
                             <tr class="hover:bg-[#13236b]/60">
                                 <td class="p-2 font-bold text-[#05fda3] cursor-pointer hover:underline" onclick="openPlayerCard(${p.id})">${escapeTeamName(p.robloxNick)}</td>
                                 <td class="p-2 font-mono text-gray-400">${escapeTeamName(p.discordNick)}</td>
                                 <td class="p-2 font-bold text-[#aefb12]">${p.goals || 0}</td>
                                 <td class="p-2 font-bold text-[#05fda3]">${p.assists || 0}</td>
                                 <td class="p-2 font-bold text-amber-400">${p.cleanSheets || 0}</td>
+                                <td class="p-2 text-center font-bold text-yellow-300">${cards.yellowCards || 0}</td>
+                                <td class="p-2 text-center font-bold text-red-400">${cards.redCards || 0}</td>
                                 <td class="p-2 text-right">
                                     <button onclick="openPlayerCard(${p.id})" class="px-2 py-1 bg-[#13236b] hover:bg-[#1e307d] text-gray-200 rounded">Profil</button>
                                 </td>
-                            </tr>
-                        `).join('')}
+                            </tr>`;
+                        }).join('')}
                     </tbody>
                 </table>
             </div>
@@ -107,6 +131,7 @@ export function openPlayerCard(playerId) {
     if (!player) return;
 
     const team = teamsData.find(t => t.id === player.teamId);
+    const cards = getPlayerCardStats(player.id);
 
     const content = document.getElementById('player-card-content');
     content.innerHTML = `
@@ -120,6 +145,8 @@ export function openPlayerCard(playerId) {
         </div>
         <div class="p-6 space-y-4 text-xs">
             <div>Discord Username: <strong>${escapeTeamName(player.discordNick)}</strong></div>
+
+            <!-- Útočné statistiky -->
             <div class="grid grid-cols-3 gap-2 p-3 bg-[#13236b] rounded-xl border border-[#1e307d] text-center">
                 <div>
                     <span class="block text-gray-400">Góly</span>
@@ -132,6 +159,20 @@ export function openPlayerCard(playerId) {
                 <div>
                     <span class="block text-gray-400">Čistá konta</span>
                     <span class="text-lg font-black text-amber-400">${player.cleanSheets || 0}</span>
+                </div>
+            </div>
+
+            <!-- Karty (počítáno ze zápasových událostí) -->
+            <div class="grid grid-cols-2 gap-2 p-3 bg-[#13236b] rounded-xl border border-[#1e307d] text-center">
+                <div class="flex flex-col items-center gap-1">
+                    <span class="inline-flex items-center justify-center w-6 h-8 rounded bg-yellow-400 shadow font-black text-[#13236b] text-base">&nbsp;</span>
+                    <span class="block text-gray-400 text-[10px] uppercase mt-1">Žluté karty</span>
+                    <span class="text-xl font-black text-yellow-300">${cards.yellowCards}</span>
+                </div>
+                <div class="flex flex-col items-center gap-1">
+                    <span class="inline-flex items-center justify-center w-6 h-8 rounded bg-red-500 shadow font-black text-white text-base">&nbsp;</span>
+                    <span class="block text-gray-400 text-[10px] uppercase mt-1">Červené karty</span>
+                    <span class="text-xl font-black text-red-400">${cards.redCards}</span>
                 </div>
             </div>
         </div>

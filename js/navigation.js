@@ -71,11 +71,11 @@ export function renderTeamManagersDropdown() {
     `).join('');
 }
 
-export function setUserRole(role, teamId = null) {
+export function setUserRole(role, teamId = null, { silent = false, skipTabSwitch = false } = {}) {
     const badge = document.getElementById('active-role-badge');
     const selectedRole = role === 'Team_Manager' ? `Team_Manager_${teamId}` : role;
     if (!state.availableRoles.includes(selectedRole)) {
-        showToast('Tato role není vašemu Discord účtu přidělena.', true);
+        if (!silent) showToast('Tato role není vašemu Discord účtu přidělena.', true);
         return;
     }
     
@@ -124,14 +124,16 @@ export function setUserRole(role, teamId = null) {
     
     applyRBACPermissions();
     applyMaintenanceVisibility();
-    showToast(`Uživatelská role přepnuta na: ${cfg.label}`);
+    if (!silent) showToast(`Uživatelská role přepnuta na: ${cfg.label}`);
     
     const dropdown = document.getElementById('role-dropdown');
     if (dropdown) dropdown.classList.add('hidden');
 
-    if (state.currentUserRole !== 'Admin' && state.activeTab === 'admin') {
-        switchTab('dashboard');
-    } else {
-        switchTab(state.activeTab);
+    if (!skipTabSwitch) {
+        if (state.currentUserRole !== 'Admin' && state.activeTab === 'admin') {
+            switchTab('dashboard');
+        } else {
+            switchTab(state.activeTab);
+        }
     }
 }

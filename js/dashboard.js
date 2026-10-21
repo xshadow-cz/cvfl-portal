@@ -69,14 +69,17 @@ function getMatchCleanSheetPlayerIds(match) {
 
 function collectLeaderboardStats() {
     const completedMatches = matchesData.filter(match => match.status === 'Completed');
-    const competitionNames = [...new Set([
-        'CVFL 1. Liga',
-        'CVFL 2. Liga',
-        'MOL Cup',
-        'Baráž o 1. Ligu',
-        ...matchesData.map(match => match.competition).filter(Boolean)
-    ])];
-    const statsByCompetition = new Map();
+
+    // Pevné pořadí skupin soutěží (zobrazeno v dashboardu)
+    // Nadstavba se sloučí do "CVFL 1. Liga", Baráž jde jen do celkového součtu
+    const DISPLAY_GROUPS = [
+        { label: 'CVFL 1. Liga', competitions: ['CVFL 1. Liga', 'Nadstavba'] },
+        { label: 'CVFL 2. Liga', competitions: ['CVFL 2. Liga'] },
+        { label: 'MOL Cup', competitions: ['MOL Cup'] },
+    ];
+    // Baráž patří jen do celkových statistik – nepřidáváme ji do DISPLAY_GROUPS
+
+    const statsByGroup = new Map(); // label -> Map<playerId, stats>
     const overallStats = new Map();
 
     const addStat = (target, playerId, key) => {
@@ -95,48 +98,54 @@ function collectLeaderboardStats() {
         target.get(playerId)[key] += 1;
     };
 
+    // Inicializujeme skupiny
+    DISPLAY_GROUPS.forEach(g => statsByGroup.set(g.label, new Map()));
+
     completedMatches.forEach(match => {
-        if (!statsByCompetition.has(match.competition)) statsByCompetition.set(match.competition, new Map());
-        const competitionStats = statsByCompetition.get(match.competition);
+        // Najdeme skupinu, do které zápas patří
+        const group = DISPLAY_GROUPS.find(g => g.competitions.includes(match.competition));
+        const groupStats = group ? statsByGroup.get(group.label) : null;
+
         const events = Array.isArray(match.events) ? match.events : [];
 
         events.forEach(event => {
             if (event.type === 'Goal' && event.goalType !== 'Own') {
-                addStat(competitionStats, event.playerId, 'goals');
+                if (groupStats) addStat(groupStats, event.playerId, 'goals');
                 addStat(overallStats, event.playerId, 'goals');
             }
             if (event.type === 'Goal' && event.goalType === 'Regular' && event.secondaryPlayerId) {
-                addStat(competitionStats, event.secondaryPlayerId, 'assists');
+                if (groupStats) addStat(groupStats, event.secondaryPlayerId, 'assists');
                 addStat(overallStats, event.secondaryPlayerId, 'assists');
             }
             if (event.targetType === 'player' && event.playerId) {
                 if (event.type === 'Yellow_Card' || event.type === 'Second_Yellow_Card') {
-                    addStat(competitionStats, event.playerId, 'yellowCards');
+                    if (groupStats) addStat(groupStats, event.playerId, 'yellowCards');
                     addStat(overallStats, event.playerId, 'yellowCards');
                 }
                 if (event.type === 'Red_Card' || event.type === 'Second_Yellow_Card') {
-                    addStat(competitionStats, event.playerId, 'redCards');
+                    if (groupStats) addStat(groupStats, event.playerId, 'redCards');
                     addStat(overallStats, event.playerId, 'redCards');
                 }
             }
         });
 
         getMatchCleanSheetPlayerIds(match).forEach(playerId => {
-            addStat(competitionStats, playerId, 'cleanSheets');
+            if (groupStats) addStat(groupStats, playerId, 'cleanSheets');
             addStat(overallStats, playerId, 'cleanSheets');
         });
     });
 
-    return { competitionNames, statsByCompetition, overallStats };
+    return { displayGroups: DISPLAY_GROUPS, statsByGroup, overallStats };
 }
 
 function renderDashboardLeaderboards() {
     const container = document.getElementById('dashboard-stat-leaders');
     if (!container) return;
 
-    const { competitionNames, statsByCompetition, overallStats } = collectLeaderboardStats();
+    const { displayGroups, statsByGroup, overallStats } = collectLeaderboardStats();
+    // Skupiny soutěží + souhrnná statistika celé ligy
     const groups = [
-        ...competitionNames.map(name => [name, statsByCompetition.get(name)]),
+        ...displayGroups.map(g => [g.label, statsByGroup.get(g.label)]),
         ['Celá liga · všechny soutěže', overallStats]
     ];
 

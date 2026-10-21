@@ -447,16 +447,17 @@ async function initApp() {
     authGate.classList.add('hidden');
     const preferredRole = state.availableRoles.includes('Admin') ? 'Admin' : state.availableRoles[0];
     if (preferredRole.startsWith('Team_Manager_')) {
-        setUserRole('Team_Manager', Number(preferredRole.slice('Team_Manager_'.length)));
+        setUserRole('Team_Manager', Number(preferredRole.slice('Team_Manager_'.length)), { silent: true, skipTabSwitch: true });
     } else {
-        setUserRole(preferredRole);
+        setUserRole(preferredRole, null, { silent: true, skipTabSwitch: true });
     }
     renderTeamManagersDropdown();
+    applyRBACPermissions();
+    applyMaintenanceVisibility();
     switchTab('dashboard');
     renderDashboard();
     updateAdminStats();
     renderDKAuditLogs();
-    applyMaintenanceVisibility();
 }
 
 if (document.readyState === 'loading') {

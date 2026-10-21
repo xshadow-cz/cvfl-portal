@@ -17,7 +17,6 @@ import {
     refereesData,
     matchesData,
     suspensionsData,
-    pointsDeductionsData,
     dkAuditLogs
 } from './state.js';
 
@@ -192,7 +191,7 @@ export async function loadInitialStateFromAPI() {
         const response = await fetchApi('/state', {
             method: 'GET',
             headers: { Accept: 'application/json' },
-            signal: AbortSignal.timeout(10000) // Zvýšeno na 10s pro stabilnější připojení k databázi
+            signal: AbortSignal.timeout(10000)
         });
 
         if (!response.ok) {
@@ -246,10 +245,10 @@ export async function loadInitialStateFromAPI() {
                 suspensionsData.push(...data.suspensions);
             }
 
-            // Naplnění odečtů bodů
-            if (Array.isArray(data.pointsDeductions) && typeof pointsDeductionsData !== 'undefined') {
-                pointsDeductionsData.length = 0;
-                pointsDeductionsData.push(...data.pointsDeductions);
+            // Naplnění odečtů bodů do objektu state (pokud existuje)
+            if (Array.isArray(data.pointsDeductions) && Array.isArray(state.pointsDeductions)) {
+                state.pointsDeductions.length = 0;
+                state.pointsDeductions.push(...data.pointsDeductions);
             }
 
             // Naplnění audit logů
