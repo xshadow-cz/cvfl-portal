@@ -197,6 +197,12 @@ export async function apiGetPlayerSyncStatus() {
     return result.data;
 }
 
+export async function apiGetAdminAuditLogs(action = '') {
+    const query = action ? `?action=${encodeURIComponent(action)}` : '';
+    const result = await requestJSON(`/admin/audit-logs${query}`);
+    return result.data;
+}
+
 export async function apiGetRobloxPlayerAvatar(playerId) {
     const result = await requestJSON(`/players/${encodeURIComponent(playerId)}/avatar`);
     return result.avatarUrl;

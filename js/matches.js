@@ -1112,13 +1112,11 @@ export function updatePeriodChecks(matchId) {
     } else if (match.periodChecks.penaltiesStarted) {
         match.status = 'In_Progress';
     } else if (match.periodChecks.et2Ended) {
-        match.status = (isTied || aggregateNeedsPenalty) ? 'In_Progress' : 'Completed';
+        match.status = 'Completed';
     } else if (match.periodChecks.et2Started || match.periodChecks.et1Ended || match.periodChecks.et1Started) {
         match.status = 'In_Progress';
     } else if (match.periodChecks.h2Ended) {
-        const needsMore = (match.competition === 'MOL Cup' && isTied) ||
-            (isPromotionPlayoffSecondLeg(match) && aggregate?.tied);
-        match.status = needsMore ? 'In_Progress' : 'Completed';
+        match.status = 'Completed';
     } else if (match.periodChecks.h1Started) {
         match.status = 'In_Progress';
     } else if (match.status !== 'Postponed') {
@@ -1921,23 +1919,16 @@ export async function saveMatchProtocol(matchId, { keepOpen = false } = {}) {
     if (!match) return false;
 
     // Ještě jednou si ověříme logiku statusu, aby byla dokonale propsaná
-    const isMolCup = match.competition === 'MOL Cup';
-    const isTied = match.homeScore === match.awayScore;
-    const aggregate = getPromotionPlayoffAggregate(match, matchesData);
-    
     if (match.periodChecks.penaltiesEnded) {
         match.status = 'Completed';
     } else if (match.periodChecks.penaltiesStarted) {
         match.status = 'In_Progress';
     } else if (match.periodChecks.et2Ended) {
-        const aggregateNeedsPenalty = isPromotionPlayoffSecondLeg(match) &&
-            aggregate?.tied && aggregate.firstLegCompleted;
-        match.status = (isTied || aggregateNeedsPenalty) ? 'In_Progress' : 'Completed';
+        match.status = 'Completed';
     } else if (match.periodChecks.et2Started || match.periodChecks.et1Ended || match.periodChecks.et1Started) {
         match.status = 'In_Progress';
     } else if (match.periodChecks.h2Ended) {
-        const needsMore = (isMolCup && isTied) || (isPromotionPlayoffSecondLeg(match) && aggregate?.tied);
-        match.status = needsMore ? 'In_Progress' : 'Completed';
+        match.status = 'Completed';
     } else if (match.periodChecks.h1Started) {
         match.status = 'In_Progress';
     } else if (match.status !== 'Postponed') {

@@ -18,12 +18,15 @@ import {
     apiCreateMatch, apiDeleteMatch, apiCreatePlayer, apiCreateTrainer, apiCreateTeam,
     apiUpdateTeam, apiDeleteTeam, apiGetDiscordUsers, apiSetDiscordUserRoles,
     apiCreateDiscordInvite, apiRevokeDiscordUserAccess, apiGetDiscordInvites, apiRevokeDiscordInvite,
-    apiGetDiscordUser, apiGetPlayerSyncStatus
+    apiGetDiscordUser, apiGetPlayerSyncStatus, apiGetAdminAuditLogs
 } from './api.js';
 
 let discordUserAccounts = [];
 let unusedDiscordInvites = [];
 let loadedDiscordUserId = null;
+let adminAuditLogs = [];
+let auditLogRequest = null;
+let auditLogsLoaded = false;
 
 export function updateCreateMatchTeams() {
     const compEl = document.getElementById('create-match-comp');
@@ -213,6 +216,54 @@ export function renderAdmin() {
     renderDiscordRoleManagement();
     onAdminMatchFilterChange(true);
     renderAdminMatchesDeleteList();
+    void loadAdminAuditLogs();
+}
+
+export async function loadAdminAuditLogs(force = false) {
+    if (auditLogRequest) return auditLogRequest;
+    if (auditLogsLoaded && !force) {
+        renderAdminAuditLogs();
+        return;
+    }
+    auditLogRequest = apiGetAdminAuditLogs()
+        .then(logs => {
+            adminAuditLogs = logs;
+            auditLogsLoaded = true;
+            renderAdminAuditLogs();
+        })
+        .catch(error => {
+            showToast(`Auditní záznamy se nepodařilo načíst: ${error.message}`, true);
+        })
+        .finally(() => {
+            auditLogRequest = null;
+        });
+    return auditLogRequest;
+}
+
+export function renderAdminAuditLogs() {
+    const filter = document.getElementById('admin-audit-action-filter');
+    const body = document.getElementById('admin-audit-log-body');
+    if (!filter || !body) return;
+
+    const selectedAction = filter.value;
+    const actions = [...new Set(adminAuditLogs.map(log => log.action))].sort((a, b) => a.localeCompare(b, 'cs'));
+    filter.innerHTML = `<option value="">Všechny akce</option>${actions.map(action =>
+        `<option value="${escapeTeamName(action)}">${escapeTeamName(action)}</option>`
+    ).join('')}`;
+    if (actions.includes(selectedAction)) filter.value = selectedAction;
+
+    const visibleLogs = selectedAction
+        ? adminAuditLogs.filter(log => log.action === selectedAction)
+        : adminAuditLogs;
+    body.innerHTML = visibleLogs.length ? visibleLogs.map(log => `
+        <tr class="hover:bg-[#13236b]/60">
+            <td class="whitespace-nowrap p-2 text-gray-400">${escapeTeamName(new Date(log.created_at).toLocaleString('cs-CZ'))}</td>
+            <td class="p-2 font-bold text-amber-300">${escapeTeamName(log.action)}</td>
+            <td class="p-2 text-white">${escapeTeamName(log.actor_username)}</td>
+            <td class="p-2 text-gray-300">${escapeTeamName(log.resource)}</td>
+            <td class="p-2 text-gray-400">${escapeTeamName(log.details)}</td>
+        </tr>
+    `).join('') : `<tr><td colspan="5" class="p-4 text-center text-gray-400">Pro vybraný filtr nejsou žádné záznamy.</td></tr>`;
 }
 
 export async function renderDiscordRoleManagement() {

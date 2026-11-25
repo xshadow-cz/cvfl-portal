@@ -14,8 +14,16 @@ import { getTeamNameMarkup, escapeTeamName } from './team-logo.js';
 export function logDKAction(type, target, details) {
     const now = new Date();
     const timeStr = `${now.getDate()}.${now.getMonth() + 1}. ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-    dkAuditLogs.unshift({ id: Date.now(), time: timeStr, type, target, details });
+    const auditEntry = { id: Date.now(), time: timeStr, type, target, details };
+    dkAuditLogs.unshift(auditEntry);
     renderDKAuditLogs();
+    if (!['Admin', 'DK'].includes(state.currentUserRole)) return;
+    apiLogDKAction(type, target, details).then(savedEntry => {
+        auditEntry.id = savedEntry.id;
+        auditEntry.timestamp = new Date().toISOString();
+    }).catch(error => {
+        showToast(`Akce proběhla, ale auditní záznam se nepodařilo uložit: ${error.message}`, true);
+    });
 }
 
 async function logPersistedDKAction(type, target, details) {

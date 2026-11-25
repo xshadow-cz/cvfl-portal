@@ -85,6 +85,94 @@ export function compareTeams1Liga(a, b) {
     return 0;
 }
 
+function getPlayoffGroupTable(groupName, startingTeams) {
+    const table = new Map(startingTeams.map(team => [team.id, {
+        ...team,
+        played: Number(team.played) || 0,
+        won: Number(team.won) || 0,
+        drawn: Number(team.drawn) || 0,
+        lost: Number(team.lost) || 0,
+        gf: Number(team.gf) || 0,
+        ga: Number(team.ga) || 0,
+        finalPoints: (Number(team.basePoints) || 0) - (Number(team.deducted) || 0)
+    }]));
+    const groupMatches = matchesData.filter(match =>
+        match.competition === 'CVFL 1. Liga' &&
+        String(match.cupStage || '').startsWith(groupName) &&
+        table.has(match.homeTeamId) && table.has(match.awayTeamId)
+    );
+
+    for (const match of groupMatches) {
+        const home = table.get(match.homeTeamId);
+        const away = table.get(match.awayTeamId);
+        if (!home || !away || match.status !== 'Completed') continue;
+        const homeScore = Number(match.homeScore) || 0;
+        const awayScore = Number(match.awayScore) || 0;
+        home.played++;
+        away.played++;
+        home.gf += homeScore;
+        home.ga += awayScore;
+        away.gf += awayScore;
+        away.ga += homeScore;
+        if (homeScore > awayScore) {
+            home.won++;
+            away.lost++;
+            home.finalPoints += 3;
+        } else if (awayScore > homeScore) {
+            away.won++;
+            home.lost++;
+            away.finalPoints += 3;
+        } else {
+            home.drawn++;
+            away.drawn++;
+            home.finalPoints++;
+            away.finalPoints++;
+        }
+    }
+
+    const sortedTeams = [...table.values()].sort((a, b) => {
+        if (b.finalPoints !== a.finalPoints) return b.finalPoints - a.finalPoints;
+        return compareTeams1Liga(
+            { ...a, basePoints: a.finalPoints, deducted: 0 },
+            { ...b, basePoints: b.finalPoints, deducted: 0 }
+        );
+    });
+
+    const titleFixturesScheduled = groupMatches.length >= 8 &&
+        [...table.keys()].every(teamId =>
+            groupMatches.filter(match => match.homeTeamId === teamId || match.awayTeamId === teamId).length >= 4
+        );
+    const remainingMatches = groupMatches.filter(match => match.status !== 'Completed');
+    let titleClinchedTeamId = null;
+    if (titleFixturesScheduled && sortedTeams.length) {
+        for (const candidate of sortedTeams) {
+            const startingPoints = new Map([...table].map(([id, team]) => [id, team.finalPoints]));
+            const canStillLose = (index, points) => {
+                if (index === remainingMatches.length) {
+                    return [...points].some(([teamId, total]) => teamId !== candidate.id && total >= points.get(candidate.id));
+                }
+                const match = remainingMatches[index];
+                const homeTeam = table.get(match.homeTeamId);
+                const awayTeam = table.get(match.awayTeamId);
+                if (!homeTeam || !awayTeam) return canStillLose(index + 1, points);
+                for (const [homePoints, awayPoints] of [[3, 0], [1, 1], [0, 3]]) {
+                    const nextPoints = new Map(points);
+                    nextPoints.set(homeTeam.id, nextPoints.get(homeTeam.id) + homePoints);
+                    nextPoints.set(awayTeam.id, nextPoints.get(awayTeam.id) + awayPoints);
+                    if (canStillLose(index + 1, nextPoints)) return true;
+                }
+                return false;
+            };
+            if (!canStillLose(0, startingPoints)) {
+                titleClinchedTeamId = candidate.id;
+                break;
+            }
+        }
+    }
+
+    return { teams: sortedTeams, titleClinchedTeamId };
+}
+
 export function renderCompetitions() {
     const container = document.getElementById('comp-view-container');
     if (!container) return;
@@ -201,14 +289,17 @@ export function renderCompetitions() {
             ` : ''}
         `;
     } else if (state.activeCompTab === 'nadstavba') {
-        const renderGroup = (title, { dangerType = '', highlightWinner = false } = {}) => `
-            <section class="overflow-hidden rounded-xl border border-[#1e307d] bg-[#13236b]/60">
+        const leagueTeams = teamsData.filter(team => team.league === '1_Liga').sort(compareTeams1Liga);
+        const titleGroup = getPlayoffGroupTable('Skupina o titul', leagueTeams.slice(0, 4));
+        const relegationGroup = getPlayoffGroupTable('Skupina o udržení', leagueTeams.slice(4, 8));
+        const renderGroup = (title, group, { relegation = false } = {}) => `
+            <section class="overflow-hidden rounded-xl border border-[#1e307d] bg-[#0e1a4f]">
                 <div class="flex items-center justify-between border-b border-[#1e307d] px-4 py-3">
                     <h3 class="font-black text-sm text-white">${title}</h3>
-                    <span class="text-[10px] text-gray-400">4 týmy</span>
+                    <span class="text-[10px] text-gray-400">${group.teams.length} týmy</span>
                 </div>
                 <div class="overflow-x-auto">
-                    <table class="w-full min-w-[36rem] text-xs text-left">
+                    <table class="w-full min-w-[36rem] text-left text-xs">
                         <thead class="bg-[#13236b] text-gray-300 uppercase"><tr>
                             <th class="p-2.5 text-center">#</th><th class="p-2.5">Tým</th>
                             <th class="p-2.5 text-center">Z</th><th class="p-2.5 text-center">V</th>
@@ -216,11 +307,54 @@ export function renderCompetitions() {
                             <th class="p-2.5 text-center">Skóre</th><th class="p-2.5 text-right">Body</th>
                         </tr></thead>
                         <tbody class="divide-y divide-[#1e307d]">
-                            ${Array.from({ length: 4 }, (_, index) => `
-                                <tr>
-                                    <td class="p-2.5 text-center"><span class="inline-flex h-6 min-w-6 items-center justify-center gap-0.5 rounded-full px-1 font-black ${index === 3 ? 'bg-[#991b1b] text-red-100' : 'bg-[#ef4444] text-[#450a0a]'}">${index + 1}${highlightWinner && index === 0 ? ' <i class="fa-solid fa-trophy text-amber-300"></i>' : ''}</span></td>
-                                    <td class="h-10 p-2.5 text-gray-700">—</td><td></td><td></td><td></td><td></td><td></td><td></td>
-                                </tr>`).join('')}
+                            ${Array.from({ length: 4 }, (_, index) => {
+                                const team = group.teams[index];
+                                const isTitleWinner = !relegation && index === 0;
+                                const isConfirmedChampion = team && group.titleClinchedTeamId === team.id;
+                                const isRelegated = relegation && index === 3;
+                                const isRelegationPlayoff = relegation && (index === 1 || index === 2);
+                                const rowClass = isConfirmedChampion
+                                    ? 'bg-amber-400/20'
+                                    : isTitleWinner
+                                        ? 'bg-amber-500/10'
+                                        : isRelegated
+                                            ? 'bg-red-950/60'
+                                            : isRelegationPlayoff
+                                                ? 'bg-red-600/10'
+                                                : 'hover:bg-[#13236b]/60';
+                                const badgeStyle = isConfirmedChampion || isTitleWinner
+                                    ? 'background-color: #fbbf24; color: #451a03;'
+                                    : isRelegated
+                                        ? 'background-color: #991b1b; color: #ffffff;'
+                                        : isRelegationPlayoff
+                                            ? 'background-color: #ef4444; color: #ffffff;'
+                                            : 'background-color: #13236b; color: #d1d5db;';
+                                const teamColor = isConfirmedChampion || isTitleWinner ? 'text-amber-200' : 'text-white';
+                                const zoneLabel = isTitleWinner
+                                    ? '<span class="ml-2 whitespace-nowrap rounded bg-amber-400/20 px-1.5 py-0.5 text-[9px] font-black uppercase text-amber-300">Mistr ligy</span>'
+                                    : isRelegated
+                                        ? '<span class="ml-2 whitespace-nowrap rounded bg-red-700/30 px-1.5 py-0.5 text-[9px] font-black uppercase text-red-300">Sestup</span>'
+                                        : isRelegationPlayoff
+                                            ? '<span class="ml-2 whitespace-nowrap rounded bg-red-500/20 px-1.5 py-0.5 text-[9px] font-black uppercase text-red-300">Baráž o sestup</span>'
+                                            : '';
+                                return `
+                                    <tr class="${rowClass}">
+                                        <td class="p-2.5 text-center font-bold">
+                                            <span class="inline-flex min-w-6 h-6 items-center justify-center gap-1 rounded-full px-1 text-center font-black" style="${badgeStyle}">
+                                                ${index + 1}${isConfirmedChampion ? '<i class="fa-solid fa-trophy" aria-label="Mistr ligy"></i>' : ''}
+                                            </span>
+                                        </td>
+                                        <td class="p-2.5 font-bold ${team ? `cursor-pointer hover:underline ${teamColor}` : 'text-gray-700'}" ${team ? `onclick="switchTab('teams'); selectTeam(${team.id});"` : ''}>
+                                            ${team ? `<div class="flex max-w-full items-center overflow-x-auto">${getTeamNameMarkup(team)}${zoneLabel}</div>` : '—'}
+                                        </td>
+                                        <td class="p-2.5 text-center ${isConfirmedChampion ? 'text-amber-200' : 'text-gray-400'}">${team?.played ?? ''}</td>
+                                        <td class="p-2.5 text-center font-bold ${isConfirmedChampion ? 'text-amber-200' : 'text-[#aefb12]'}">${team?.won ?? ''}</td>
+                                        <td class="p-2.5 text-center ${isConfirmedChampion ? 'text-amber-200' : 'text-gray-400'}">${team?.drawn ?? ''}</td>
+                                        <td class="p-2.5 text-center ${isConfirmedChampion ? 'text-amber-200' : 'text-[#f33332]'}">${team?.lost ?? ''}</td>
+                                        <td class="p-2.5 text-center font-mono ${isConfirmedChampion ? 'text-amber-200' : 'text-gray-300'}">${team ? `${team.gf}:${team.ga}` : ''}</td>
+                                        <td class="p-2.5 text-right font-black text-sm ${isConfirmedChampion || isTitleWinner ? 'text-amber-300' : 'text-[#aefb12]'}">${team?.finalPoints ?? ''}</td>
+                                    </tr>`;
+                            }).join('')}
                         </tbody>
                     </table>
                 </div>
@@ -230,11 +364,12 @@ export function renderCompetitions() {
                 <div class="flex flex-wrap items-center justify-between gap-2 border-b border-[#1e307d] pb-3">
                     <h3 class="font-black text-xl text-white">Nadstavba</h3>
                 </div>
-                ${renderGroup('Skupina o titul', { highlightWinner: true })}
-                ${renderGroup('Skupina o udržení', { dangerType: 'relegation' })}
+                ${renderGroup('Skupina o titul', titleGroup)}
+                ${renderGroup('Skupina o udržení', relegationGroup, { relegation: true })}
                 <div class="flex flex-wrap gap-4 border-t border-[#1e307d] pt-3 text-xs text-gray-300">
-                    <span class="inline-flex items-center gap-2"><i class="fa-solid fa-square text-red-500"></i> Místa 2–3: baráž</span>
-                    <span class="inline-flex items-center gap-2"><i class="fa-solid fa-square text-red-700"></i> Místo 4: sestup</span>
+                    <span class="inline-flex items-center gap-2"><i class="fa-solid fa-square text-amber-400"></i> 1. místo skupiny o titul: mistr ligy</span>
+                    <span class="inline-flex items-center gap-2"><i class="fa-solid fa-square text-red-500"></i> Místa 2–3 skupiny o udržení: baráž o sestup</span>
+                    <span class="inline-flex items-center gap-2"><i class="fa-solid fa-square text-red-800"></i> 4. místo skupiny o udržení: sestup</span>
                 </div>
             </div>`;
     } else if (state.activeCompTab === 'baraz') {

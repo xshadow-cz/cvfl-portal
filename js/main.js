@@ -120,6 +120,7 @@ import {
     renderDelegateAlerts,
     dismissDelegateAlert,
     renderRefereesMainTable,
+    openRefereeCard,
     deleteRefereeLicenseWithConfirm,
     renderRefereeAssignments,
     saveRefereeAssignmentsForMatch,
@@ -162,6 +163,8 @@ import {
     submitAdminAddTrainer,
     toggleExtraSection,
     renderAdmin,
+    loadAdminAuditLogs,
+    renderAdminAuditLogs,
     renderAdminMatchesDeleteList,
     onAdminMatchFilterChange,
     deleteMatchFromAdmin,
@@ -343,6 +346,7 @@ Object.assign(window, {
     renderDelegateAlerts,
     dismissDelegateAlert,
     renderRefereesMainTable,
+    openRefereeCard,
     deleteRefereeLicenseWithConfirm,
     renderRefereeAssignments,
     saveRefereeAssignmentsForMatch,
@@ -382,6 +386,8 @@ Object.assign(window, {
     submitAdminAddTrainer,
     toggleExtraSection,
     renderAdmin,
+    loadAdminAuditLogs,
+    renderAdminAuditLogs,
     renderAdminMatchesDeleteList,
     onAdminMatchFilterChange,
     deleteMatchFromAdmin,
@@ -424,6 +430,7 @@ async function initApp() {
     const loginLink = document.getElementById('discord-login-link');
     const logoutButton = document.getElementById('discord-logout-button');
     const headerLogoutButton = document.getElementById('header-discord-logout-button');
+    loginLink.href = `${getApiOrigin()}/api/auth/discord`;
     const authErrors = {
         invite_invalid: 'Odkaz na pozvánku není platný.',
         invite_expired: 'Tato pozvánka již není platná nebo už byla použita.',

@@ -153,7 +153,7 @@ async function dbRun(sql, params = []) {
         let pgSql = sql.replace(/\?/g, () => `$${paramIndex++}`)
                        .replace(/datetime\('now'\)/gi, 'CURRENT_TIMESTAMP');
 
-        const tablesWithId = ['teams', 'players', 'referees', 'trainers', 'matches', 'suspensions', 'points_deductions', 'dk_audit_logs'];
+        const tablesWithId = ['teams', 'players', 'referees', 'trainers', 'matches', 'suspensions', 'points_deductions', 'dk_audit_logs', 'audit_logs'];
         const isInsert = /^\s*INSERT\s+INTO\s+([a-z_]+)/i.exec(pgSql);
 
         if (isInsert && tablesWithId.includes(isInsert[1].toLowerCase()) && !/RETURNING/i.test(pgSql)) {
@@ -317,6 +317,18 @@ async function initPostgresDatabase() {
                 details TEXT NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
+            CREATE TABLE IF NOT EXISTS audit_logs (
+                id SERIAL PRIMARY KEY,
+                action TEXT NOT NULL,
+                method TEXT NOT NULL,
+                resource TEXT NOT NULL,
+                actor_discord_id TEXT,
+                actor_username TEXT NOT NULL,
+                details TEXT NOT NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
+            CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action);
             CREATE TABLE IF NOT EXISTS site_settings (
                 key TEXT PRIMARY KEY,
                 value TEXT
@@ -354,6 +366,7 @@ async function initPostgresDatabase() {
         await dbClient.query("INSERT INTO site_settings (key, value) VALUES ('system_announcement', 'Vítejte v oficiálním CVFL Portálu!') ON CONFLICT DO NOTHING");
         console.log('✅ PostgreSQL databáze na Supabase byla úspěšně inicializována.');
         isDatabaseReady = true;
+        scheduleAuditLogCleanup();
     } catch (err) {
         console.error('❌ Chyba při inicializaci Supabase databáze:', err.message);
     }
@@ -390,6 +403,7 @@ function initSqliteDatabase() {
         
         console.log('✅ Schéma SQLite databáze bylo ověřeno a inicializováno.');
         isDatabaseReady = true;
+        scheduleAuditLogCleanup();
     } catch (migrationError) {
         console.error('❌ Nepodařilo se aktualizovat schéma SQLite databáze:', migrationError.message);
     }
@@ -400,6 +414,22 @@ function ensureDatabaseColumn(table, column, declaration) {
     const columns = dbClient.prepare(`PRAGMA table_info(${table})`).all();
     if (!columns.some(item => item.name === column)) {
         dbClient.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${declaration}`).run();
+    }
+
+    function scheduleAuditLogCleanup() {
+        const cleanup = async () => {
+            const retentionCutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+                .toISOString().slice(0, 19).replace('T', ' ');
+            try {
+                await dbRun('DELETE FROM audit_logs WHERE created_at < ?', [retentionCutoff]);
+                await dbRun('DELETE FROM dk_audit_logs WHERE created_at < ?', [retentionCutoff]);
+            } catch (error) {
+                console.error('Nepodařilo se odstranit auditní záznamy starší 30 dní:', error.message);
+            }
+        };
+        void cleanup();
+        const cleanupTimer = setInterval(cleanup, 24 * 60 * 60 * 1000);
+        cleanupTimer.unref?.();
     }
 }
 
@@ -668,11 +698,13 @@ function parseCookies(req) {
 function authCookieOptions(maxAge, req) {
     const isSecure = req?.secure || req?.headers?.['x-forwarded-proto'] === 'https' ||
         process.env.NODE_ENV === 'production' || process.env.DISCORD_REDIRECT_URI?.startsWith('https://');
+    const cookieDomain = req ? getOAuthStateCookieDomain(req) : null;
     return [
         'Path=/',
         'HttpOnly',
         isSecure ? 'SameSite=None' : 'SameSite=Lax',
         isSecure ? 'Secure' : '',
+        cookieDomain ? `Domain=${cookieDomain}` : '',
         `Max-Age=${maxAge}`
     ].filter(Boolean).join('; ');
 }
@@ -1144,6 +1176,17 @@ app.get('/api/auth/discord/callback', async (req, res) => {
             'INSERT INTO auth_sessions (token_hash, discord_id, expires_at) VALUES (?, ?, ?)',
             [crypto.createHash('sha256').update(sessionToken).digest('hex'), profile.id, expiresAt]
         );
+        try {
+            await dbRun(
+                `INSERT INTO audit_logs
+                    (action, method, resource, actor_discord_id, actor_username, details)
+                 VALUES (?, ?, ?, ?, ?, ?)`,
+                ['Přihlášení přes Discord', 'OAUTH', '/api/auth/discord/callback', profile.id,
+                    profile.global_name || profile.username, 'Úspěšné přihlášení.']
+            );
+        } catch (auditError) {
+            console.error('Přihlášení proběhlo, ale audit přihlášení se nepodařilo uložit:', auditError);
+        }
         res.setHeader('Set-Cookie', [
             `cvfl_oauth_state=; ${oauthStateCookieOptions(0, req)}`,
             `cvfl_session=${sessionToken}; ${authCookieOptions(7 * 24 * 60 * 60, req)}`
@@ -1179,6 +1222,17 @@ app.post('/api/auth/logout', requireAuthenticated, async (req, res) => {
         await dbRun('DELETE FROM auth_sessions WHERE token_hash = ?', [
             crypto.createHash('sha256').update(token).digest('hex')
         ]);
+        try {
+            await dbRun(
+                `INSERT INTO audit_logs
+                    (action, method, resource, actor_discord_id, actor_username, details)
+                 VALUES (?, ?, ?, ?, ?, ?)`,
+                ['Odhlášení z portálu', 'POST', '/api/auth/logout', req.auth.discordId,
+                    req.auth.username, 'Úspěšné odhlášení.']
+            );
+        } catch (auditError) {
+            console.error('Odhlášení proběhlo, ale audit odhlášení se nepodařilo uložit:', auditError);
+        }
         res.setHeader('Set-Cookie', `cvfl_session=; ${authCookieOptions(0, req)}`);
         res.json({ success: true });
     } catch (err) {
@@ -1208,6 +1262,54 @@ app.get('/api/health', (req, res) => {
 });
 
 app.use('/api', requireAuthenticated);
+
+app.use('/api', (req, res, next) => {
+    if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) return next();
+
+    const originalJson = res.json.bind(res);
+    res.json = (payload) => {
+        const statusCode = res.statusCode;
+        const responseError = payload && typeof payload === 'object' && payload.success === false
+            ? String(payload.error || 'Akce se nezdařila.').slice(0, 500)
+            : '';
+        const isManualAudit = req.originalUrl.startsWith('/api/audit-logs');
+        const action = isManualAudit &&
+            typeof req.body?.action === 'string' && req.body.action.trim()
+            ? req.body.action.trim().slice(0, 120)
+            : `${req.method} ${req.originalUrl.split('?')[0]}`;
+        const auditDetails = isManualAudit && typeof req.body?.details === 'string'
+            ? req.body.details.trim().slice(0, 500)
+            : '';
+        const target = isManualAudit && typeof req.body?.target === 'string'
+            ? req.body.target.trim().slice(0, 160)
+            : '';
+        const details = responseError
+            ? `HTTP ${statusCode}: ${responseError}`
+            : `HTTP ${statusCode}: ${target ? `${target} — ` : ''}${auditDetails || 'Požadavek dokončen.'}`;
+
+        return dbRun(
+            `INSERT INTO audit_logs
+                (action, method, resource, actor_discord_id, actor_username, details)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            [
+                action,
+                req.method,
+                req.originalUrl.split('?')[0].slice(0, 500),
+                req.auth?.discordId || null,
+                req.auth?.username || 'Neznámý uživatel',
+                details
+            ]
+        ).then(() => originalJson(payload)).catch(error => {
+            console.error('Auditní záznam se nepodařilo uložit:', error);
+            res.status(500);
+            return originalJson({
+                success: false,
+                error: 'Auditní záznam akce se nepodařilo uložit. Akce mohla být provedena; ověřte její stav před opakováním.'
+            });
+        });
+    };
+    next();
+});
 
 const robloxAvatarCache = new Map();
 const robloxAvatarRequests = new Map();
@@ -1521,10 +1623,67 @@ app.get('/api/state', async (req, res) => {
              FROM referees ORDER BY id ASC`,
             [OWNER_DISCORD_ID]
         );
-        const matchesRaw = await matchesVisibleToUser(
-            await dbAll('SELECT * FROM matches ORDER BY round ASC, id ASC'),
-            req.auth
-        );
+        const allMatchesRaw = await dbAll('SELECT * FROM matches ORDER BY round ASC, id ASC');
+        const matchesRaw = await matchesVisibleToUser(allMatchesRaw, req.auth);
+        const refereeMatchStats = new Map();
+        for (const match of allMatchesRaw) {
+            if (!['Completed', 'In_Progress'].includes(match.status)) continue;
+            const assignedReferees = [...new Set([match.referee, match.fourth_ref, match.var].filter(Boolean))];
+            if (!assignedReferees.length) continue;
+
+            let events = [];
+            try {
+                events = JSON.parse(match.events_json || '[]');
+            } catch (error) {
+                console.warn(`Události zápasu ${match.id} nelze načíst pro profil rozhodčího:`, error.message);
+            }
+            if (!Array.isArray(events)) events = [];
+            const matchStats = {
+                match: {
+                    id: match.id,
+                    homeTeamId: match.home_team_id,
+                    awayTeamId: match.away_team_id,
+                    homeScore: match.home_score,
+                    awayScore: match.away_score,
+                    status: match.status,
+                    competition: match.competition,
+                    matchDate: match.match_date
+                },
+                yellowCards: events.filter(event =>
+                    ['Yellow_Card', 'Second_Yellow_Card'].includes(event.type)
+                ).length,
+                redCards: events.filter(event =>
+                    ['Red_Card', 'Second_Yellow_Card'].includes(event.type)
+                ).length,
+                penalties: events.filter(event =>
+                    event.type === 'Goal' && event.goalType === 'Penalty'
+                ).length
+            };
+            const timestamp = match.match_date && match.match_date !== 'TBA'
+                ? Date.parse(match.match_date)
+                : 0;
+            matchStats.timestamp = Number.isFinite(timestamp) ? timestamp : 0;
+
+            for (const refereeName of assignedReferees) {
+                const profile = refereeMatchStats.get(refereeName) || {
+                    appearances: 0,
+                    yellowCards: 0,
+                    redCards: 0,
+                    penalties: 0,
+                    matches: []
+                };
+                profile.appearances++;
+                profile.yellowCards += matchStats.yellowCards;
+                profile.redCards += matchStats.redCards;
+                profile.penalties += matchStats.penalties;
+                profile.matches.push(matchStats);
+                refereeMatchStats.set(refereeName, profile);
+            }
+        }
+        for (const profile of refereeMatchStats.values()) {
+            profile.matches.sort((a, b) => b.timestamp - a.timestamp || b.match.id - a.match.id);
+            profile.matches = profile.matches.slice(0, 10).map(({ timestamp, ...item }) => item);
+        }
         const suspensionsRaw = await dbAll('SELECT * FROM suspensions ORDER BY id DESC');
         const deductionsRaw = await dbAll(`
             SELECT points_deductions.*, teams.name AS team_name
@@ -1569,17 +1728,33 @@ app.get('/api/state', async (req, res) => {
             isArchived: Boolean(p.is_archived)
         }));
 
-        const referees = refereesRaw.map(r => ({
-            id: r.id,
-            robloxNick: r.roblox_nick,
-            discordNick: r.discord_nick,
-            license: r.license,
-            status: r.status,
-            suspensionReason: r.suspension_reason || '',
-            isDelegate: Boolean(r.is_delegate),
-            isRegistered: Boolean(r.has_active_account),
-            isCurrentUser: r.discord_id === req.auth.discordId
-        }));
+        const referees = refereesRaw.map(r => {
+            const matchStats = refereeMatchStats.get(r.roblox_nick) || {
+                appearances: 0,
+                yellowCards: 0,
+                redCards: 0,
+                penalties: 0,
+                matches: []
+            };
+            return {
+                id: r.id,
+                robloxNick: r.roblox_nick,
+                discordNick: r.discord_nick,
+                license: r.license,
+                status: r.status,
+                suspensionReason: r.suspension_reason || '',
+                isDelegate: Boolean(r.is_delegate),
+                isRegistered: Boolean(r.has_active_account),
+                isCurrentUser: r.discord_id === req.auth.discordId,
+                matchStats: {
+                    appearances: matchStats.appearances,
+                    yellowCards: matchStats.yellowCards,
+                    redCards: matchStats.redCards,
+                    penalties: matchStats.penalties
+                },
+                matchHistory: matchStats.matches
+            };
+        });
 
         const trainers = trainersRaw.map(t => ({
             id: t.id,
@@ -2544,6 +2719,25 @@ app.post('/api/audit-logs', requireRoles('Admin', 'DK'), async (req, res) => {
         res.status(201).json({ success: true, id: result.lastID });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+app.get('/api/admin/audit-logs', requireRoles('Admin'), async (req, res) => {
+    try {
+        const action = typeof req.query.action === 'string' ? req.query.action.trim().slice(0, 120) : '';
+        const rows = action
+            ? await dbAll(
+                `SELECT id, action, method, resource, actor_discord_id, actor_username, details, created_at
+                 FROM audit_logs WHERE action = ? ORDER BY id DESC LIMIT 5000`,
+                [action]
+            )
+            : await dbAll(
+                `SELECT id, action, method, resource, actor_discord_id, actor_username, details, created_at
+                 FROM audit_logs ORDER BY id DESC LIMIT 5000`
+            );
+        res.json({ success: true, data: rows });
+    } catch (err) {
+        res.status(500).json({ success: false, error: 'Auditní záznamy se nepodařilo načíst.' });
     }
 });
 

@@ -3,11 +3,16 @@ export function getTeamLogoMarkup(team, className = 'h-6 w-6') {
     return `<img src="${team.logo}" alt="" class="inline-block ${className} shrink-0 rounded-md object-contain bg-[#0e1a4f] align-middle">`;
 }
 
-export function getTeamNameMarkup(team, { logoClassName = 'h-6 w-6', className = '', textClassName = '' } = {}) {
+export function getTeamNameMarkup(team, {
+    logoClassName = 'h-6 w-6',
+    className = '',
+    textClassName = '',
+    truncate = false
+} = {}) {
     if (!team) return '';
-    return `<span class="inline-flex min-w-max shrink-0 flex-nowrap items-center gap-2 whitespace-nowrap ${className}">
+    return `<span class="inline-flex ${truncate ? 'min-w-0 max-w-full' : 'min-w-max shrink-0'} flex-nowrap items-center gap-2 whitespace-nowrap ${className}">
         ${getTeamLogoMarkup(team, logoClassName)}
-        <span class="whitespace-nowrap ${textClassName}">${escapeTeamName(team.name)}</span>
+        <span class="${truncate ? 'min-w-0 truncate' : 'whitespace-nowrap'} ${textClassName}">${escapeTeamName(team.name)}</span>
     </span>`;
 }
 
