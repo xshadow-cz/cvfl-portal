@@ -1249,7 +1249,7 @@ async function getRobloxAvatarUrl(player) {
         let avatarUrl = null;
         if (robloxUserId) {
             const thumbnailResponse = await fetch(
-                `https://thumbnails.roblox.com/v1/users/avatar?userIds=${encodeURIComponent(robloxUserId)}&size=420x420&format=Png&isCircular=false`,
+                `https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${encodeURIComponent(robloxUserId)}&size=420x420&format=Png&isCircular=false`,
                 { signal: AbortSignal.timeout(10000) }
             );
             if (!thumbnailResponse.ok) {

@@ -201,12 +201,13 @@ function collectFilteredPlayerStats(competitionFilter) {
     const completedMatches = matchesData.filter(match => match.status === 'Completed');
     const playerStatsMap = new Map();
 
-    const addStat = (playerId, key) => {
-        const player = playersData.find(item => item.id === playerId);
-        if (!player) return;
-        if (!playerStatsMap.has(playerId)) {
-            playerStatsMap.set(playerId, {
+    const getOrCreatePlayerStats = playerId => {
+        const player = playersData.find(item => Number(item.id) === Number(playerId));
+        if (!player) return null;
+        if (!playerStatsMap.has(player.id)) {
+            playerStatsMap.set(player.id, {
                 player,
+                matchesPlayed: 0,
                 goals: 0,
                 assists: 0,
                 cleanSheets: 0,
@@ -214,7 +215,12 @@ function collectFilteredPlayerStats(competitionFilter) {
                 redCards: 0
             });
         }
-        playerStatsMap.get(playerId)[key] += 1;
+        return playerStatsMap.get(player.id);
+    };
+
+    const addStat = (playerId, key) => {
+        const stats = getOrCreatePlayerStats(playerId);
+        if (stats) stats[key] += 1;
     };
 
     completedMatches.forEach(match => {
@@ -227,6 +233,25 @@ function collectFilteredPlayerStats(competitionFilter) {
         }
 
         const events = Array.isArray(match.events) ? match.events : [];
+        const appearances = new Set();
+        [...(match.homeRoster || []), ...(match.awayRoster || [])]
+            .filter(player => player.isStarter)
+            .forEach(player => appearances.add(Number(player.playerId)));
+        events.forEach(event => {
+            if (event.type === 'Substitution') {
+                if (event.playerInId != null) appearances.add(Number(event.playerInId));
+                if (event.playerOutId != null) appearances.add(Number(event.playerOutId));
+            }
+            if (event.targetType !== 'staff' && event.playerId != null) appearances.add(Number(event.playerId));
+            if (event.type === 'Goal' && event.goalType === 'Regular' && event.secondaryPlayerId != null) {
+                appearances.add(Number(event.secondaryPlayerId));
+            }
+        });
+        appearances.forEach(playerId => {
+            if (!Number.isFinite(playerId)) return;
+            const stats = getOrCreatePlayerStats(playerId);
+            if (stats) stats.matchesPlayed++;
+        });
 
         events.forEach(event => {
             if (event.type === 'Goal' && event.goalType !== 'Own') {
@@ -316,10 +341,9 @@ function renderStatsModal() {
 
     const allStats = collectFilteredPlayerStats(statsModalState.selectedCompetition);
 
-    // Zobrazit pouze hráče, kteří nemají u všech statistik číslo 0
+    // Include every player who appeared, even without an individual scoring event.
     let filtered = allStats.filter(item => {
-        const total = item.goals + item.assists + item.cleanSheets + item.yellowCards + item.redCards;
-        if (total === 0) return false;
+        if (item.matchesPlayed < 1) return false;
 
         if (statsModalState.selectedTeamId !== 'all') {
             if (String(item.player.teamId) !== String(statsModalState.selectedTeamId)) return false;
@@ -352,7 +376,7 @@ function renderStatsModal() {
                     </div>
                     <div>
                         <h2 class="text-lg font-black tracking-wide text-white">Přehled Hráčských Statistik</h2>
-                        <p class="text-xs text-gray-400">Zobrazeni jsou pouze hráči s alespoň 1 zápisem ve statistikách</p>
+                        <p class="text-xs text-gray-400">Zobrazeni jsou hráči s alespoň jedním odehraným zápasem</p>
                     </div>
                 </div>
                 <button onclick="closeStatsModal()" class="flex shrink-0 items-center gap-2 rounded-lg border border-[#1e307d] px-3 py-2 text-sm font-bold text-gray-200 transition hover:bg-[#13236b] hover:text-white">
@@ -385,11 +409,12 @@ function renderStatsModal() {
 
             <!-- Tabulka statistik -->
             <div class="overflow-auto flex-1 my-2 pr-1">
-                <table class="w-full min-w-[42rem] text-left text-xs border-collapse">
+                <table class="w-full min-w-[46rem] text-left text-xs border-collapse">
                     <thead class="sticky top-0 bg-[#0e1a4f] z-10 border-b border-[#1e307d] text-gray-400 font-bold uppercase text-[11px]">
                         <tr>
                             <th class="py-3 px-2">Hráč</th>
                             <th class="py-3 px-2">Tým</th>
+                            <th class="py-3 px-2 text-center">Z</th>
                             ${STAT_CATEGORIES.map(cat => {
                                 const isActive = sortKey === cat.key;
                                 const arrow = isActive ? (sortAscending ? ' <i class="fa-solid fa-arrow-up text-[#aefb12] ml-1"></i>' : ' <i class="fa-solid fa-arrow-down text-[#aefb12] ml-1"></i>') : '';
@@ -412,6 +437,7 @@ function renderStatsModal() {
                                     <td class="py-2.5 px-2 text-gray-300">
                                         ${team ? `<div class="flex items-center gap-1.5">${getTeamLogoMarkup(team)}<span>${escapeTeamName(team.name)}</span></div>` : '<span class="text-gray-500">Bez týmu</span>'}
                                     </td>
+                                    <td class="py-2.5 px-2 text-center font-mono text-gray-300">${item.matchesPlayed}</td>
                                     ${STAT_CATEGORIES.map(cat => `
                                         <td class="border-x border-[#0e1a4f] py-2.5 px-2 text-center font-bold ${cat.cell}">
                                             ${item[cat.key]}
@@ -421,8 +447,8 @@ function renderStatsModal() {
                             `;
                         }).join('') : `
                             <tr>
-                                <td colspan="7" class="py-10 text-center text-gray-500">
-                                    Žádní hráči neodpovídají zvolenému filtru nebo nemají v této soutěži žádný zápis.
+                                <td colspan="8" class="py-10 text-center text-gray-500">
+                                    Žádní hráči s odehraným zápasem neodpovídají zvolenému filtru.
                                 </td>
                             </tr>
                         `}

@@ -261,7 +261,7 @@ export function openPlayerCard(playerId) {
                 <div class="min-w-0">
                 <span class="text-xs text-[#aefb12] font-bold uppercase">${escapeTeamName(team ? team.name : 'Bez klubu')}</span>
                 <h2 class="mt-1 break-words text-xl font-black text-white sm:text-2xl">${escapeTeamName(player.robloxNick)}</h2>
-                <p class="mt-1 flex items-center gap-1.5 truncate text-xs text-gray-300"><i class="fa-brands fa-discord text-[#5865f2]"></i><span>${escapeTeamName(player.discordNick)}</span></p>
+                <p class="mt-1 flex items-center gap-1.5 truncate text-xs text-gray-300"><i class="fa-brands fa-discord text-gray-300"></i><span>${escapeTeamName(player.discordNick)}</span></p>
                 ${player.isArchived ? '<span class="mt-2 inline-flex rounded border border-gray-500/40 bg-gray-500/10 px-2 py-1 text-[10px] font-bold uppercase text-gray-300">Archivovaný hráč</span>' : ''}
                 </div>
             </div>
