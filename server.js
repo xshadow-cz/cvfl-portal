@@ -1209,6 +1209,94 @@ app.get('/api/health', (req, res) => {
 
 app.use('/api', requireAuthenticated);
 
+const robloxAvatarCache = new Map();
+const robloxAvatarRequests = new Map();
+const ROBLOX_AVATAR_CACHE_MS = 6 * 60 * 60 * 1000;
+
+async function getRobloxAvatarUrl(player) {
+    const cacheKey = String(player.roblox_id || player.roblox_nick).toLowerCase();
+    const cached = robloxAvatarCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) return cached.avatarUrl;
+    if (robloxAvatarRequests.has(cacheKey)) return robloxAvatarRequests.get(cacheKey);
+
+    const request = (async () => {
+        let robloxUserId = /^\d+$/.test(String(player.roblox_id || ''))
+            ? String(player.roblox_id)
+            : null;
+        if (!robloxUserId) {
+            const userResponse = await fetch('https://users.roblox.com/v1/usernames/users', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ usernames: [player.roblox_nick], excludeBannedUsers: false }),
+                signal: AbortSignal.timeout(10000)
+            });
+            if (!userResponse.ok) {
+                throw new Error(`Roblox uživatele se nepodařilo vyhledat (HTTP ${userResponse.status}).`);
+            }
+            const userData = await userResponse.json();
+            robloxUserId = String(userData.data?.[0]?.id || '') || null;
+            if (robloxUserId && !/^\d+$/.test(robloxUserId)) {
+                throw new Error('Roblox vrátil neplatné ID uživatele.');
+            }
+            if (robloxUserId && !player.roblox_id) {
+                await dbRun('UPDATE players SET roblox_id = ? WHERE id = ? AND roblox_id IS NULL', [
+                    robloxUserId,
+                    player.id
+                ]);
+            }
+        }
+
+        let avatarUrl = null;
+        if (robloxUserId) {
+            const thumbnailResponse = await fetch(
+                `https://thumbnails.roblox.com/v1/users/avatar?userIds=${encodeURIComponent(robloxUserId)}&size=420x420&format=Png&isCircular=false`,
+                { signal: AbortSignal.timeout(10000) }
+            );
+            if (!thumbnailResponse.ok) {
+                throw new Error(`Roblox avatar se nepodařilo načíst (HTTP ${thumbnailResponse.status}).`);
+            }
+            const thumbnailData = await thumbnailResponse.json();
+            const imageUrl = thumbnailData.data?.[0]?.imageUrl;
+            if (typeof imageUrl === 'string') {
+                const parsedUrl = new URL(imageUrl);
+                if (parsedUrl.protocol === 'https:' &&
+                    (parsedUrl.hostname === 'rbxcdn.com' || parsedUrl.hostname.endsWith('.rbxcdn.com'))) {
+                    avatarUrl = parsedUrl.href;
+                }
+            }
+        }
+
+        robloxAvatarCache.set(cacheKey, { avatarUrl, expiresAt: Date.now() + ROBLOX_AVATAR_CACHE_MS });
+        return avatarUrl;
+    })();
+
+    robloxAvatarRequests.set(cacheKey, request);
+    try {
+        return await request;
+    } finally {
+        robloxAvatarRequests.delete(cacheKey);
+    }
+}
+
+app.get('/api/players/:id/avatar', async (req, res) => {
+    if (!/^\d+$/.test(req.params.id)) {
+        return res.status(400).json({ success: false, error: 'Neplatné ID hráče.' });
+    }
+    try {
+        const player = await dbGet(
+            'SELECT id, roblox_nick, roblox_id FROM players WHERE id = ?',
+            [Number(req.params.id)]
+        );
+        if (!player) return res.status(404).json({ success: false, error: 'Hráč nebyl nalezen.' });
+        const avatarUrl = await getRobloxAvatarUrl(player);
+        res.set('Cache-Control', 'private, max-age=21600');
+        res.json({ success: true, avatarUrl });
+    } catch (err) {
+        console.error(`Roblox avatar hráče ${req.params.id} se nepodařilo načíst:`, err.message);
+        res.status(502).json({ success: false, error: 'Avatar Roblox se nepodařilo načíst.' });
+    }
+});
+
 app.put('/api/announcement', requireRoles('Admin'), async (req, res) => {
     try {
         const announcement = req.body.announcement;

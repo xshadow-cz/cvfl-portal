@@ -197,6 +197,11 @@ export async function apiGetPlayerSyncStatus() {
     return result.data;
 }
 
+export async function apiGetRobloxPlayerAvatar(playerId) {
+    const result = await requestJSON(`/players/${encodeURIComponent(playerId)}/avatar`);
+    return result.avatarUrl;
+}
+
 /**
  * Načte kompletní stav z backendu při startu aplikace
  */
