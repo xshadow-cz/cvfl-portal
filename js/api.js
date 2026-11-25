@@ -33,11 +33,50 @@ export function getApiOrigin() {
     return API_ORIGIN;
 }
 
+export async function apiSetCompetitionVisibility(section, visible) {
+    const result = await requestJSON('/competition-visibility', {
+        method: 'PUT',
+        body: JSON.stringify({ section, visible })
+    });
+    return result.visible;
+}
+
 function localFallbackApiOrigin() {
     return null;
 }
 
 async function fetchApi(path, options = {}) {
+    const actionButton = window.__cvflActionButton;
+    const tracksAction = actionButton instanceof HTMLButtonElement && !actionButton.disabled;
+    if (tracksAction) {
+        actionButton.dataset.cvflActionLocked = 'true';
+        actionButton.setAttribute('aria-busy', 'true');
+        actionButton.disabled = true;
+        actionButton.dataset.cvflPendingRequests = String(
+            (Number(actionButton.dataset.cvflPendingRequests) || 0) + 1
+        );
+    }
+
+    try {
+        return await fetchApiRequest(path, options);
+    } finally {
+        if (tracksAction) {
+            const pendingRequests = Math.max(0, (Number(actionButton.dataset.cvflPendingRequests) || 1) - 1);
+            actionButton.dataset.cvflPendingRequests = String(pendingRequests);
+            if (pendingRequests === 0) {
+                window.setTimeout(() => {
+                    if (actionButton.dataset.cvflPendingRequests !== '0') return;
+                    actionButton.disabled = false;
+                    actionButton.removeAttribute('aria-busy');
+                    delete actionButton.dataset.cvflPendingRequests;
+                    delete actionButton.dataset.cvflActionLocked;
+                }, 350);
+            }
+        }
+    }
+}
+
+async function fetchApiRequest(path, options = {}) {
     const requestOptions = {
         ...options,
         credentials: 'include',
@@ -254,6 +293,13 @@ export async function loadInitialStateFromAPI() {
             state.isMaintenanceMode = state.maintenanceMode;
             state.maintenanceNotice = data.maintenanceNotice || '';
             state.playerSyncEnabled = Boolean(data.playerSyncEnabled);
+            if (data.competitionVisibility && typeof data.competitionVisibility === 'object') {
+                state.competitionVisibility = {
+                    nadstavba: Boolean(data.competitionVisibility.nadstavba),
+                    baraz: Boolean(data.competitionVisibility.baraz),
+                    molcup: Boolean(data.competitionVisibility.molcup)
+                };
+            }
             if (typeof data.systemAnnouncement === 'string') {
                 state.systemAnnouncement = data.systemAnnouncement;
             }

@@ -364,6 +364,13 @@ async function initPostgresDatabase() {
         await dbClient.query('ALTER TABLE discord_invites ADD COLUMN IF NOT EXISTS token_encrypted TEXT');
         
         await dbClient.query("INSERT INTO site_settings (key, value) VALUES ('system_announcement', 'Vítejte v oficiálním CVFL Portálu!') ON CONFLICT DO NOTHING");
+        await dbClient.query(
+            `INSERT INTO site_settings (key, value) VALUES
+                ('competition_visibility_nadstavba', '0'),
+                ('competition_visibility_baraz', '0'),
+                ('competition_visibility_molcup', '0')
+             ON CONFLICT DO NOTHING`
+        );
         console.log('✅ PostgreSQL databáze na Supabase byla úspěšně inicializována.');
         isDatabaseReady = true;
         scheduleAuditLogCleanup();
@@ -393,6 +400,9 @@ function initSqliteDatabase() {
         dbClient.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_players_roblox_id ON players(roblox_id) WHERE roblox_id IS NOT NULL').run();
         
         dbClient.prepare("INSERT OR IGNORE INTO site_settings (key, value) VALUES ('system_announcement', 'Vítejte v oficiálním CVFL Portálu!')").run();
+        dbClient.prepare("INSERT OR IGNORE INTO site_settings (key, value) VALUES ('competition_visibility_nadstavba', '0')").run();
+        dbClient.prepare("INSERT OR IGNORE INTO site_settings (key, value) VALUES ('competition_visibility_baraz', '0')").run();
+        dbClient.prepare("INSERT OR IGNORE INTO site_settings (key, value) VALUES ('competition_visibility_molcup', '0')").run();
         ensureDatabaseColumn('matches', 'home_penalty_score', 'INTEGER DEFAULT 0');
         ensureDatabaseColumn('matches', 'away_penalty_score', 'INTEGER DEFAULT 0');
         ensureDatabaseColumn('discord_invites', 'revoked_at', 'DATETIME');
@@ -1315,6 +1325,7 @@ function getReadableAuditAction(method, path, manualAction = '') {
         ['DELETE', /^\/api\/deductions\/team\/\d+$/, 'Zrušení odečtů bodů týmu'],
         ['DELETE', /^\/api\/deductions\/\d+$/, 'Zrušení odečtu bodů'],
         ['PUT', /^\/api\/announcement$/, 'Změna oznámení portálu'],
+        ['PUT', /^\/api\/competition-visibility$/, 'Změna viditelnosti soutěže'],
         ['PUT', /^\/api\/maintenance$/, 'Změna režimu údržby'],
         ['POST', /^\/api\/admin\/discord-invites$/, 'Vytvoření pozvánky'],
         ['DELETE', /^\/api\/admin\/discord-invites\/\d+$/, 'Zrušení pozvánky'],
@@ -1482,6 +1493,22 @@ app.put('/api/announcement', requireRoles('Admin'), async (req, res) => {
         res.json({ success: true, announcement: value });
     } catch (err) {
         res.status(500).json({ success: false, error: 'Oznámení se nepodařilo uložit.' });
+    }
+});
+
+app.put('/api/competition-visibility', requireRoles('Admin'), async (req, res) => {
+    try {
+        const { section, visible } = req.body || {};
+        if (!['nadstavba', 'baraz', 'molcup'].includes(section) || typeof visible !== 'boolean') {
+            return res.status(400).json({ success: false, error: 'Vyberte platnou soutěž a hodnotu viditelnosti.' });
+        }
+        await dbRun(
+            'INSERT INTO site_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = EXCLUDED.value',
+            [`competition_visibility_${section}`, visible ? '1' : '0']
+        );
+        res.json({ success: true, section, visible });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -1764,6 +1791,13 @@ app.get('/api/state', async (req, res) => {
         const maintenanceSetting = await dbGet("SELECT value FROM site_settings WHERE key = 'maintenance_mode'");
         const maintenanceNoticeSetting = await dbGet("SELECT value FROM site_settings WHERE key = 'maintenance_notice'");
         const announcementSetting = await dbGet("SELECT value FROM site_settings WHERE key = 'system_announcement'");
+        const competitionVisibilitySettings = await dbAll(
+            "SELECT key, value FROM site_settings WHERE key IN ('competition_visibility_nadstavba', 'competition_visibility_baraz', 'competition_visibility_molcup')"
+        );
+        const competitionVisibility = Object.fromEntries(competitionVisibilitySettings.map(setting => [
+            setting.key.replace('competition_visibility_', ''),
+            setting.value === '1'
+        ]));
 
         const teams = teamsRaw.map(t => ({
             id: t.id,
@@ -1944,7 +1978,12 @@ app.get('/api/state', async (req, res) => {
                 playerSyncEnabled: playerSyncStatus.enabled,
                 maintenanceMode: maintenanceSetting?.value === '1',
                 maintenanceNotice: maintenanceNoticeSetting?.value || '',
-                systemAnnouncement: announcementSetting?.value ?? ''
+                systemAnnouncement: announcementSetting?.value ?? '',
+                competitionVisibility: {
+                    nadstavba: Boolean(competitionVisibility.nadstavba),
+                    baraz: Boolean(competitionVisibility.baraz),
+                    molcup: Boolean(competitionVisibility.molcup)
+                }
             }
         });
     } catch (err) {
@@ -2276,7 +2315,7 @@ app.post('/api/matches', requireRoles('Admin'), async (req, res) => {
                 m.homeScore || 0,
                 m.awayScore || 0,
                 m.stadium || 'TBD',
-                m.matchDate || 'TBA',
+                m.matchDate || 'TBD',
                 m.status || 'Scheduled',
                 m.recorder || '',
                 JSON.stringify(m.checks || {}),
@@ -2449,6 +2488,21 @@ app.put('/api/matches/:id', requireMatchEditor, async (req, res) => {
         }
         const penaltyError = await validateMatchPenalties(m, id);
         if (penaltyError) return res.status(400).json({ success: false, error: penaltyError });
+        const effectiveHomeScore = Number(m.homeScore ?? currentMatch.home_score);
+        const effectiveAwayScore = Number(m.awayScore ?? currentMatch.away_score);
+        const effectivePeriodChecks = { ...JSON.parse(currentMatch.period_checks_json || '{}'), ...(m.periodChecks || {}) };
+        const effectivePenaltyHome = Number(m.homePenaltyScore ?? currentMatch.home_penalty_score ?? 0);
+        const effectivePenaltyAway = Number(m.awayPenaltyScore ?? currentMatch.away_penalty_score ?? 0);
+        if ((m.status ?? currentMatch.status) === 'Completed' &&
+            currentMatch.competition === 'MOL Cup' &&
+            !Boolean(m.isForfeited ?? currentMatch.is_forfeited) &&
+            effectiveHomeScore === effectiveAwayScore &&
+            !(effectivePeriodChecks.penaltiesEnded && effectivePenaltyHome !== effectivePenaltyAway)) {
+            return res.status(400).json({
+                success: false,
+                error: 'Utkání MOL Cupu nelze ukončit remízou. Zaznamenejte vítězný penaltový rozstřel.'
+            });
+        }
         if (m.status === 'Completed' && !m.isForfeited || m.periodChecks && m.periodChecks.h1Started) {
             const lineupError = await validateMatchLineups(m);
             if (lineupError) return res.status(400).json({ success: false, error: lineupError });
@@ -2511,7 +2565,9 @@ app.put('/api/matches/:id', requireMatchEditor, async (req, res) => {
 
 async function validateMatchPenalties(match, matchId) {
     const current = await dbGet(
-        'SELECT competition, cup_stage, round, home_team_id, away_team_id, home_score, away_score, status FROM matches WHERE id = ?',
+        `SELECT competition, cup_stage, round, home_team_id, away_team_id, home_score, away_score, status,
+                home_roster_json, away_roster_json
+         FROM matches WHERE id = ?`,
         [matchId]
     );
     if (!current) return 'Zápas nebyl nalezen.';
@@ -2519,6 +2575,32 @@ async function validateMatchPenalties(match, matchId) {
     const isSecondLeg = current.competition === 'Baráž o 1. Ligu' &&
         current.cup_stage === 'Semifinále' && Number(current.round) === 2;
     const periodChecks = match.periodChecks || {};
+    const homeRoster = match.homeRoster ?? JSON.parse(current.home_roster_json || '[]');
+    const awayRoster = match.awayRoster ?? JSON.parse(current.away_roster_json || '[]');
+    const penaltyKicks = Array.isArray(match.events)
+        ? match.events.filter(event => event.type === 'Penalty_Kick')
+        : [];
+    if (penaltyKicks.length && !periodChecks.penaltiesStarted) {
+        return 'Kopy lze zaznamenat pouze během penaltového rozstřelu.';
+    }
+    for (const kick of penaltyKicks) {
+        const kickingRoster = kick.teamSide === 'home' ? homeRoster : kick.teamSide === 'away' ? awayRoster : null;
+        const opposingRoster = kick.teamSide === 'home' ? awayRoster : kick.teamSide === 'away' ? homeRoster : null;
+        const expectedOpponentId = kick.teamSide === 'home' ? current.away_team_id : current.home_team_id;
+        if (!kickingRoster || !opposingRoster ||
+            !Number.isInteger(Number(kick.playerId)) ||
+            !kickingRoster.some(player => Number(player.playerId) === Number(kick.playerId)) ||
+            Number(kick.opposingTeamId) !== Number(expectedOpponentId) ||
+            typeof kick.scored !== 'boolean') {
+            return 'Záznam kopu penalty obsahuje neplatný tým, hráče nebo výsledek.';
+        }
+        if (kick.opposingGoalkeeperId != null &&
+            !opposingRoster.some(player =>
+                player.isGK && Number(player.playerId) === Number(kick.opposingGoalkeeperId)
+            )) {
+            return 'Brankář u kopu penalty musí být v soupisce soupeře označen jako brankář.';
+        }
+    }
     const homePenalties = match.homePenaltyScore ?? 0;
     const awayPenalties = match.awayPenaltyScore ?? 0;
     const penaltyActivity = periodChecks.penaltiesStarted || periodChecks.penaltiesEnded ||

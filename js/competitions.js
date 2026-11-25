@@ -250,6 +250,10 @@ function getPlayoffGroupTable(groupName, startingTeams) {
 }
 
 export function renderCompetitions() {
+    ['nadstavba', 'baraz', 'molcup'].forEach(section => {
+        const button = document.getElementById(`comp-btn-${section}`);
+        if (button) button.classList.toggle('hidden', !state.competitionVisibility?.[section]);
+    });
     const container = document.getElementById('comp-view-container');
     if (!container) return;
 
@@ -367,12 +371,12 @@ export function renderCompetitions() {
             ? leagueTeams.slice(-4)
             : leagueTeams.slice(4, 8);
         const relegationGroup = getPlayoffGroupTable('Skupina o udržení', relegationTeams);
-        const renderGroup = (title, group, { relegation = false } = {}) => `
+        const renderGroup = (title, group, { titleGroup = false, relegation = false } = {}) => `
             <section class="overflow-hidden rounded-xl border border-[#1e307d] bg-[#0e1a4f]">
                 <div class="flex items-center justify-between border-b border-[#1e307d] px-4 py-3">
                     <h3 class="font-black text-sm text-white">${title}</h3>
                 </div>
-                <div class="overflow-x-auto">
+                <div class="overflow-x-auto overscroll-x-contain touch-pan-x">
                     <table class="w-full min-w-[36rem] text-left text-xs">
                         <thead class="bg-[#13236b] text-gray-300 uppercase"><tr>
                             <th class="p-2.5 text-center">#</th><th class="p-2.5">Tým</th>
@@ -384,11 +388,18 @@ export function renderCompetitions() {
                             ${Array.from({ length: 4 }, (_, index) => {
                                 const team = group.teams[index];
                                 const isConfirmedChampion = team && group.titleClinchedTeamId === team.id;
+                                const badgeStyle = titleGroup && index === 0
+                                    ? 'background-color: #fbbf24; color: #13236b;'
+                                    : relegation && index === 3
+                                        ? 'background-color: #991b1b; color: #ffffff;'
+                                        : relegation && index > 0
+                                            ? 'background-color: #ef4444; color: #ffffff;'
+                                            : '';
                                 return `
                                     <tr class="hover:bg-[#13236b]/60">
                                         <td class="p-2.5 text-center font-bold">
-                                            <span class="inline-flex min-w-6 h-6 items-center justify-center gap-1 rounded-full bg-[#13236b] px-1 text-center font-black ${isConfirmedChampion ? 'text-amber-300' : 'text-gray-300'}">
-                                                ${index + 1}${isConfirmedChampion ? '<i class="fa-solid fa-trophy text-amber-400" aria-label="Mistr ligy"></i>' : ''}
+                                            <span class="inline-flex min-w-6 h-6 items-center justify-center gap-1 rounded-full bg-[#13236b] px-1 text-center font-black ${isConfirmedChampion ? 'text-amber-300' : 'text-gray-300'}" style="${badgeStyle}">
+                                                ${index + 1}${titleGroup && index === 0 ? '<i class="fa-solid fa-trophy text-amber-400" aria-label="Mistr ligy"></i>' : ''}
                                             </span>
                                         </td>
                                         <td class="max-w-0 p-2.5 font-bold text-white">
@@ -399,7 +410,9 @@ export function renderCompetitions() {
                                         <td class="p-2.5 text-center ${isConfirmedChampion ? 'text-amber-200' : 'text-gray-400'}">${team?.drawn ?? ''}</td>
                                         <td class="p-2.5 text-center ${isConfirmedChampion ? 'text-amber-200' : 'text-[#f33332]'}">${team?.lost ?? ''}</td>
                                         <td class="p-2.5 text-center font-mono ${isConfirmedChampion ? 'text-amber-200' : 'text-gray-300'}">${team ? `${team.gf}:${team.ga}` : ''}</td>
-                                        <td class="p-2.5 text-right font-black text-sm ${isConfirmedChampion ? 'text-amber-300' : 'text-[#aefb12]'}">${team?.finalPoints ?? ''}</td>
+                                        <td class="p-2.5 text-right font-black text-sm ${isConfirmedChampion ? 'text-amber-300' : 'text-[#aefb12]'}">
+                                            ${team ? `<span class="inline-flex items-center justify-end gap-1.5">${team.finalPoints}<span class="sr-only"> bodů</span>${team.deducted > 0 ? `<span class="inline-flex items-center gap-1 rounded bg-red-500/20 px-1.5 py-0.5 text-[10px] font-bold text-red-300" title="Odečet ${team.deducted} bodů" aria-label="Odečet ${team.deducted} bodů"><i class="fa-solid fa-minus"></i>${team.deducted}</span>` : ''}</span>` : ''}
+                                        </td>
                                     </tr>`;
                             }).join('')}
                         </tbody>
@@ -411,7 +424,7 @@ export function renderCompetitions() {
                 <div class="flex flex-wrap items-center justify-between gap-2 border-b border-[#1e307d] pb-3">
                     <h3 class="font-black text-xl text-white">Nadstavba</h3>
                 </div>
-                ${renderGroup('Skupina o titul', titleGroup)}
+                ${renderGroup('Skupina o titul', titleGroup, { titleGroup: true })}
                 ${renderGroup('Skupina o udržení', relegationGroup, { relegation: true })}
                 <div class="flex flex-wrap gap-4 border-t border-[#1e307d] pt-3 text-xs text-gray-300">
                     <span class="inline-flex items-center gap-2"><i class="fa-solid fa-circle text-amber-400"></i> 1. místo skupiny o titul: mistr ligy</span>
@@ -457,30 +470,33 @@ export function renderCompetitions() {
                         const away = teamsData.find(team => team.id === awayId);
                         const firstCompleted = firstLeg?.status === 'Completed';
                         const secondCompleted = secondLeg?.status === 'Completed';
-                        const aggregateHome = firstLeg && secondLeg
-                            ? (firstLeg.homeTeamId === homeId ? firstLeg.homeScore : firstLeg.awayScore) +
-                                (secondLeg.homeTeamId === homeId ? secondLeg.homeScore : secondLeg.awayScore)
-                            : '';
-                        const aggregateAway = firstLeg && secondLeg
-                            ? (firstLeg.homeTeamId === awayId ? firstLeg.homeScore : firstLeg.awayScore) +
-                                (secondLeg.homeTeamId === awayId ? secondLeg.homeScore : secondLeg.awayScore)
-                            : '';
+                        const aggregateVisible = [firstLeg, secondLeg].some(leg =>
+                            leg && ['Completed', 'In_Progress'].includes(leg.status)
+                        );
+                        const aggregateHome =
+                            (firstLeg ? (firstLeg.homeTeamId === homeId ? firstLeg.homeScore : firstLeg.awayScore) : 0) +
+                            (secondLeg ? (secondLeg.homeTeamId === homeId ? secondLeg.homeScore : secondLeg.awayScore) : 0);
+                        const aggregateAway =
+                            (firstLeg ? (firstLeg.homeTeamId === awayId ? firstLeg.homeScore : firstLeg.awayScore) : 0) +
+                            (secondLeg ? (secondLeg.homeTeamId === awayId ? secondLeg.homeScore : secondLeg.awayScore) : 0);
                         const penaltiesDecide = secondCompleted && aggregateHome === aggregateAway &&
                             Number.isInteger(secondLeg?.homePenaltyScore) && Number.isInteger(secondLeg?.awayPenaltyScore) &&
                             secondLeg.homePenaltyScore !== secondLeg.awayPenaltyScore;
                         return `<section class="rounded-xl border border-[#f33332]/30 bg-[#13236b]/60 p-4 space-y-3">
                             <h4 class="text-center text-xs font-black uppercase tracking-wide text-[#f33332]">Baráž ${index + 1}</h4>
-                            <div class="flex items-center justify-between gap-2 rounded-lg bg-[#0e1a4f] p-3 text-sm font-bold text-white">
-                                <div class="max-w-[40%] min-w-0 overflow-hidden">${home ? getTeamProfileLinkMarkup(home) : '<span class="whitespace-nowrap">Čeká se na tým</span>'}</div>
-                                <span class="text-gray-500">vs</span>
-                                <div class="max-w-[40%] min-w-0 overflow-hidden">${away ? getTeamProfileLinkMarkup(away) : '<span class="whitespace-nowrap">Čeká se na tým</span>'}</div>
+                            <div class="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 rounded-lg bg-[#0e1a4f] p-3 text-white">
+                                <div class="min-w-0 text-center">
+                                    <div class="overflow-hidden text-sm font-black">${home ? getTeamProfileLinkMarkup(home) : '<span class="whitespace-nowrap">Čeká se na tým</span>'}</div>
+                                    <strong class="mt-1 block font-mono text-2xl font-black text-[#f33332]">${aggregateVisible ? aggregateHome : '—'}</strong>
+                                </div>
+                                <span class="text-xs font-black text-gray-500">:</span>
+                                <div class="min-w-0 text-center">
+                                    <div class="overflow-hidden text-sm font-black">${away ? getTeamProfileLinkMarkup(away) : '<span class="whitespace-nowrap">Čeká se na tým</span>'}</div>
+                                    <strong class="mt-1 block font-mono text-2xl font-black text-[#f33332]">${aggregateVisible ? aggregateAway : '—'}</strong>
+                                </div>
                             </div>
                             <div class="space-y-2">${renderLeg(firstLeg, 1)}${renderLeg(secondLeg, 2)}</div>
-                            <div class="flex justify-between border-t border-[#1e307d] pt-2 text-xs">
-                                <span class="text-gray-400">Součet skóre</span>
-                                <strong class="text-white">${firstCompleted || secondCompleted ? `${aggregateHome || 0} : ${aggregateAway || 0}` : '— : —'}</strong>
-                            </div>
-                            ${penaltiesDecide ? `<div class="text-center text-xs font-bold text-amber-300"><i class="fa-solid fa-bullseye mr-1"></i> Rozhodly penalty ${secondLeg.homePenaltyScore}:${secondLeg.awayPenaltyScore}</div>` : ''}
+                            ${penaltiesDecide ? `<div class="text-center text-xs font-bold text-amber-300"><i class="fa-solid fa-bullseye mr-1"></i> Rozhodly penalty ${secondLeg.homePenaltyScore}:${secondLeg.awayPenaltyScore} · Postupuje ${escapeTeamName(secondLeg.homePenaltyScore > secondLeg.awayPenaltyScore ? teamsData.find(team => team.id === secondLeg.homeTeamId)?.name || 'domácí tým' : teamsData.find(team => team.id === secondLeg.awayTeamId)?.name || 'hostující tým')}</div>` : ''}
                             ${secondCompleted && aggregateHome === aggregateAway && !penaltiesDecide ? '<div class="text-center text-[10px] text-amber-300">Součet je nerozhodný — čeká se na penalty v odvetě.</div>' : ''}
                         </section>`;
                     }).join('')}
@@ -532,7 +548,8 @@ export function renderCompetitions() {
                                                     <div class="max-w-[80%] min-w-0 overflow-hidden">${away ? getTeamProfileLinkMarkup(away, { logoClassName: 'h-5 w-5' }) : '<span class="whitespace-nowrap">Čeká se na tým</span>'}</div>
                                                     <strong>${score ? match.awayScore : '—'}</strong>
                                                 </div>
-                                                ${match ? `<div class="mt-2 text-[10px] text-gray-400">${match.status === 'Completed' ? 'Odehráno' : match.status === 'In_Progress' ? 'Probíhá' : match.status === 'Postponed' ? 'Odloženo' : 'Naplánováno'}</div>` : ''}
+                                                ${match ? `<div class="mt-2 text-[10px] text-gray-400">${match.status === 'Completed' ? 'Odehráno' : match.status === 'In_Progress' ? 'Probíhá' : match.status === 'Postponed' ? 'Odloženo' : 'Naplánováno'}</div>
+                                                    ${match.status === 'Completed' && match.periodChecks?.penaltiesEnded && Number(match.homePenaltyScore) !== Number(match.awayPenaltyScore) ? `<div class="mt-1 text-[10px] font-bold text-amber-300">Rozhodly penalty ${match.homePenaltyScore}:${match.awayPenaltyScore} · postupuje ${escapeTeamName(match.homePenaltyScore > match.awayPenaltyScore ? home?.name || 'domácí tým' : away?.name || 'hostující tým')}</div>` : ''}` : ''}
                                             </div>`;
                                     }).join('')}
                                 </div>

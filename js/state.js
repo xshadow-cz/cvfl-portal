@@ -15,6 +15,11 @@ export const state = {
     maintenanceNotice: '',
     systemAnnouncement: 'Vítejte v oficiálním CVFL Portálu!',
     playerSyncEnabled: false,
+    competitionVisibility: {
+        nadstavba: false,
+        baraz: false,
+        molcup: false
+    },
     unsavedChangesGuard: false,
     activeEditRefId: null,
     activeSlotMatchId: null,

@@ -7,7 +7,7 @@ import { showToast, openConfirmModal } from './ui.js';
 import { logDKAction } from './disciplinary.js';
 import { renderMatches } from './matches.js';
 import { renderDashboard } from './dashboard.js';
-import { renderCompetitions } from './competitions.js';
+import { renderCompetitions, switchCompTab } from './competitions.js';
 import { renderTeamManagersDropdown } from './navigation.js';
 import { renderRefereeAssignments } from './referees.js';
 import { renderTeams } from './teams.js';
@@ -18,7 +18,8 @@ import {
     apiCreateMatch, apiDeleteMatch, apiCreatePlayer, apiCreateTrainer, apiCreateTeam,
     apiUpdateTeam, apiDeleteTeam, apiGetDiscordUsers, apiSetDiscordUserRoles,
     apiCreateDiscordInvite, apiRevokeDiscordUserAccess, apiGetDiscordInvites, apiRevokeDiscordInvite,
-    apiGetDiscordUser, apiGetPlayerSyncStatus, apiGetAdminAuditLogs
+    apiGetDiscordUser, apiGetPlayerSyncStatus, apiGetAdminAuditLogs,
+    apiSetCompetitionVisibility
 } from './api.js';
 
 let discordUserAccounts = [];
@@ -81,7 +82,7 @@ export function submitCreateMatch() {
         homePenaltyScore: 0,
         awayPenaltyScore: 0,
         stadium: stadiumVal,
-        matchDate: dateVal || new Date().toISOString(),
+        matchDate: dateVal || 'TBD',
         recorder: '',
         status: "Scheduled",
         homeKitSelected: "Home",
@@ -163,17 +164,44 @@ export async function submitAdminAddPlayer() {
     if (state.activeTab === 'teams') renderTeams();
 }
 
-export function toggleExtraSection(secId, isShown) {
-    const btn = document.getElementById(`comp-btn-${secId}`);
-    if (btn) {
-        btn.classList.toggle('hidden', !isShown);
+export async function toggleExtraSection(secId, isShown) {
+    if (!['nadstavba', 'baraz', 'molcup'].includes(secId) || !['Admin'].includes(state.currentUserRole)) {
+        showToast('Viditelnost soutěže může měnit pouze administrátor.', true);
+        renderAdmin();
+        return;
     }
-    showToast(`Sekce ${secId.toUpperCase()} byla ${isShown ? 'ZOBRAZENA' : 'SCHOVÁNA'}.`);
+
+    const checkbox = document.getElementById(`toggle-sec-${secId}`);
+    const btn = document.getElementById(`comp-btn-${secId}`);
+    if (checkbox) checkbox.disabled = true;
+    try {
+        const visible = await apiSetCompetitionVisibility(secId, Boolean(isShown));
+        state.competitionVisibility[secId] = visible;
+        if (btn) btn.classList.toggle('hidden', !visible);
+        if (!visible && state.activeCompTab === secId) {
+            switchCompTab('liga1');
+        } else {
+            renderCompetitions();
+        }
+        showToast(`Sekce ${secId.toUpperCase()} byla ${visible ? 'ZOBRAZENA' : 'SCHOVÁNA'}.`);
+    } catch (error) {
+        if (checkbox) checkbox.checked = Boolean(state.competitionVisibility[secId]);
+        showToast(`Viditelnost sekce se nepodařilo uložit: ${error.message}`, true);
+    } finally {
+        if (checkbox) checkbox.disabled = false;
+    }
 }
 
 export function renderAdmin() {
     updateAdminStats();
     updateCreateMatchTeams();
+    ['nadstavba', 'baraz', 'molcup'].forEach(section => {
+        const checkbox = document.getElementById(`toggle-sec-${section}`);
+        const button = document.getElementById(`comp-btn-${section}`);
+        const isShown = Boolean(state.competitionVisibility[section]);
+        if (checkbox) checkbox.checked = isShown;
+        if (button) button.classList.toggle('hidden', !isShown);
+    });
 
     const syncPanel = document.getElementById('admin-player-sync-panel');
     const playerFields = document.getElementById('admin-add-player-fields');

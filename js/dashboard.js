@@ -83,7 +83,7 @@ function getMatchCleanSheetPlayerIds(match) {
 
         intervals.forEach(interval => {
             const conceded = events.some(event => {
-                if (event.type !== 'Goal') return false;
+                if (event.type !== 'Goal' || event.goalType === 'Penalty') return false;
                 const scoringSide = event.teamSide ||
                     (match.homeRoster?.some(player => player.playerId === event.playerId) ? 'home' : 'away');
                 const minute = matchMinute(event.timeStr || `${event.minute || 0}:00`);
@@ -223,7 +223,7 @@ function renderDashboardLeaderboards() {
         <section class="rounded-xl border border-[#1e307d] bg-[#13236b]/40 p-4">
             <h3 class="mb-3 flex items-center justify-between gap-3 border-b border-[#1e307d] pb-2 font-black text-sm text-cyan-300">
                 <span><i class="fa-solid fa-stopwatch mr-2"></i>Nejvíce odehraných utkání</span>
-                <button type="button" aria-label="Otevřít statistiky hráčů" title="Otevřít statistiky hráčů" onclick="openStatsModal('matchesPlayed')" class="shrink-0 rounded-lg p-2 text-cyan-300 transition hover:bg-white/10">
+                <button type="button" aria-label="Otevřít statistiky hráčů" title="Otevřít statistiky hráčů" onclick="openStatsModal('matchesPlayed')" class="shrink-0 rounded-lg p-2 font-normal text-cyan-300 transition hover:bg-white/10">
                     <i class="fa-solid fa-up-right-from-square"></i>
                 </button>
             </h3>
@@ -540,10 +540,17 @@ function renderDashboardMatchCards(matchList) {
         const home = teamsData.find(t => t.id === m.homeTeamId);
         const away = teamsData.find(t => t.id === m.awayTeamId);
 
-        const d = (m.matchDate && m.matchDate !== 'TBA') ? new Date(m.matchDate) : null;
-        const dateFormatted = m.matchDate === 'TBA' ? 'TBA' : (d ? `${d.getDate()}.${d.getMonth() + 1}.` : 'TBD');
-        const timeFormatted = m.matchDate === 'TBA' ? 'TBA' : (d ? d.toLocaleTimeString('cs-CZ', {hour: '2-digit', minute:'2-digit'}) : 'TBD');
+        const hasDate = m.matchDate && !['TBA', 'TBD'].includes(String(m.matchDate).trim().toUpperCase());
+        const d = hasDate ? new Date(m.matchDate) : null;
+        const dateFormatted = d && !Number.isNaN(d.getTime()) ? `${d.getDate()}.${d.getMonth() + 1}.` : 'TBD';
+        const timeFormatted = d && !Number.isNaN(d.getTime())
+            ? d.toLocaleTimeString('cs-CZ', {hour: '2-digit', minute:'2-digit'})
+            : 'TBD';
         const stadiumFormatted = m.stadium || 'Stadion neuveden';
+        const penaltyResult = m.status === 'Completed' && m.periodChecks?.penaltiesEnded &&
+            Number(m.homePenaltyScore) !== Number(m.awayPenaltyScore)
+            ? `<span class="mt-1 block text-[9px] font-bold text-amber-300">pen. ${m.homePenaltyScore}:${m.awayPenaltyScore}</span>`
+            : '';
 
         return `
             <div class="bg-[#0e1a4f] p-4 rounded-xl border border-[#1e307d] flex flex-col sm:flex-row justify-between items-center gap-4 shadow-md hover:border-[#aefb12]/50 transition">
@@ -551,6 +558,7 @@ function renderDashboardMatchCards(matchList) {
                     <div class="w-5/12 min-w-0 overflow-hidden text-right font-bold text-sm text-white sm:w-32"><span class="inline-flex min-w-0 max-w-full items-center justify-end gap-2 whitespace-nowrap">${home ? getTeamProfileLinkMarkup(home) : ''}</span></div>
                     <div class="px-3 py-1 bg-[#13236b] rounded-lg text-[#aefb12] font-mono font-black text-sm border border-[#1e307d]">
                         ${m.status === 'Completed' || m.status === 'In_Progress' ? `${m.homeScore} :${m.awayScore}` : (m.status === 'Postponed' ? 'Odloženo' : 'VS')}
+                        ${penaltyResult}
                     </div>
                     <div class="w-5/12 min-w-0 overflow-hidden font-bold text-sm text-white sm:w-32">${away ? getTeamProfileLinkMarkup(away) : ''}</div>
                 </div>
@@ -598,9 +606,10 @@ export function renderDashboard() {
 
     const upcomingMatches = matchesData
         .filter(match => match.status === 'Scheduled')
+        .filter(match => match.matchDate && !['TBA', 'TBD'].includes(String(match.matchDate).trim().toUpperCase()) && !Number.isNaN(Date.parse(match.matchDate)))
         .sort((a, b) => {
-            const dateA = a.matchDate && a.matchDate !== 'TBA' ? Date.parse(a.matchDate) : Number.POSITIVE_INFINITY;
-            const dateB = b.matchDate && b.matchDate !== 'TBA' ? Date.parse(b.matchDate) : Number.POSITIVE_INFINITY;
+            const dateA = Date.parse(a.matchDate);
+            const dateB = Date.parse(b.matchDate);
             return dateA - dateB || Number(a.id) - Number(b.id);
         })
         .slice(0, 3);

@@ -84,6 +84,8 @@ import {
     submitGoal,
     renderSubstitutionPlayerOptions,
     submitSubstitution,
+    renderPenaltyKickOptions,
+    submitPenaltyKick,
     openCardForm,
     closeCardForm,
     onCardTeamChange,
@@ -213,6 +215,22 @@ window.addEventListener('beforeunload', event => {
     event.returnValue = '';
 });
 
+document.addEventListener('click', event => {
+    const button = event.target instanceof Element ? event.target.closest('button') : null;
+    if (!(button instanceof HTMLButtonElement) || button.disabled) return;
+
+    window.__cvflActionButton = button;
+    window.setTimeout(() => {
+        if (window.__cvflActionButton === button) window.__cvflActionButton = null;
+        if (button.dataset.cvflPendingRequests !== undefined) return;
+        button.disabled = true;
+        window.setTimeout(() => {
+            if (button.dataset.cvflActionLocked === 'true') return;
+            button.disabled = false;
+        }, 350);
+    }, 0);
+}, true);
+
 window.addEventListener('error', event => {
     if (event.target !== window) return;
     console.error('Chyba aplikace:', event.error || event.message);
@@ -312,6 +330,8 @@ Object.assign(window, {
     submitGoal,
     renderSubstitutionPlayerOptions,
     submitSubstitution,
+    renderPenaltyKickOptions,
+    submitPenaltyKick,
     openCardForm,
     closeCardForm,
     onCardTeamChange,

@@ -4,7 +4,7 @@
 
 import { state, teamsData, playersData, trainersData, matchesData, suspensionsData } from './state.js';
 import { openModal, closeSpecificModal } from './ui.js';
-import { getTeamNameMarkup, escapeTeamName } from './team-logo.js';
+import { getTeamNameMarkup, getTeamProfileLinkMarkup, escapeTeamName } from './team-logo.js';
 import { apiGetRobloxPlayerAvatar } from './api.js';
 
 /**
@@ -68,7 +68,7 @@ function getPlayerProfileStats(playerId, matchHistory) {
 
             intervals.forEach(interval => {
                 const conceded = events.some(event => {
-                    if (event.type !== 'Goal') return false;
+                    if (event.type !== 'Goal' || event.goalType === 'Penalty') return false;
                     const scoringSide = event.teamSide ||
                         (match.homeRoster?.some(player => Number(player.playerId) === Number(event.playerId)) ? 'home' : 'away');
                     const minute = matchMinute(event.timeStr || `${event.minute || 0}:00`);
@@ -124,7 +124,9 @@ function getPlayerMatchHistory(playerId) {
             const redCards = events.filter(event =>
                 Number(event.playerId) === Number(playerId) && ['Red_Card', 'Second_Yellow_Card'].includes(event.type)
             ).length;
-            const date = match.matchDate && match.matchDate !== 'TBA' ? new Date(match.matchDate) : null;
+            const date = match.matchDate && !['TBA', 'TBD'].includes(String(match.matchDate).trim().toUpperCase())
+                ? new Date(match.matchDate)
+                : null;
 
             return {
                 match,
@@ -172,6 +174,63 @@ export function renderSelectedTeamView() {
 
     const roster = playersData.filter(p => !p.isArchived && p.teamId === team.id);
     const trainers = trainersData.filter(trainer => trainer.teamId === team.id);
+    const teamMatches = matchesData.filter(match =>
+        Number(match.homeTeamId) === Number(team.id) || Number(match.awayTeamId) === Number(team.id)
+    );
+    const matchTimestamp = match => {
+        const timestamp = Date.parse(match.matchDate || '');
+        return Number.isNaN(timestamp) ? 0 : timestamp;
+    };
+    const recentMatches = teamMatches
+        .filter(match => match.status === 'Completed')
+        .sort((a, b) => matchTimestamp(b) - matchTimestamp(a) || Number(b.id) - Number(a.id))
+        .slice(0, 5);
+    const upcomingMatches = teamMatches
+        .filter(match => match.status === 'Scheduled' && match.matchDate &&
+            !['TBA', 'TBD'].includes(String(match.matchDate).trim().toUpperCase()) &&
+            !Number.isNaN(Date.parse(match.matchDate)))
+        .sort((a, b) => matchTimestamp(a) - matchTimestamp(b) || Number(a.id) - Number(b.id))
+        .slice(0, 5);
+    const renderTeamMatches = (matches, completed) => matches.length ? `
+        <div class="grid grid-cols-1 gap-2 lg:grid-cols-2">
+            ${matches.map(match => {
+                const isHome = Number(match.homeTeamId) === Number(team.id);
+                const opponent = teamsData.find(candidate =>
+                    Number(candidate.id) === Number(isHome ? match.awayTeamId : match.homeTeamId)
+                );
+                const date = new Date(match.matchDate);
+                const dateText = Number.isNaN(date.getTime())
+                    ? 'Datum neuvedeno'
+                    : `${date.toLocaleDateString('cs-CZ')} · ${date.toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' })}`;
+                const teamScore = Number(isHome ? match.homeScore : match.awayScore) || 0;
+                const opponentScore = Number(isHome ? match.awayScore : match.homeScore) || 0;
+                const hasPenaltyWinner = match.status === 'Completed' &&
+                    match.periodChecks?.penaltiesEnded &&
+                    Number.isInteger(Number(match.homePenaltyScore)) &&
+                    Number.isInteger(Number(match.awayPenaltyScore)) &&
+                    Number(match.homePenaltyScore) !== Number(match.awayPenaltyScore);
+                const teamPenaltyScore = Number(isHome ? match.homePenaltyScore : match.awayPenaltyScore) || 0;
+                const opponentPenaltyScore = Number(isHome ? match.awayPenaltyScore : match.homePenaltyScore) || 0;
+                const round = match.cupStage || `${match.round}. kolo`;
+                return `<article class="flex min-w-0 items-center justify-between gap-3 rounded-lg border border-[#1e307d] bg-[#13236b]/60 p-3">
+                    <div class="min-w-0">
+                        <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-gray-400">
+                            <span>${escapeTeamName(match.competition)}</span><span>${escapeTeamName(round)}</span>
+                        </div>
+                        <div class="mt-1 flex min-w-0 items-center gap-1.5 text-xs font-bold text-white">
+                            <span class="shrink-0">${isHome ? 'Doma' : 'Venku'} vs</span>
+                            <span class="min-w-0 overflow-hidden">${opponent ? getTeamProfileLinkMarkup(opponent, { truncate: true }) : 'Soupeř'}</span>
+                        </div>
+                        <div class="mt-1 text-[10px] text-gray-400">${completed ? dateText : `<i class="fa-regular fa-calendar mr-1"></i>${dateText}`}</div>
+                    </div>
+                    <button type="button" onclick="openMatchProtocol(${match.id})" class="shrink-0 rounded-lg border border-[#1e307d] bg-[#0e1a4f] px-3 py-2 text-center transition hover:border-[#aefb12]" aria-label="Otevřít zápis utkání">
+                        <span class="block font-mono text-lg font-black ${completed ? 'text-[#aefb12]' : 'text-gray-300'}">${completed ? `${teamScore}:${opponentScore}` : 'Zápis'}</span>
+                        ${hasPenaltyWinner ? `<span class="text-[9px] font-bold text-amber-300">pen. ${teamPenaltyScore}:${opponentPenaltyScore}</span>` : completed ? '<span class="text-[9px] font-bold text-gray-400">Zápis</span>' : '<span class="text-[9px] font-bold text-gray-400">Program</span>'}
+                    </button>
+                </article>`;
+            }).join('')}
+        </div>
+    ` : '<p class="rounded-lg border border-[#1e307d] bg-[#13236b]/40 p-3 text-center text-xs text-gray-400">Zatím žádná utkání.</p>';
 
     container.innerHTML = `
         <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-[#1e307d] pb-4">
@@ -200,6 +259,17 @@ export function renderSelectedTeamView() {
                 ${trainers.length === 0 ? '<p class="p-2 text-xs text-gray-400">Tým zatím nemá členy realizačního týmu.</p>' : ''}
             </div>
         </div>
+
+        <section class="grid grid-cols-1 gap-5 xl:grid-cols-2">
+            <div class="space-y-3">
+                <h3 class="font-bold text-sm text-white"><i class="fa-solid fa-clock-rotate-left mr-2 text-[#aefb12]"></i>Poslední zápasy</h3>
+                ${renderTeamMatches(recentMatches, true)}
+            </div>
+            <div class="space-y-3">
+                <h3 class="font-bold text-sm text-white"><i class="fa-regular fa-calendar mr-2 text-[#05fda3]"></i>Program</h3>
+                ${renderTeamMatches(upcomingMatches, false)}
+            </div>
+        </section>
 
         <div>
             <h3 class="font-bold text-sm mb-3 text-white">Hráčský Kádr (${roster.length} Hráčů)</h3>

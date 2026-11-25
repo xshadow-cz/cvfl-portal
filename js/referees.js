@@ -129,7 +129,8 @@ function getRefereeMatchHistory(referee) {
             yellowCards: item.yellowCards,
             redCards: item.redCards,
             penalties: item.penalties,
-            timestamp: item.match.matchDate && item.match.matchDate !== 'TBA'
+            timestamp: item.match.matchDate &&
+                !['TBA', 'TBD'].includes(String(item.match.matchDate).trim().toUpperCase())
                 ? Date.parse(item.match.matchDate) || 0
                 : 0
         }));
@@ -295,10 +296,15 @@ export function renderRefereeAssignments() {
     const container = document.getElementById('referee-assignments-list');
     if (!container) return;
 
-    const unfinishedMatches = matchesData.filter(m => m.status !== 'Completed');
+    const unfinishedMatches = matchesData.filter(m =>
+        m.status !== 'Completed' &&
+        m.matchDate &&
+        !['TBA', 'TBD'].includes(String(m.matchDate).trim().toUpperCase()) &&
+        !Number.isNaN(Date.parse(m.matchDate))
+    );
 
     if (unfinishedMatches.length === 0) {
-        container.innerHTML = `<div class="p-4 text-center text-gray-400 text-xs">Všechny vytvořené zápasy mají kompletní nominaci nebo zápis.</div>`;
+        container.innerHTML = `<div class="p-4 text-center text-gray-400 text-xs">Nejsou žádná utkání s určeným termínem, která by čekala na nominaci.</div>`;
         return;
     }
 

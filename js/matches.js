@@ -60,11 +60,18 @@ export function renderMatches() {
         const away = teamsData.find(t => t.id === m.awayTeamId);
 
         const roundText = getMatchRoundLabel(m);
-        const d = (m.matchDate && m.matchDate !== 'TBA') ? new Date(m.matchDate) : null;
-        const matchDateFormatted = m.matchDate === 'TBA' ? 'TBA' : (d ? `${d.getDate()}.${d.getMonth() + 1}. ${d.toLocaleTimeString('cs-CZ', {hour: '2-digit', minute:'2-digit'})}` : 'Termín TBD');
+        const hasDate = m.matchDate && !['TBA', 'TBD'].includes(String(m.matchDate).trim().toUpperCase());
+        const d = hasDate ? new Date(m.matchDate) : null;
+        const matchDateFormatted = d && !Number.isNaN(d.getTime())
+            ? `${d.getDate()}.${d.getMonth() + 1}. ${d.toLocaleTimeString('cs-CZ', {hour: '2-digit', minute:'2-digit'})}`
+            : 'TBD';
+        const penaltyResult = m.status === 'Completed' && m.periodChecks?.penaltiesEnded &&
+            Number(m.homePenaltyScore) !== Number(m.awayPenaltyScore)
+            ? `<span class="text-[9px] font-bold text-amber-300">pen. ${m.homePenaltyScore}:${m.awayPenaltyScore}</span>`
+            : '';
 
         return `
-            <div class="bg-[#0e1a4f] p-5 rounded-xl border border-[#1e307d] shadow-md flex flex-col justify-between space-y-4">
+            <div class="min-w-0 bg-[#0e1a4f] p-4 sm:p-5 rounded-xl border border-[#1e307d] shadow-md flex flex-col justify-between space-y-4">
                 <div class="flex justify-between items-center text-xs">
                     <span class="font-bold text-[#aefb12]">${escapeTeamName(m.competition)} — ${escapeTeamName(roundText)}</span>
                     <span class="text-gray-400">${m.stadium ? `<i class="fa-solid fa-location-dot mr-1"></i>${escapeTeamName(m.stadium)} | ` : ''}${matchDateFormatted}</span>
@@ -73,11 +80,12 @@ export function renderMatches() {
                     <div class="w-5/12 min-w-0 overflow-hidden text-center font-bold text-sm text-white"><div class="inline-flex min-w-0 max-w-full justify-center">${home ? getTeamProfileLinkMarkup(home) : ''}</div></div>
                     <div class="text-center font-black text-xl text-[#aefb12] px-3 py-1 bg-[#13236b] border border-[#1e307d] rounded flex flex-col items-center">
                         <span>${m.status === 'Completed' || m.status === 'In_Progress' ? `${m.homeScore} :${m.awayScore}` : (m.status === 'Postponed' ? 'Odloženo' : 'VS')}</span>
+                        ${penaltyResult}
                         ${m.isForfeited ? '<span class="text-[9px] text-amber-400 uppercase font-black tracking-tight">Kontumováno</span>' : ''}
                     </div>
                     <div class="w-5/12 min-w-0 overflow-hidden text-center font-bold text-sm text-white"><div class="inline-flex min-w-0 max-w-full justify-center">${away ? getTeamProfileLinkMarkup(away) : ''}</div></div>
                 </div>
-                <div class="flex justify-between items-center border-t border-[#1e307d] pt-3 text-xs">
+                <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 border-t border-[#1e307d] pt-3 text-xs">
                     <div class="flex items-center gap-2">
                         <span class="text-gray-400"><i class="fa-solid fa-user-ninja mr-1"></i> ${escapeTeamName(m.referee || 'Nenominován')}</span>
                         ${m.isForfeited && ['Admin', 'DK'].includes(state.currentUserRole) ? `
@@ -221,8 +229,8 @@ export function openMatchProtocol(matchId, { updateHistory = true } = {}) {
     const canEditDelegate = isDelegate || state.currentUserRole === 'Admin';
 
     const dateObj = (match.matchDate && match.matchDate !== 'TBA') ? new Date(match.matchDate) : null;
-    const dateOnlyFormatted = match.matchDate === 'TBA' ? 'TBA' : (dateObj ? `${dateObj.getDate()}.${dateObj.getMonth() + 1}.` : '16.10.');
-    const timeOnlyFormatted = match.matchDate === 'TBA' ? 'TBA' : (dateObj ? dateObj.toLocaleTimeString('cs-CZ', {hour: '2-digit', minute:'2-digit'}) : '18:00');
+    const dateOnlyFormatted = ['TBA', 'TBD'].includes(String(match.matchDate || '').toUpperCase()) ? 'TBD' : (dateObj ? `${dateObj.getDate()}.${dateObj.getMonth() + 1}.` : 'TBD');
+    const timeOnlyFormatted = ['TBA', 'TBD'].includes(String(match.matchDate || '').toUpperCase()) ? 'TBD' : (dateObj ? dateObj.toLocaleTimeString('cs-CZ', {hour: '2-digit', minute:'2-digit'}) : 'TBD');
 
     let teamMgrNotice = '';
     if (isTeamMgr) {
@@ -453,6 +461,54 @@ export function openMatchProtocol(matchId, { updateHistory = true } = {}) {
                         <input type="number" min="0" max="99" value="${match.awayPenaltyScore}" ${!canEditEverything || match.isLocked || !penaltiesCanBeRecorded || !match.periodChecks.penaltiesStarted ? 'disabled' : ''} onchange="updatePenaltyScores(${match.id})" id="away-penalty-score" class="mt-1 w-full bg-[#0e1a4f] border border-[#1e307d] rounded p-2 text-white disabled:opacity-50">
                     </label>
                 </div>
+                <div class="mt-4 border-t border-[#1e307d] pt-4">
+                    <h4 class="mb-3 text-xs font-black uppercase tracking-wide text-white">Kopy penaltového rozstřelu</h4>
+                    ${canEditEverything && !match.isLocked && match.periodChecks.penaltiesStarted && !match.periodChecks.penaltiesEnded ? `
+                        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                            <label class="text-gray-300">Kopající tým
+                                <select id="penalty-kick-team-${match.id}" onchange="renderPenaltyKickOptions(${match.id})" class="mt-1 w-full rounded border border-[#1e307d] bg-[#0e1a4f] p-2 text-white">
+                                    <option value="home">${home ? escapeTeamName(home.name) : 'Domácí'}</option>
+                                    <option value="away">${away ? escapeTeamName(away.name) : 'Hosté'}</option>
+                                </select>
+                            </label>
+                            <label class="text-gray-300">Kopající hráč
+                                <select id="penalty-kick-player-${match.id}" class="mt-1 w-full rounded border border-[#1e307d] bg-[#0e1a4f] p-2 text-white"></select>
+                            </label>
+                            <label class="text-gray-300">Brankář soupeře (volitelné)
+                                <select id="penalty-kick-goalkeeper-${match.id}" class="mt-1 w-full rounded border border-[#1e307d] bg-[#0e1a4f] p-2 text-white"></select>
+                            </label>
+                            <label class="flex items-center gap-2 self-end rounded border border-[#1e307d] bg-[#0e1a4f] p-2 text-gray-200">
+                                <input id="penalty-kick-scored-${match.id}" type="checkbox" class="h-4 w-4 accent-[#aefb12]">
+                                Proměněná penalta
+                            </label>
+                        </div>
+                        <button type="button" onclick="submitPenaltyKick(${match.id})" class="mt-3 w-full rounded bg-[#aefb12] px-4 py-2 font-black text-[#13236b] transition hover:brightness-110 sm:w-auto">
+                            <i class="fa-solid fa-bullseye mr-1"></i> Zapsat kop
+                        </button>
+                    ` : '<p class="text-xs text-gray-400">Kopy lze zapisovat během probíhajícího penaltového rozstřelu.</p>'}
+                    <div class="mt-3 overflow-x-auto">
+                        <table class="w-full min-w-[34rem] text-left text-xs">
+                            <thead class="bg-[#0e1a4f] text-gray-400"><tr><th class="p-2">Kopající tým</th><th class="p-2">Hráč</th><th class="p-2">Proti</th><th class="p-2">Brankář</th><th class="p-2">Výsledek</th><th class="p-2 text-right">Akce</th></tr></thead>
+                            <tbody class="divide-y divide-[#1e307d]">
+                                ${match.events.filter(event => event.type === 'Penalty_Kick').map(event => {
+                                    const kicker = playersData.find(player => Number(player.id) === Number(event.playerId));
+                                    const opponent = teamsData.find(team => Number(team.id) === Number(event.opposingTeamId));
+                                    const goalkeeper = playersData.find(player => Number(player.id) === Number(event.opposingGoalkeeperId));
+                                    const kickingTeam = event.teamSide === 'home' ? home : away;
+                                    return `<tr>
+                                        <td class="p-2 font-bold ${event.teamSide === 'home' ? 'text-[#aefb12]' : 'text-[#05fda3]'}">${escapeTeamName(kickingTeam?.name || 'Tým')}</td>
+                                        <td class="p-2 font-bold text-white">${escapeTeamName(kicker?.robloxNick || 'Hráč')}</td>
+                                        <td class="p-2 text-gray-300">${escapeTeamName(opponent?.name || 'Soupeř')}</td>
+                                        <td class="p-2 text-gray-300">${escapeTeamName(goalkeeper?.robloxNick || 'Neuveden')}</td>
+                                        <td class="p-2 font-bold ${event.scored ? 'text-[#aefb12]' : 'text-red-300'}">${event.scored ? 'Proměněna' : 'Neúspěšná'}</td>
+                                        <td class="p-2 text-right">${canEditEverything && !match.isLocked ? `<button type="button" onclick="deleteMatchEvent(${match.id}, ${event.id})" class="rounded bg-[#f33332]/20 px-2 py-1 font-bold text-[#f33332]">Smazat</button>` : ''}</td>
+                                    </tr>`;
+                                }).join('')}
+                                ${match.events.some(event => event.type === 'Penalty_Kick') ? '' : '<tr><td colspan="6" class="p-3 text-center text-gray-500">Zatím nejsou zaznamenané žádné kopy.</td></tr>'}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
                 ${!penaltiesCanBeRecorded ? '<p class="text-gray-400">Penaltový rozstřel zatím nelze zaznamenat.</p>' : ''}
                 ${match.periodChecks.penaltiesEnded && match.homePenaltyScore !== match.awayPenaltyScore ? '<p class="font-black text-[#aefb12]">Vítěz penaltového rozstřelu: ' + escapeTeamName(match.homePenaltyScore > match.awayPenaltyScore ? home?.name || 'Domácí tým' : away?.name || 'Hostující tým') + '</p>' : ''}
             </div>
@@ -470,7 +526,7 @@ export function openMatchProtocol(matchId, { updateHistory = true } = {}) {
                             <option value="away">Hosté (${away ? escapeTeamName(away.name) : 'Hosté'})</option>
                         </select>
                     </label>
-                    <label class="text-gray-300">Hráč odchází ze hřiště
+                    <label class="text-gray-300">Hráč odchází ze hřiště (volitelné)
                         <select id="sub-out-select" class="mt-1 w-full rounded border border-[#1e307d] bg-[#0e1a4f] p-2 text-white"></select>
                     </label>
                     <label class="text-gray-300">Hráč nastupuje
@@ -491,7 +547,7 @@ export function openMatchProtocol(matchId, { updateHistory = true } = {}) {
                             const team = e.teamSide === 'home' ? home : away;
                             const outgoing = playersData.find(player => player.id === e.playerOutId);
                             const incoming = playersData.find(player => player.id === e.playerInId);
-                            return `<tr><td class="p-2 font-bold ${e.teamSide === 'home' ? 'text-[#aefb12]' : 'text-[#05fda3]'}">${team ? escapeTeamName(team.name) : 'Tým'}</td><td class="p-2 font-mono text-gray-300">${escapeTeamName(e.timeStr || '')}</td><td class="p-2 text-white">${escapeTeamName(outgoing?.robloxNick || 'Hráč')}</td><td class="p-2 text-white">${escapeTeamName(incoming?.robloxNick || 'Hráč')}</td><td class="p-2 text-right">${canEditEverything && !match.isLocked ? `<button onclick="deleteMatchEvent(${match.id}, ${e.id})" class="rounded bg-[#f33332]/20 px-2 py-1 font-bold text-[#f33332]">Smazat</button>` : ''}</td></tr>`;
+                            return `<tr><td class="p-2 font-bold ${e.teamSide === 'home' ? 'text-[#aefb12]' : 'text-[#05fda3]'}">${team ? escapeTeamName(team.name) : 'Tým'}</td><td class="p-2 font-mono text-gray-300">${escapeTeamName(e.timeStr || '')}</td><td class="p-2 text-white">${escapeTeamName(outgoing?.robloxNick || 'Bez odchozího hráče')}</td><td class="p-2 text-white">${escapeTeamName(incoming?.robloxNick || 'Hráč')}</td><td class="p-2 text-right">${canEditEverything && !match.isLocked ? `<button onclick="deleteMatchEvent(${match.id}, ${e.id})" class="rounded bg-[#f33332]/20 px-2 py-1 font-bold text-[#f33332]">Smazat</button>` : ''}</td></tr>`;
                         }).join('')}
                     </tbody>
                 </table>
@@ -724,6 +780,7 @@ export function openMatchProtocol(matchId, { updateHistory = true } = {}) {
 
     openModal('modal-match-protocol');
     renderSubstitutionPlayerOptions(matchId);
+    renderPenaltyKickOptions(matchId);
 }
 
 function matchMinute(timeStr) {
@@ -761,24 +818,99 @@ export function renderSubstitutionPlayerOptions(matchId) {
         const player = playersData.find(person => person.id === item.playerId);
         return `<option value="${item.playerId}">${escapeTeamName(player?.robloxNick || 'Hráč')}</option>`;
     }).join('');
-    outSelect.innerHTML = options;
+    outSelect.innerHTML = `<option value="">Bez odchozího hráče</option>${options}`;
     inSelect.innerHTML = options;
+}
+
+export function renderPenaltyKickOptions(matchId) {
+    const match = matchesData.find(item => Number(item.id) === Number(matchId));
+    const sideSelect = document.getElementById(`penalty-kick-team-${matchId}`);
+    const playerSelect = document.getElementById(`penalty-kick-player-${matchId}`);
+    const goalkeeperSelect = document.getElementById(`penalty-kick-goalkeeper-${matchId}`);
+    if (!match || !sideSelect || !playerSelect || !goalkeeperSelect) return;
+
+    const kickingSide = sideSelect.value === 'away' ? 'away' : 'home';
+    const kickingRoster = kickingSide === 'home' ? match.homeRoster : match.awayRoster;
+    const opposingRoster = kickingSide === 'home' ? match.awayRoster : match.homeRoster;
+    const playerOptions = kickingRoster.map(entry => {
+        const player = playersData.find(person => Number(person.id) === Number(entry.playerId));
+        return player ? `<option value="${player.id}">${escapeTeamName(player.robloxNick)}</option>` : '';
+    }).join('');
+    const goalkeeperOptions = opposingRoster.filter(entry => entry.isGK).map(entry => {
+        const player = playersData.find(person => Number(person.id) === Number(entry.playerId));
+        return player ? `<option value="${player.id}">${escapeTeamName(player.robloxNick)}</option>` : '';
+    }).join('');
+
+    playerSelect.innerHTML = `<option value="">Vyberte kopajícího hráče</option>${playerOptions}`;
+    goalkeeperSelect.innerHTML = `<option value="">Neuveden</option>${goalkeeperOptions}`;
+}
+
+export function submitPenaltyKick(matchId) {
+    const match = matchesData.find(item => Number(item.id) === Number(matchId));
+    const side = document.getElementById(`penalty-kick-team-${matchId}`)?.value;
+    const playerId = Number(document.getElementById(`penalty-kick-player-${matchId}`)?.value);
+    const goalkeeperValue = document.getElementById(`penalty-kick-goalkeeper-${matchId}`)?.value;
+    const goalkeeperId = goalkeeperValue ? Number(goalkeeperValue) : null;
+    const scored = Boolean(document.getElementById(`penalty-kick-scored-${matchId}`)?.checked);
+    if (!match || !['home', 'away'].includes(side) || !Number.isInteger(playerId) || playerId <= 0) {
+        showToast('Vyberte hráče, který penaltu kopal.', true);
+        return;
+    }
+    if (!match.periodChecks?.penaltiesStarted || match.periodChecks?.penaltiesEnded || match.isLocked) {
+        showToast('Kopy lze zapisovat pouze během odemčeného penaltového rozstřelu.', true);
+        return;
+    }
+
+    const kickingRoster = side === 'home' ? match.homeRoster : match.awayRoster;
+    const opposingRoster = side === 'home' ? match.awayRoster : match.homeRoster;
+    if (!kickingRoster.some(entry => Number(entry.playerId) === playerId)) {
+        showToast('Kopající hráč musí být na soupisce vybraného týmu.', true);
+        return;
+    }
+    if (goalkeeperId !== null && !opposingRoster.some(entry => entry.isGK && Number(entry.playerId) === goalkeeperId)) {
+        showToast('Vybraný brankář musí být v základní soupisce soupeře označen jako brankář.', true);
+        return;
+    }
+
+    const opposingTeamId = side === 'home' ? match.awayTeamId : match.homeTeamId;
+    const eventId = Date.now();
+    match.events.push({
+        id: eventId,
+        type: 'Penalty_Kick',
+        teamSide: side,
+        playerId,
+        opposingTeamId,
+        opposingGoalkeeperId: goalkeeperId,
+        scored
+    });
+    if (scored) {
+        const scoreKey = side === 'home' ? 'homePenaltyScore' : 'awayPenaltyScore';
+        match[scoreKey] = (Number(match[scoreKey]) || 0) + 1;
+    }
+    state.unsavedChangesGuard = true;
+    showToast(scored ? 'Proměněná penalta byla zaznamenána.' : 'Neúspěšný kop byl zaznamenán.');
+    const activeTab = state.activeFISTab || 'hraci-casti';
+    openMatchProtocol(matchId);
+    switchFISTab(activeTab);
 }
 
 export function submitSubstitution(matchId) {
     const match = matchesData.find(item => item.id === matchId);
     const side = document.getElementById('sub-team-select')?.value;
-    const playerOutId = Number.parseInt(document.getElementById('sub-out-select')?.value || '', 10);
+    const outgoingValue = document.getElementById('sub-out-select')?.value || '';
+    const playerOutId = outgoingValue ? Number.parseInt(outgoingValue, 10) : null;
     const playerInId = Number.parseInt(document.getElementById('sub-in-select')?.value || '', 10);
     const timeStr = document.getElementById('sub-time-input')?.value.trim();
-    if (!match || (side !== 'home' && side !== 'away') || !Number.isInteger(playerOutId) ||
-        !Number.isInteger(playerInId) || playerOutId === playerInId) {
-        showToast('Vyberte různé hráče, kteří se střídají.', true);
+    if (!match || (side !== 'home' && side !== 'away') ||
+        (playerOutId !== null && !Number.isInteger(playerOutId)) ||
+        !Number.isInteger(playerInId) || (playerOutId !== null && playerOutId === playerInId)) {
+        showToast('Vyberte hráče, který nastupuje; odchozího hráče můžete vynechat.', true);
         return;
     }
     const roster = side === 'home' ? match.homeRoster : match.awayRoster;
-    if (!roster.some(item => item.playerId === playerOutId) || !roster.some(item => item.playerId === playerInId)) {
-        showToast('Oba hráči musí být na soupisce vybraného týmu.', true);
+    if ((playerOutId !== null && !roster.some(item => Number(item.playerId) === playerOutId)) ||
+        !roster.some(item => Number(item.playerId) === playerInId)) {
+        showToast('Nastupující hráč a případný odchozí hráč musí být na soupisce vybraného týmu.', true);
         return;
     }
     match.events.push({
@@ -1105,6 +1237,9 @@ export function updatePeriodChecks(matchId) {
         ...(penaltiesStarted ? { penaltiesStarted: penaltiesStarted.checked } : {}),
         ...(penaltiesEnded ? { penaltiesEnded: penaltiesEnded.checked } : {})
     };
+    const cupRequiresWinner = match.competition === 'MOL Cup' &&
+        match.homeScore === match.awayScore &&
+        !match.periodChecks.penaltiesEnded;
     
     // Logika aktualizace stavu utkání (včetně prodloužení a penalt)
     if (match.periodChecks.penaltiesEnded) {
@@ -1112,11 +1247,11 @@ export function updatePeriodChecks(matchId) {
     } else if (match.periodChecks.penaltiesStarted) {
         match.status = 'In_Progress';
     } else if (match.periodChecks.et2Ended) {
-        match.status = 'Completed';
+        match.status = cupRequiresWinner ? 'In_Progress' : 'Completed';
     } else if (match.periodChecks.et2Started || match.periodChecks.et1Ended || match.periodChecks.et1Started) {
         match.status = 'In_Progress';
     } else if (match.periodChecks.h2Ended) {
-        match.status = 'Completed';
+        match.status = cupRequiresWinner ? 'In_Progress' : 'Completed';
     } else if (match.periodChecks.h1Started) {
         match.status = 'In_Progress';
     } else if (match.status !== 'Postponed') {
@@ -1397,6 +1532,14 @@ export function deleteMatchEvent(matchId, eventId) {
                     match.awayScore = Math.max(0, match.awayScore - 1);
                 } else {
                     match.homeScore = Math.max(0, match.homeScore - 1);
+                }
+            } else if (deletedEvent.type === 'Penalty_Kick' && deletedEvent.scored) {
+                const scoreKey = deletedEvent.teamSide === 'away' ? 'awayPenaltyScore' : 'homePenaltyScore';
+                match[scoreKey] = Math.max(0, (Number(match[scoreKey]) || 0) - 1);
+                if (match.periodChecks?.penaltiesEnded &&
+                    Number(match.homePenaltyScore) === Number(match.awayPenaltyScore)) {
+                    match.periodChecks.penaltiesEnded = false;
+                    match.status = 'In_Progress';
                 }
             }
             match.events.splice(idx, 1);
@@ -1896,7 +2039,7 @@ export function calculateMatchStats(match) {
         if (activeKeeper !== null) keeperIntervals.push({ playerId: activeKeeper, start: intervalStart, end: matchDurationMinutes });
         keeperIntervals.forEach(interval => {
             const conceded = match.events.some(event =>
-                event.type === 'Goal' &&
+                event.type === 'Goal' && event.goalType !== 'Penalty' &&
                 (event.teamSide || (match.homeRoster.some(item => item.playerId === event.playerId) ? 'home' : 'away')) !== side &&
                 matchMinute(event.timeStr || `${event.minute || 0}:00`) >= interval.start &&
                 (matchMinute(event.timeStr || `${event.minute || 0}:00`) < interval.end ||
@@ -1919,16 +2062,19 @@ export async function saveMatchProtocol(matchId, { keepOpen = false } = {}) {
     if (!match) return false;
 
     // Ještě jednou si ověříme logiku statusu, aby byla dokonale propsaná
+    const cupRequiresWinner = match.competition === 'MOL Cup' &&
+        match.homeScore === match.awayScore &&
+        !match.periodChecks.penaltiesEnded;
     if (match.periodChecks.penaltiesEnded) {
         match.status = 'Completed';
     } else if (match.periodChecks.penaltiesStarted) {
         match.status = 'In_Progress';
     } else if (match.periodChecks.et2Ended) {
-        match.status = 'Completed';
+        match.status = cupRequiresWinner ? 'In_Progress' : 'Completed';
     } else if (match.periodChecks.et2Started || match.periodChecks.et1Ended || match.periodChecks.et1Started) {
         match.status = 'In_Progress';
     } else if (match.periodChecks.h2Ended) {
-        match.status = 'Completed';
+        match.status = cupRequiresWinner ? 'In_Progress' : 'Completed';
     } else if (match.periodChecks.h1Started) {
         match.status = 'In_Progress';
     } else if (match.status !== 'Postponed') {
