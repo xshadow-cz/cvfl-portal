@@ -74,9 +74,12 @@ export function compareTeams1Liga(a, b) {
     const allHave14Matches = leagueTeams.every(t => t.played >= 14);
 
     if (allHave14Matches) {
-        if (!a._randomOrder) a._randomOrder = Math.random();
-        if (!b._randomOrder) b._randomOrder = Math.random();
-        return a._randomOrder - b._randomOrder;
+        const getRandomOrder = team => {
+            const sourceTeam = teamsData.find(item => item.id === team.id);
+            if (sourceTeam && sourceTeam._randomOrder === undefined) sourceTeam._randomOrder = Math.random();
+            return sourceTeam?._randomOrder ?? team._randomOrder ?? 0;
+        };
+        return getRandomOrder(a) - getRandomOrder(b);
     }
 
     return 0;

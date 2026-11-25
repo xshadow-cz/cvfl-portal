@@ -267,8 +267,7 @@ export function openMatchProtocol(matchId, { updateHistory = true } = {}) {
         <div class="flex flex-wrap gap-1 border-b border-[#1e307d] mb-4 font-semibold text-xs text-gray-300">
             <button onclick="switchFISTab('sestavy')" id="fistab-sestavy" class="fis-tab-btn active px-3 py-2">Sestavy týmů</button>
             <button onclick="switchFISTab('realizacni')" id="fistab-realizacni" class="fis-tab-btn px-3 py-2">Realizační tým</button>
-            <button onclick="switchFISTab('hraci-casti')" id="fistab-hraci-casti" class="fis-tab-btn px-3 py-2">Hrací části</button>
-            <button onclick="switchFISTab('penalty')" id="fistab-penalty" class="fis-tab-btn px-3 py-2 text-amber-300">Penalty</button>
+            <button onclick="switchFISTab('hraci-casti')" id="fistab-hraci-casti" class="fis-tab-btn px-3 py-2">Prodloužení a penalty</button>
             <button onclick="switchFISTab('stridani')" id="fistab-stridani" class="fis-tab-btn px-3 py-2">Střídání</button>
             <button onclick="switchFISTab('branky')" id="fistab-branky" class="fis-tab-btn px-3 py-2">Branky a Asistence</button>
             <button onclick="switchFISTab('vylouceni')" id="fistab-vylouceni" class="fis-tab-btn px-3 py-2">Karty</button>
@@ -363,23 +362,23 @@ export function openMatchProtocol(matchId, { updateHistory = true } = {}) {
                     </label>
                 </div>
                 
-                <div class="bg-[#0e1a4f] p-4 rounded-xl border border-purple-500/40">
-                    <h5 class="font-bold text-purple-400 mb-2 text-xs">Prodloužení (volitelné)</h5>
+                <div class="bg-[#0e1a4f] p-4 rounded-xl border border-[#1e307d]">
+                    <h5 class="font-bold text-white mb-2 text-xs">Prodloužení (volitelné)</h5>
                     <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
                         <label class="flex items-center space-x-2 cursor-pointer text-white font-bold">
-                            <input type="checkbox" id="check-et1-started" ${match.periodChecks.et1Started ? 'checked' : ''} ${!canEditEverything || match.isLocked || !match.periodChecks.h2Ended || !isTied ? 'disabled' : ''} onchange="updatePeriodChecks(${match.id})" class="accent-purple-400 w-4 h-4">
+                            <input type="checkbox" id="check-et1-started" ${match.periodChecks.et1Started ? 'checked' : ''} ${!canEditEverything || match.isLocked || !match.periodChecks.h2Ended || !isTied ? 'disabled' : ''} onchange="updatePeriodChecks(${match.id})" class="accent-[#aefb12] w-4 h-4">
                             <span>1. PP začalo</span>
                         </label>
                         <label class="flex items-center space-x-2 cursor-pointer text-white font-bold">
-                            <input type="checkbox" id="check-et1-ended" ${match.periodChecks.et1Ended ? 'checked' : ''} ${!canEditEverything || match.isLocked || !match.periodChecks.et1Started ? 'disabled' : ''} onchange="updatePeriodChecks(${match.id})" class="accent-purple-400 w-4 h-4">
+                            <input type="checkbox" id="check-et1-ended" ${match.periodChecks.et1Ended ? 'checked' : ''} ${!canEditEverything || match.isLocked || !match.periodChecks.et1Started ? 'disabled' : ''} onchange="updatePeriodChecks(${match.id})" class="accent-[#aefb12] w-4 h-4">
                             <span>1. PP skončilo</span>
                         </label>
                         <label class="flex items-center space-x-2 cursor-pointer text-white font-bold">
-                            <input type="checkbox" id="check-et2-started" ${match.periodChecks.et2Started ? 'checked' : ''} ${!canEditEverything || match.isLocked || !match.periodChecks.et1Ended ? 'disabled' : ''} onchange="updatePeriodChecks(${match.id})" class="accent-purple-400 w-4 h-4">
+                            <input type="checkbox" id="check-et2-started" ${match.periodChecks.et2Started ? 'checked' : ''} ${!canEditEverything || match.isLocked || !match.periodChecks.et1Ended ? 'disabled' : ''} onchange="updatePeriodChecks(${match.id})" class="accent-[#aefb12] w-4 h-4">
                             <span>2. PP začalo</span>
                         </label>
                         <label class="flex items-center space-x-2 cursor-pointer text-white font-bold">
-                            <input type="checkbox" id="check-et2-ended" ${match.periodChecks.et2Ended ? 'checked' : ''} ${!canEditEverything || match.isLocked || !match.periodChecks.et2Started ? 'disabled' : ''} onchange="updatePeriodChecks(${match.id})" class="accent-purple-400 w-4 h-4">
+                            <input type="checkbox" id="check-et2-ended" ${match.periodChecks.et2Ended ? 'checked' : ''} ${!canEditEverything || match.isLocked || !match.periodChecks.et2Started ? 'disabled' : ''} onchange="updatePeriodChecks(${match.id})" class="accent-[#aefb12] w-4 h-4">
                             <span>2. PP skončilo</span>
                         </label>
                     </div>
@@ -398,38 +397,36 @@ export function openMatchProtocol(matchId, { updateHistory = true } = {}) {
                 </div>
                 
             </div>
-        </div>
 
-        <div id="fis-sec-penalty" class="hidden space-y-4 text-xs">
-            <div class="rounded-xl border border-amber-400/30 bg-[#13236b] p-4 space-y-4">
+            <div class="mt-4 rounded-xl border border-[#1e307d] bg-[#13236b] p-4 space-y-4">
                 <div>
-                    <h3 class="font-bold text-amber-300 text-sm">Penaltový rozstřel (volitelný)</h3>
+                    <h3 class="font-bold text-white text-sm">Penaltový rozstřel (volitelný)</h3>
                     <p class="mt-1 text-gray-400">
                         ${isPlayoffSecondLeg && playoffAggregate ? `Součet obou utkání: ${playoffAggregate.homeScore}:${playoffAggregate.awayScore}. Penalty lze zaznamenat při shodném součtu.` : 'Penalty lze použít při nerozhodném výsledku po skončení 2. poločasu; pokud nejsou potřeba, nechte je nezaškrtnuté.'}
                     </p>
                 </div>
                 
                 <div class="grid grid-cols-2 gap-3 mb-4">
-                    <label class="flex items-center gap-2 text-xs font-bold text-amber-200">
-                        <input type="checkbox" id="check-penalties-started" ${match.periodChecks.penaltiesStarted ? 'checked' : ''} ${!canEditEverything || match.isLocked || !penaltiesCanBeRecorded ? 'disabled' : ''} onchange="updatePeriodChecks(${match.id})" class="accent-amber-400">
+                    <label class="flex items-center gap-2 text-xs font-bold text-white">
+                        <input type="checkbox" id="check-penalties-started" ${match.periodChecks.penaltiesStarted ? 'checked' : ''} ${!canEditEverything || match.isLocked || !penaltiesCanBeRecorded ? 'disabled' : ''} onchange="updatePeriodChecks(${match.id})" class="accent-[#aefb12]">
                         Penaltový rozstřel začal
                     </label>
-                    <label class="flex items-center gap-2 text-xs font-bold text-amber-200">
-                        <input type="checkbox" id="check-penalties-ended" ${match.periodChecks.penaltiesEnded ? 'checked' : ''} ${!canEditEverything || match.isLocked || !penaltiesCanBeRecorded || !match.periodChecks.penaltiesStarted ? 'disabled' : ''} onchange="updatePeriodChecks(${match.id})" class="accent-amber-400">
+                    <label class="flex items-center gap-2 text-xs font-bold text-white">
+                        <input type="checkbox" id="check-penalties-ended" ${match.periodChecks.penaltiesEnded ? 'checked' : ''} ${!canEditEverything || match.isLocked || !penaltiesCanBeRecorded || !match.periodChecks.penaltiesStarted ? 'disabled' : ''} onchange="updatePeriodChecks(${match.id})" class="accent-[#aefb12]">
                         Penaltový rozstřel skončil
                     </label>
                 </div>
                 
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <label class="block text-[#aefb12] font-bold">${home ? escapeTeamName(home.name) : 'Domácí'}
-                        <input type="number" min="0" max="99" value="${match.homePenaltyScore}" ${!canEditEverything || match.isLocked || !penaltiesCanBeRecorded || !match.periodChecks.penaltiesStarted ? 'disabled' : ''} onchange="updatePenaltyScores(${match.id})" id="home-penalty-score" class="mt-1 w-full bg-[#0e1a4f] border border-amber-400/30 rounded p-2 text-white disabled:opacity-50">
+                        <input type="number" min="0" max="99" value="${match.homePenaltyScore}" ${!canEditEverything || match.isLocked || !penaltiesCanBeRecorded || !match.periodChecks.penaltiesStarted ? 'disabled' : ''} onchange="updatePenaltyScores(${match.id})" id="home-penalty-score" class="mt-1 w-full bg-[#0e1a4f] border border-[#1e307d] rounded p-2 text-white disabled:opacity-50">
                     </label>
                     <label class="block text-[#05fda3] font-bold">${away ? escapeTeamName(away.name) : 'Hosté'}
-                        <input type="number" min="0" max="99" value="${match.awayPenaltyScore}" ${!canEditEverything || match.isLocked || !penaltiesCanBeRecorded || !match.periodChecks.penaltiesStarted ? 'disabled' : ''} onchange="updatePenaltyScores(${match.id})" id="away-penalty-score" class="mt-1 w-full bg-[#0e1a4f] border border-amber-400/30 rounded p-2 text-white disabled:opacity-50">
+                        <input type="number" min="0" max="99" value="${match.awayPenaltyScore}" ${!canEditEverything || match.isLocked || !penaltiesCanBeRecorded || !match.periodChecks.penaltiesStarted ? 'disabled' : ''} onchange="updatePenaltyScores(${match.id})" id="away-penalty-score" class="mt-1 w-full bg-[#0e1a4f] border border-[#1e307d] rounded p-2 text-white disabled:opacity-50">
                     </label>
                 </div>
-                ${!penaltiesCanBeRecorded ? '<p class="text-amber-300">Penaltový rozstřel zatím nelze zaznamenat.</p>' : ''}
-                ${match.periodChecks.penaltiesEnded && match.homePenaltyScore !== match.awayPenaltyScore ? '<p class="font-black text-amber-300">Vítěz penaltového rozstřelu: ' + escapeTeamName(match.homePenaltyScore > match.awayPenaltyScore ? home?.name || 'Domácí tým' : away?.name || 'Hostující tým') + '</p>' : ''}
+                ${!penaltiesCanBeRecorded ? '<p class="text-gray-400">Penaltový rozstřel zatím nelze zaznamenat.</p>' : ''}
+                ${match.periodChecks.penaltiesEnded && match.homePenaltyScore !== match.awayPenaltyScore ? '<p class="font-black text-[#aefb12]">Vítěz penaltového rozstřelu: ' + escapeTeamName(match.homePenaltyScore > match.awayPenaltyScore ? home?.name || 'Domácí tým' : away?.name || 'Hostující tým') + '</p>' : ''}
             </div>
         </div>
 
@@ -541,7 +538,7 @@ export function openMatchProtocol(matchId, { updateHistory = true } = {}) {
             <div class="flex justify-between items-center">
                 <h3 class="font-bold text-white text-sm">Záznam Karet</h3>
                 ${canEditEverything && !match.isLocked ? `
-                <button onclick="openCardForm(${match.id})" class="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs rounded-lg shadow flex items-center gap-1.5 transition">
+                <button onclick="openCardForm(${match.id})" class="px-3.5 py-1.5 bg-[#f33332] hover:bg-red-600 text-white font-bold text-xs rounded-lg shadow flex items-center gap-1.5 transition">
                     <i class="fa-solid fa-square"></i> + Přidat Kartu
                 </button>` : ''}
             </div>
@@ -1207,27 +1204,20 @@ export function openAddPlayerToRosterModal(matchId, side) {
         `).join('');
     }
 
-    let modal = document.getElementById('modal-add-roster-player');
+    const modal = document.getElementById('modal-add-roster-player');
     if (!modal) {
-        modal = document.createElement('div');
-        modal.id = 'modal-add-roster-player';
-        // z-[60] aby to bylo nad samotným protokolem zápasu (který má pravděpodobně z-50)
-        modal.className = 'fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm hidden';
-        document.body.appendChild(modal);
+        showToast('Okno pro výběr hráče se nepodařilo otevřít.', true);
+        return;
     }
-    
+
     modal.innerHTML = `
-        <div class="relative w-full max-w-md bg-[#0e1a4f] border border-[#1e307d] rounded-2xl p-6 shadow-2xl flex flex-col max-h-[80vh]">
-            <div class="flex justify-between items-center mb-4 pb-3 border-b border-[#1e307d]">
-                <h3 class="text-lg font-black text-white" id="roster-picker-title">Přidat Hráče — ${team ? team.name : ''}</h3>
-                <button onclick="document.getElementById('modal-add-roster-player').classList.add('hidden')" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
-            </div>
-            <div id="roster-picker-list" class="overflow-y-auto space-y-2 pr-2 flex-1">
-                ${listHtml}
-            </div>
+        <div class="flex justify-between items-center border-b border-[#1e307d] pb-3">
+            <h3 class="font-bold text-lg text-[#aefb12]" id="roster-picker-title">Přidat Hráče — ${escapeTeamName(team?.name || '')}</h3>
+            <button type="button" onclick="closeSpecificModal('modal-add-roster-player')" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
         </div>
+        <div id="roster-picker-list" class="mt-4 space-y-2 max-h-[70vh] overflow-y-auto text-xs">${listHtml}</div>
     `;
-    modal.classList.remove('hidden');
+    openModal('modal-add-roster-player');
 }
 
 function isPlayerSuspended(playerId) {
@@ -1405,8 +1395,9 @@ export function updateMatchChecks(matchId) {
 }
 
 export function switchFISTab(fisTabId) {
+    if (fisTabId === 'penalty') fisTabId = 'hraci-casti';
     state.activeFISTab = fisTabId;
-    ['sestavy', 'realizacni', 'hraci-casti', 'penalty', 'stridani', 'branky', 'vylouceni', 'online', 'rozhodci', 'kontrola', 'delegat'].forEach(t => {
+    ['sestavy', 'realizacni', 'hraci-casti', 'stridani', 'branky', 'vylouceni', 'online', 'rozhodci', 'kontrola', 'delegat'].forEach(t => {
         const sec = document.getElementById(`fis-sec-${t}`);
         const btn = document.getElementById(`fistab-${t}`);
         if (sec) sec.classList.add('hidden');
@@ -1705,7 +1696,7 @@ export function renderCardForm(matchId, side = 'home', timeStr = '00:00') {
 
             <div class="flex justify-end gap-2 pt-2 border-t border-[#1e307d]">
                 <button type="button" onclick="closeCardForm()" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 font-bold rounded-lg transition">Zrušit</button>
-                <button type="button" onclick="submitCard(${matchId})" class="px-4 py-1.5 bg-amber-500 hover:bg-amber-400 text-black font-black rounded-lg shadow transition">
+                <button type="button" onclick="submitCard(${matchId})" class="px-4 py-1.5 bg-[#f33332] hover:bg-red-600 text-white font-black rounded-lg shadow transition">
                     <i class="fa-solid fa-check mr-1"></i> Udělit Kartu
                 </button>
             </div>

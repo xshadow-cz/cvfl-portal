@@ -33,3 +33,46 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 .role-badge-delegate { background-color: #71368a; color: #ffffff; }
 .role-badge-referee { background-color: #607d8b; color: #ffffff; }
 .role-badge-team-mgr { background-color: #11806a; color: #ffffff; }
+
+#modal-backdrop.match-protocol-backdrop {
+    padding: 1rem;
+}
+
+#modal-match-protocol.match-protocol-fullscreen {
+    width: min(calc(100vw - 2rem), 80rem);
+    height: calc(100vh - 2rem);
+    height: calc(100dvh - 2rem);
+    max-width: none;
+    max-height: none;
+    border-radius: 1rem;
+}
+
+.nested-modal-overlay > [id^="modal-"] {
+    max-height: calc(100vh - 2rem);
+    max-height: calc(100dvh - 2rem);
+    overflow-y: auto;
+}
+
+@media (min-width: 640px) {
+    #modal-backdrop.match-protocol-backdrop {
+        padding: 1.5rem;
+    }
+
+    #modal-match-protocol.match-protocol-fullscreen {
+        width: min(calc(100vw - 3rem), 80rem);
+        height: calc(100vh - 3rem);
+        height: calc(100dvh - 3rem);
+    }
+}
+
+@media (min-width: 1024px) {
+    #modal-backdrop.match-protocol-backdrop {
+        padding: 2rem;
+    }
+
+    #modal-match-protocol.match-protocol-fullscreen {
+        width: min(calc(100vw - 4rem), 80rem);
+        height: calc(100vh - 4rem);
+        height: calc(100dvh - 4rem);
+    }
+}

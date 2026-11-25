@@ -182,6 +182,7 @@ CREATE TABLE IF NOT EXISTS auth_sessions (
 
 CREATE TABLE IF NOT EXISTS discord_invites (
     token_hash TEXT PRIMARY KEY,
+    token_encrypted TEXT,
     roles_json TEXT NOT NULL,
     expires_at DATETIME NOT NULL,
     used_at DATETIME,

@@ -267,14 +267,13 @@ function renderDiscordUsers() {
     const list = document.getElementById('admin-discord-user-list');
     if (!list) return;
     const search = document.getElementById('admin-discord-user-search')?.value.trim().toLocaleLowerCase('cs') || '';
-    const usersWithAccess = discordUserAccounts.filter(user => user.roles.length > 0);
-    const filteredUsers = usersWithAccess.filter(user =>
+    const filteredUsers = discordUserAccounts.filter(user =>
         `${user.username} ${user.discordId} ${user.roles.join(' ')}`.toLocaleLowerCase('cs').includes(search)
     );
     if (filteredUsers.length === 0) {
-        list.innerHTML = usersWithAccess.length
-            ? '<p class="p-3 text-xs text-gray-400">Žádné účty s právy neodpovídají hledání.</p>'
-            : '<p class="p-3 text-xs text-gray-400">Zatím nejsou nastaveny žádné Discord účty s přístupem.</p>';
+        list.innerHTML = discordUserAccounts.length
+            ? '<p class="p-3 text-xs text-gray-400">Žádné Discord účty neodpovídají hledání.</p>'
+            : '<p class="p-3 text-xs text-gray-400">V databázi zatím nejsou žádné Discord účty.</p>';
         return;
     }
     list.innerHTML = filteredUsers.map(user => `
@@ -282,7 +281,7 @@ function renderDiscordUsers() {
             <div>
                 <strong class="text-white">${escapeHtml(user.username)}</strong>
                 <span class="block font-mono text-gray-400">${escapeHtml(user.discordId)}</span>
-                <span class="block text-gray-300">${user.roles.map(escapeHtml).join(', ')}</span>
+                <span class="block text-gray-300">${user.roles.length ? user.roles.map(escapeHtml).join(', ') : 'Bez přidělených rolí'}</span>
             </div>
             ${user.isOwner
                 ? '<span class="text-amber-300 font-bold">Vlastník — všechny role</span>'
@@ -331,9 +330,12 @@ function renderDiscordInvites() {
                 <div class="min-w-0">
                     <div class="font-bold text-white">${invite.roles.map(escapeHtml).join(', ')}</div>
                     <div class="${invite.expired ? 'text-amber-300' : 'text-gray-400'}">${invite.expired ? 'Platnost vypršela' : 'Platí do'}: ${expiryText}</div>
+                    ${invite.inviteUrl
+                        ? `<input type="text" readonly aria-label="Odkaz pozvánky" value="${escapeHtml(invite.inviteUrl)}" data-invite-url-for="${escapeHtml(String(invite.id))}" class="mt-2 w-full min-w-0 rounded border border-[#1e307d] bg-[#13236b] p-2 font-mono text-[10px] text-gray-300">`
+                        : '<div class="mt-2 text-[10px] text-gray-500">Tato starší pozvánka nemá uložený odkaz. Vytvořte novou pozvánku.</div>'}
                 </div>
                 <div class="flex gap-2 shrink-0">
-                    <button type="button" data-copy-invite-id="${escapeHtml(String(invite.id))}" class="rounded bg-[#5865f2] px-3 py-1.5 font-bold text-white">Kopírovat</button>
+                    <button type="button" data-copy-invite-id="${escapeHtml(String(invite.id))}" ${invite.inviteUrl ? '' : 'disabled'} class="rounded bg-[#5865f2] px-3 py-1.5 font-bold text-white disabled:cursor-not-allowed disabled:opacity-40">Kopírovat</button>
                     <button type="button" onclick="revokeDiscordInvite('${invite.id}')" class="rounded bg-[#f33332] px-3 py-1.5 font-bold text-white">Zrušit pozvánku</button>
                 </div>
             </div>`;
@@ -368,7 +370,15 @@ export async function copySpecificDiscordInviteLink(inviteId) {
         await navigator.clipboard.writeText(url);
         showToast('Odkaz na pozvánku byl zkopírován.');
     } catch (error) {
-        showToast('Odkaz se nepodařilo zkopírovat do schránky.', true);
+        const input = Array.from(document.querySelectorAll('[data-invite-url-for]'))
+            .find(element => element.dataset.inviteUrlFor === String(inviteId));
+        if (input) {
+            input.focus();
+            input.select();
+            showToast('Odkaz je označený. Zkopírujte ho ručně klávesami Ctrl+C.', true);
+        } else {
+            showToast(`Odkaz se nepodařilo zkopírovat: ${error.message}`, true);
+        }
     }
 }
 

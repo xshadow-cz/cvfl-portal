@@ -104,9 +104,23 @@ async function requestJSON(path, options = {}) {
 }
 
 export async function loadDiscordSession() {
-    const response = await fetchApi('/auth/me', {
-        headers: { Accept: 'application/json' },
-    });
+    let response;
+    for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+            response = await fetchApi('/auth/me', {
+                headers: { Accept: 'application/json' },
+                cache: 'no-store',
+                signal: AbortSignal.timeout(15000)
+            });
+        } catch (error) {
+            if (attempt === 2) throw error;
+            await new Promise(resolve => setTimeout(resolve, 750 * (attempt + 1)));
+            continue;
+        }
+        if (![502, 503, 504].includes(response.status) || attempt === 2) break;
+        await new Promise(resolve => setTimeout(resolve, 750 * (attempt + 1)));
+    }
+
     let json;
     try {
         json = await response.json();

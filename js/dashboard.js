@@ -5,6 +5,7 @@
 import { state, playersData, refereesData, teamsData, matchesData } from './state.js';
 import { getMatchStatusLabel } from './match-status.js';
 import { getTeamLogoMarkup, escapeTeamName } from './team-logo.js';
+import { compareTeams1Liga } from './competitions.js';
 
 const STAT_CATEGORIES = [
     { key: 'goals', label: 'Góly', icon: 'fa-futbol', color: 'text-[#aefb12]' },
@@ -283,7 +284,7 @@ function renderStatsModal() {
     if (!modal) {
         modal = document.createElement('div');
         modal.id = 'stats-modal-overlay';
-        modal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm';
+        modal.className = 'fixed inset-0 z-[70] flex items-center justify-center bg-black/80 p-4 sm:p-6 backdrop-blur-sm';
         document.body.appendChild(modal);
     }
 
@@ -316,7 +317,7 @@ function renderStatsModal() {
     const activeTeams = teamsData.filter(t => !t.isArchived);
 
     modal.innerHTML = `
-        <div class="relative w-full max-w-5xl max-h-[90vh] flex flex-col rounded-2xl border border-[#1e307d] bg-[#0e1a4f] p-6 shadow-2xl text-white overflow-hidden">
+        <div class="relative flex h-[calc(100dvh-2rem)] w-full max-w-7xl flex-col overflow-hidden rounded-xl border border-[#1e307d] bg-[#0e1a4f] p-4 shadow-2xl text-white sm:h-[calc(100dvh-3rem)] sm:p-6">
             <!-- Záhlaví -->
             <div class="flex items-center justify-between pb-4 border-b border-[#1e307d]">
                 <div class="flex items-center gap-3">
@@ -357,7 +358,7 @@ function renderStatsModal() {
             </div>
 
             <!-- Tabulka statistik -->
-            <div class="overflow-y-auto flex-1 my-2 pr-1">
+            <div class="overflow-auto flex-1 my-2 pr-1">
                 <table class="w-full text-left text-xs border-collapse">
                     <thead class="sticky top-0 bg-[#0e1a4f] z-10 border-b border-[#1e307d] text-gray-400 font-bold uppercase text-[11px]">
                         <tr>
@@ -406,31 +407,51 @@ function renderStatsModal() {
     `;
 }
 
-export function renderDashboard() {
-    const welcome = document.getElementById('dashboard-welcome');
-    if (welcome) {
-        const username = state.currentUser?.username;
-        welcome.textContent = username ? `Vítej, ${username}!` : 'Vítej!';
-    }
-    const list = document.getElementById('dashboard-matches-list');
-    
-    const pStat = document.getElementById('dash-stat-players');
-    const rStat = document.getElementById('dash-stat-referees');
-    const tStat = document.getElementById('dash-stat-teams');
+function renderDashboardLeagueTables() {
+    const leagues = [
+        { id: 'dashboard-league-1-table', key: '1_Liga', tab: 'liga1', title: 'CVFL 1. Liga', accent: '#aefb12' },
+        { id: 'dashboard-league-2-table', key: '2_Liga', tab: 'liga2', title: 'CVFL 2. Liga', accent: '#05fda3' }
+    ];
+    leagues.forEach(league => {
+        const container = document.getElementById(league.id);
+        if (!container) return;
+        const teams = teamsData.filter(team => team.league === league.key).map(team => ({
+            ...team,
+            finalPoints: team.basePoints - team.deducted
+        }));
+        teams.sort(league.key === '1_Liga'
+            ? compareTeams1Liga
+            : (a, b) => b.finalPoints - a.finalPoints);
+        container.innerHTML = `
+            <section class="h-full rounded-xl border border-[#1e307d] bg-[#0e1a4f] p-4 shadow-md">
+                <div class="mb-3 flex items-center justify-between gap-3 border-b border-[#1e307d] pb-2">
+                    <h2 class="font-bold text-lg" style="color:${league.accent}">${league.title} · Top 4</h2>
+                    <button type="button" onclick="switchTab('competitions'); switchCompTab('${league.tab}')" class="shrink-0 text-xs font-bold text-[#aefb12] hover:underline">Hlavní tabulka</button>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs">
+                        <thead class="text-[10px] uppercase text-gray-400">
+                            <tr><th class="p-2 text-center">#</th><th class="p-2">Tým</th><th class="p-2 text-center">Z</th><th class="p-2 text-center">Skóre</th><th class="p-2 text-right">Body</th></tr>
+                        </thead>
+                        <tbody class="divide-y divide-[#1e307d]">
+                            ${teams.slice(0, 4).map((team, index) => `
+                                <tr class="hover:bg-[#13236b]/60">
+                                    <td class="p-2 text-center font-mono text-gray-400">${index + 1}.</td>
+                                    <td class="p-2 font-bold text-white">${getTeamLogoMarkup(team)}${escapeTeamName(team.name)}</td>
+                                    <td class="p-2 text-center text-gray-300">${team.played}</td>
+                                    <td class="p-2 text-center font-mono text-gray-300">${team.gf}:${team.ga}</td>
+                                    <td class="p-2 text-right font-black" style="color:${league.accent}">${team.finalPoints}</td>
+                                </tr>
+                            `).join('') || '<tr><td colspan="5" class="p-3 text-center text-gray-500">Tabulka zatím není k dispozici.</td></tr>'}
+                        </tbody>
+                    </table>
+                </div>
+            </section>`;
+    });
+}
 
-    if (pStat) pStat.textContent = `${playersData.filter(player => !player.isArchived).length} Hráčů`;
-    if (rStat) rStat.textContent = `${refereesData.length} Rozhodčích`;
-    if (tStat) tStat.textContent = `${teamsData.length} Klubů`;
-
-    if (!list) return;
-    renderDashboardLeaderboards();
-
-    if (matchesData.length === 0) {
-        list.innerHTML = `<div class="p-6 bg-[#0e1a4f] rounded-xl border border-[#1e307d] text-center text-gray-400 text-xs">V systému zatím nejsou žádná zápasy. Nová utkání vytvoříte v sekci Administrace.</div>`;
-        return;
-    }
-
-    list.innerHTML = matchesData.map(m => {
+function renderDashboardMatchCards(matchList) {
+    return matchList.map(m => {
         const home = teamsData.find(t => t.id === m.homeTeamId);
         const away = teamsData.find(t => t.id === m.awayTeamId);
 
@@ -465,4 +486,43 @@ export function renderDashboard() {
             </div>
         `;
     }).join('');
+}
+
+export function renderDashboard() {
+    const welcome = document.getElementById('dashboard-welcome');
+    if (welcome) {
+        const username = state.currentUser?.username;
+        welcome.textContent = username ? `Vítej, ${username}!` : 'Vítej!';
+    }
+    const list = document.getElementById('dashboard-matches-list');
+    const liveList = document.getElementById('dashboard-live-matches-list');
+
+    const pStat = document.getElementById('dash-stat-players');
+    const rStat = document.getElementById('dash-stat-referees');
+    const tStat = document.getElementById('dash-stat-teams');
+
+    if (pStat) pStat.textContent = `${playersData.filter(player => !player.isArchived).length} Hráčů`;
+    if (rStat) rStat.textContent = `${refereesData.length} Rozhodčích`;
+    if (tStat) tStat.textContent = `${teamsData.length} Klubů`;
+
+    renderDashboardLeaderboards();
+    renderDashboardLeagueTables();
+    if (matchesData.length === 0) {
+        if (list) list.innerHTML = `<div class="p-6 bg-[#0e1a4f] rounded-xl border border-[#1e307d] text-center text-gray-400 text-xs">V systému zatím nejsou žádná zápasy. Nová utkání vytvoříte v sekci Administrace.</div>`;
+        if (liveList) liveList.innerHTML = '<p class="text-sm text-gray-400">Právě neprobíhá žádné utkání.</p>';
+        return;
+    }
+
+    const liveMatches = matchesData.filter(match => match.status === 'In_Progress');
+    if (liveList) {
+        liveList.innerHTML = liveMatches.length
+            ? renderDashboardMatchCards(liveMatches)
+            : '<p class="text-sm text-gray-400">Právě neprobíhá žádné utkání.</p>';
+    }
+    const otherMatches = matchesData.filter(match => match.status !== 'In_Progress');
+    if (list) {
+        list.innerHTML = otherMatches.length
+            ? renderDashboardMatchCards(otherMatches)
+            : '<div class="p-6 rounded-xl border border-[#1e307d] bg-[#0e1a4f] text-center text-sm text-gray-400">Všechny dostupné zápasy právě probíhají.</div>';
+    }
 }

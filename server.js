@@ -29,6 +29,12 @@ if (!Number.isInteger(PLAYER_BOT_SYNC_INTERVAL_MS) ||
     throw new Error('PLAYER_BOT_SYNC_INTERVAL_MS musí být celé číslo mezi 10000 a 86400000.');
 }
 
+function getDiscordApiOrigin() {
+    return new URL(
+        process.env.DISCORD_REDIRECT_URI || 'https://portal.cvfl.cz/api/auth/discord/callback'
+    ).origin;
+}
+
 const playerSyncStatus = {
     enabled: Boolean(PLAYER_BOT_API_URL || PLAYER_BOT_API_TOKEN),
     lastAttemptAt: null,
@@ -322,6 +328,7 @@ async function initPostgresDatabase() {
             );
             CREATE TABLE IF NOT EXISTS discord_invites (
                 token_hash TEXT PRIMARY KEY,
+                token_encrypted TEXT,
                 roles_json TEXT NOT NULL,
                 expires_at TIMESTAMP NOT NULL,
                 created_by TEXT REFERENCES discord_users(discord_id) ON DELETE SET NULL,
@@ -336,6 +343,7 @@ async function initPostgresDatabase() {
                 expires_at TIMESTAMP NOT NULL
             );
         `);
+        await dbClient.query('ALTER TABLE discord_invites ADD COLUMN IF NOT EXISTS token_encrypted TEXT');
         
         await dbClient.query("INSERT INTO site_settings (key, value) VALUES ('system_announcement', 'Vítejte v oficiálním CVFL Portálu!') ON CONFLICT DO NOTHING");
         console.log('✅ PostgreSQL databáze na Supabase byla úspěšně inicializována.');
@@ -369,6 +377,7 @@ function initSqliteDatabase() {
         ensureDatabaseColumn('matches', 'home_penalty_score', 'INTEGER DEFAULT 0');
         ensureDatabaseColumn('matches', 'away_penalty_score', 'INTEGER DEFAULT 0');
         ensureDatabaseColumn('discord_invites', 'revoked_at', 'DATETIME');
+        ensureDatabaseColumn('discord_invites', 'token_encrypted', 'TEXT');
         ensureDatabaseColumn('trainers', 'role', "TEXT NOT NULL DEFAULT 'Coach'");
         ensureDatabaseColumn('referees', 'discord_id', 'TEXT');
         dbClient.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_referees_discord_id ON referees(discord_id)').run();
@@ -713,6 +722,30 @@ function getSessionSecret() {
     return process.env.SESSION_SECRET || 'cvfl_portal_fallback_secret_key_32bytes_long!';
 }
 
+function encryptInviteToken(token) {
+    const key = crypto.createHash('sha256').update(getSessionSecret()).digest();
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+    const ciphertext = Buffer.concat([cipher.update(token, 'utf8'), cipher.final()]);
+    return [iv, cipher.getAuthTag(), ciphertext].map(part => part.toString('hex')).join(':');
+}
+
+function decryptInviteToken(encryptedToken) {
+    const [ivHex, tagHex, ciphertextHex] = String(encryptedToken).split(':');
+    if (!/^[a-f0-9]{24}$/.test(ivHex || '') ||
+        !/^[a-f0-9]{32}$/.test(tagHex || '') ||
+        !/^[a-f0-9]{128}$/.test(ciphertextHex || '')) {
+        throw new Error('Uložená pozvánka má neplatný formát.');
+    }
+    const key = crypto.createHash('sha256').update(getSessionSecret()).digest();
+    const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(ivHex, 'hex'));
+    decipher.setAuthTag(Buffer.from(tagHex, 'hex'));
+    return Buffer.concat([
+        decipher.update(Buffer.from(ciphertextHex, 'hex')),
+        decipher.final()
+    ]).toString('utf8');
+}
+
 function createSignedState(stateValue) {
     const signature = crypto.createHmac('sha256', getSessionSecret()).update(stateValue).digest('hex');
     return `${stateValue}.${signature}`;
@@ -839,6 +872,7 @@ async function resolveAuthenticatedUser(req) {
 
 async function requireAuthenticated(req, res, next) {
     try {
+        res.set('Cache-Control', 'no-store');
         if (!isDatabaseReady) {
             return res.status(503).json({ success: false, error: 'Databáze není připravena.' });
         }
@@ -1257,14 +1291,15 @@ app.post('/api/admin/discord-invites', requireRoles('Admin'), async (req, res) =
         }
         const token = crypto.randomBytes(32).toString('hex');
         const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+        const encryptedToken = encryptInviteToken(token);
         const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
             .toISOString().replace('T', ' ').slice(0, 19);
         await dbRun(
-            'INSERT INTO discord_invites (token_hash, roles_json, expires_at, created_by) VALUES (?, ?, ?, ?)',
-            [tokenHash, JSON.stringify(roles), expiresAt, req.auth.discordId]
+            'INSERT INTO discord_invites (token_hash, token_encrypted, roles_json, expires_at, created_by) VALUES (?, ?, ?, ?, ?)',
+            [tokenHash, encryptedToken, JSON.stringify(roles), expiresAt, req.auth.discordId]
         );
         
-        const baseUrl = process.env.APP_ORIGIN || 'https://portal.cvfl.cz';
+        const baseUrl = getDiscordApiOrigin();
         const inviteUrl = new URL(`/api/auth/discord?invite=${token}`, baseUrl).toString();
 
         res.status(201).json({ success: true, inviteUrl, expiresAt });
@@ -1276,7 +1311,8 @@ app.post('/api/admin/discord-invites', requireRoles('Admin'), async (req, res) =
 app.get('/api/admin/discord-invites', requireRoles('Admin'), async (req, res) => {
     try {
         const invites = await dbAll(
-            `SELECT token_hash AS id, roles_json AS "rolesJson", expires_at AS "expiresAt", created_at AS "createdAt"
+            `SELECT token_hash AS id, token_encrypted AS "tokenEncrypted", roles_json AS "rolesJson",
+                    expires_at AS "expiresAt", created_at AS "createdAt"
              FROM discord_invites
              WHERE used_at IS NULL AND revoked_at IS NULL
              ORDER BY created_at DESC`
@@ -1284,9 +1320,16 @@ app.get('/api/admin/discord-invites', requireRoles('Admin'), async (req, res) =>
         res.json({
             success: true,
             data: invites.map(invite => ({
-                ...invite,
+                id: invite.id,
+                expiresAt: invite.expiresAt,
+                createdAt: invite.createdAt,
                 roles: JSON.parse(invite.rolesJson),
-                expired: new Date(`${String(invite.expiresAt).replace(' ', 'T')}Z`) <= new Date()
+                inviteUrl: invite.tokenEncrypted
+                    ? new URL(`/api/auth/discord?invite=${decryptInviteToken(invite.tokenEncrypted)}`, getDiscordApiOrigin()).toString()
+                    : null,
+                expired: (invite.expiresAt instanceof Date
+                    ? invite.expiresAt
+                    : new Date(`${String(invite.expiresAt).replace(' ', 'T')}Z`)) <= new Date()
             }))
         });
     } catch (err) {

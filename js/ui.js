@@ -148,34 +148,115 @@ export function toggleRoleSelector() {
     document.getElementById('role-dropdown').classList.toggle('hidden');
 }
 
-export function openModal(id) {
+const nestedModalOrigins = new WeakMap();
+
+export function openModal(id, { updateHistory = true } = {}) {
     const backdrop = document.getElementById('modal-backdrop');
-    backdrop.classList.remove('hidden');
     const target = document.getElementById(id);
-    if (target) {
-        target.classList.remove('hidden');
-        if (id === 'modal-match-protocol') {
-            backdrop.classList.add('!p-0', '!bg-black', '!backdrop-blur-none');
-            target.classList.add('!w-screen', '!h-screen', '!max-w-none', '!max-h-none', '!rounded-none', '!border-0');
+    if (!backdrop || !target) return;
+
+    if (id === 'modal-match-protocol') closeAllNestedModals();
+    backdrop.classList.remove('hidden');
+
+    const protocol = document.getElementById('modal-match-protocol');
+    const protocolIsOpen = protocol && !protocol.classList.contains('hidden');
+    if (protocolIsOpen && id !== 'modal-match-protocol') {
+        let overlay = target.closest('.nested-modal-overlay');
+        if (!overlay) {
+            const parent = target.parentElement;
+            nestedModalOrigins.set(target, {
+                parent,
+                nextSibling: target.nextSibling
+            });
+            overlay = document.createElement('div');
+            overlay.className = 'nested-modal-overlay fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4';
+            overlay.dataset.modalId = id;
+            backdrop.appendChild(overlay);
+            overlay.appendChild(target);
         }
+        overlay.classList.remove('hidden');
+        if (updateHistory && window.history.state?.cvflNestedModal !== id) {
+            window.history.pushState(
+                { ...(window.history.state || {}), cvflNestedModal: id },
+                '',
+                `${window.location.pathname}${window.location.search}${window.location.hash}`
+            );
+        }
+    } else if (id !== 'modal-match-protocol' && target.closest('.nested-modal-overlay')) {
+        target.closest('.nested-modal-overlay')?.classList.remove('hidden');
+    }
+
+    target.classList.remove('hidden');
+    if (id === 'modal-match-protocol') {
+        backdrop.classList.add('match-protocol-backdrop');
+        target.classList.add('match-protocol-fullscreen');
     }
 }
 
 export function closeSpecificModal(id) {
     const backdrop = document.getElementById('modal-backdrop');
     const target = document.getElementById(id);
+    if (id === 'modal-match-protocol') closeAllNestedModals();
     if (target) {
         target.classList.add('hidden');
         if (id === 'modal-match-protocol') {
-            target.classList.remove('!w-screen', '!h-screen', '!max-w-none', '!max-h-none', '!rounded-none', '!border-0');
-            backdrop.classList.remove('!p-0', '!bg-black', '!backdrop-blur-none');
+            target.classList.remove('match-protocol-fullscreen');
+            backdrop.classList.remove('match-protocol-backdrop');
         }
+        restoreNestedModal(target);
+    }
+    if (window.history.state?.cvflNestedModal === id) {
+        const { cvflNestedModal, ...historyState } = window.history.state;
+        const overlays = document.querySelectorAll('#modal-backdrop > .nested-modal-overlay');
+        const remainingId = overlays[overlays.length - 1]?.dataset.modalId;
+        if (remainingId) historyState.cvflNestedModal = remainingId;
+        window.history.replaceState(historyState, '', window.location.href);
     }
 
     const anyVisible = document.querySelectorAll('#modal-backdrop > div:not(.hidden)').length > 0;
     if (!anyVisible) {
         backdrop.classList.add('hidden');
     }
+}
+
+function restoreNestedModal(target) {
+    const overlay = target.closest('.nested-modal-overlay');
+    if (!overlay) return;
+    const origin = nestedModalOrigins.get(target);
+    if (origin?.parent) {
+        origin.parent.insertBefore(target, origin.nextSibling?.parentNode === origin.parent ? origin.nextSibling : null);
+    }
+    nestedModalOrigins.delete(target);
+    overlay.remove();
+}
+
+function closeNestedModal() {
+    const overlays = document.querySelectorAll('#modal-backdrop > .nested-modal-overlay');
+    const overlay = overlays[overlays.length - 1];
+    const target = overlay?.firstElementChild;
+    if (target) closeSpecificModal(target.id);
+}
+
+function closeAllNestedModals() {
+    while (document.querySelector('#modal-backdrop > .nested-modal-overlay')) {
+        closeNestedModal();
+    }
+}
+
+export function handleModalPopState() {
+    const overlays = document.querySelectorAll('#modal-backdrop > .nested-modal-overlay');
+    const expectedId = window.history.state?.cvflNestedModal;
+    const hasExpectedOverlay = Array.from(overlays).some(overlay => overlay.dataset.modalId === expectedId);
+    if (expectedId && !hasExpectedOverlay) {
+        openModal(expectedId, { updateHistory: false });
+        return true;
+    }
+    const overlay = overlays[overlays.length - 1];
+    if (overlay) {
+        closeNestedModal();
+        return true;
+    }
+    return false;
 }
 
 export function showToast(message, isError = false) {

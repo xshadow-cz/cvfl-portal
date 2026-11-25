@@ -139,6 +139,14 @@
         
         <!-- DASHBOARD TAB -->
         <section id="tab-dashboard" class="space-y-6">
+            <section class="rounded-xl border border-red-500/30 bg-[#0e1a4f] p-4 shadow-md space-y-3">
+                <div class="flex items-center justify-between gap-3">
+                    <h2 class="font-bold text-lg flex items-center gap-2 text-white"><i class="fa-solid fa-circle text-red-500 animate-pulse text-xs"></i> Probíhající zápasy</h2>
+                    <button onclick="switchTab('matches')" class="text-xs text-[#aefb12] hover:underline font-bold">Všechny zápasy</button>
+                </div>
+                <div id="dashboard-live-matches-list" class="space-y-3"></div>
+            </section>
+
             <div class="bg-gradient-to-r from-[#0e1a4f] via-[#13236b] to-[#004a49] border border-[#aefb12]/30 rounded-2xl p-6 relative overflow-hidden shadow-2xl">
                 <div class="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                     <div>
@@ -165,6 +173,11 @@
                     <div id="dash-stat-teams" class="text-2xl font-black text-purple-400 mt-1">0 Klubů</div>
                 </div>
             </div>
+
+            <section class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                <div id="dashboard-league-1-table"></div>
+                <div id="dashboard-league-2-table"></div>
+            </section>
 
             <section class="bg-[#0e1a4f] border border-[#1e307d] rounded-xl p-4 shadow-md space-y-4">
                 <div>
@@ -293,11 +306,11 @@
                     <p class="text-xs text-gray-300">Správa stopek, kontumací, přeložení, odečtů bodů a rozhodnutí komise.</p>
                 </div>
                 <div class="flex flex-wrap gap-2">
-                    <button onclick="openAddSuspensionModal()" class="px-3 py-2 bg-[#f33332] hover:bg-opacity-90 text-white text-xs font-bold rounded-lg shadow role-perm-admin role-perm-dk"><i class="fa-solid fa-plus mr-1"></i> Udělit Trest</button>
-                    <button onclick="openForfeitModal()" class="px-3 py-2 bg-amber-500 hover:bg-opacity-90 text-black text-xs font-bold rounded-lg shadow role-perm-admin role-perm-dk"><i class="fa-solid fa-ban mr-1"></i> Kontumace Zápasu</button>
-                    <button onclick="openPostponeModal()" class="px-3 py-2 bg-blue-600 hover:bg-opacity-90 text-white text-xs font-bold rounded-lg shadow role-perm-admin role-perm-dk"><i class="fa-solid fa-clock-rotate-left mr-1"></i> Odložit Utkání</button>
-                    <button onclick="openRescheduleModal()" class="px-3 py-2 bg-emerald-600 hover:bg-opacity-90 text-white text-xs font-bold rounded-lg shadow role-perm-admin role-perm-dk"><i class="fa-solid fa-calendar-days mr-1"></i> Přeložit Utkání</button>
-                    <button onclick="openDeductPointsModal()" class="px-3 py-2 bg-purple-600 hover:bg-opacity-90 text-white text-xs font-bold rounded-lg shadow role-perm-admin role-perm-dk"><i class="fa-solid fa-minus-circle mr-1"></i> Odečet Bodů Týmu</button>
+                    <button onclick="openAddSuspensionModal()" class="px-3 py-2 bg-[#f33332] hover:bg-red-600 text-white text-xs font-bold rounded-lg shadow role-perm-admin role-perm-dk"><i class="fa-solid fa-plus mr-1"></i> Udělit Trest</button>
+                    <button onclick="openForfeitModal()" class="px-3 py-2 bg-[#f33332] hover:bg-red-600 text-white text-xs font-bold rounded-lg shadow role-perm-admin role-perm-dk"><i class="fa-solid fa-ban mr-1"></i> Kontumace Zápasu</button>
+                    <button onclick="openPostponeModal()" class="px-3 py-2 bg-[#f33332] hover:bg-red-600 text-white text-xs font-bold rounded-lg shadow role-perm-admin role-perm-dk"><i class="fa-solid fa-clock-rotate-left mr-1"></i> Odložit Utkání</button>
+                    <button onclick="openRescheduleModal()" class="px-3 py-2 bg-[#f33332] hover:bg-red-600 text-white text-xs font-bold rounded-lg shadow role-perm-admin role-perm-dk"><i class="fa-solid fa-calendar-days mr-1"></i> Přeložit Utkání</button>
+                    <button onclick="openDeductPointsModal()" class="px-3 py-2 bg-[#f33332] hover:bg-red-600 text-white text-xs font-bold rounded-lg shadow role-perm-admin role-perm-dk"><i class="fa-solid fa-minus-circle mr-1"></i> Odečet Bodů Týmu</button>
                 </div>
             </div>
 
@@ -640,7 +653,7 @@
                     <label class="block text-gray-400 mb-1">Důvod Odečtu Bodů (např. Rozhodnutí svazu):</label>
                     <input type="text" id="deduct-points-reason" value="Rozhodnutí svazu" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white">
                 </div>
-                <button onclick="submitPointsDeduction()" class="w-full py-2 bg-purple-600 hover:bg-opacity-90 text-white font-black rounded-lg shadow-lg">Potvrdit Odečet Bodů</button>
+                <button onclick="submitPointsDeduction()" class="w-full py-2 bg-[#f33332] hover:bg-red-600 text-white font-black rounded-lg shadow-lg">Potvrdit Odečet Bodů</button>
             </div>
         </div>
 
@@ -857,7 +870,7 @@
                     <label class="block text-gray-400 mb-1">Důvod Odložení (Povinné):</label>
                     <input type="text" id="postpone-reason-input" placeholder="Zadejte odůvodnění..." class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white">
                 </div>
-                <button onclick="executePostpone()" class="w-full py-2.5 bg-blue-600 hover:bg-opacity-90 font-bold rounded-lg text-white shadow-lg">Potvrdit a Odložit Utkání</button>
+                <button onclick="executePostpone()" class="w-full py-2.5 bg-[#f33332] hover:bg-red-600 font-bold rounded-lg text-white shadow-lg">Potvrdit a Odložit Utkání</button>
             </div>
         </div>
 
@@ -893,7 +906,7 @@
                     <label class="block text-gray-400 mb-1">Důvod Přeložení (Povinné):</label>
                     <input type="text" id="reschedule-reason-input" placeholder="Zadejte odůvodnění..." class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white">
                 </div>
-                <button onclick="executeReschedule()" class="w-full py-2.5 bg-emerald-600 hover:bg-opacity-90 font-bold rounded-lg text-white shadow-lg">Potvrdit a Přeložit Utkání</button>
+                <button onclick="executeReschedule()" class="w-full py-2.5 bg-[#f33332] hover:bg-red-600 font-bold rounded-lg text-white shadow-lg">Potvrdit a Přeložit Utkání</button>
             </div>
         </div>
 

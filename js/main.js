@@ -16,6 +16,7 @@ import {
 import {
     openModal,
     closeSpecificModal,
+    handleModalPopState,
     showToast,
     openConfirmModal,
     closeConfirmModal,
@@ -206,6 +207,7 @@ window.addEventListener('beforeunload', event => {
 });
 
 window.addEventListener('popstate', () => {
+    if (handleModalPopState()) return;
     const matchId = getMatchIdFromPath(window.location.pathname);
     if (matchId !== null) {
         if (state.activeTab !== 'matches' && !switchTab('matches', { updateHistory: false })) return;
@@ -376,6 +378,7 @@ Object.assign(window, {
 async function logoutDiscord() {
     try {
         await apiLogoutDiscord();
+        sessionStorage.removeItem('cvfl_invite_code');
         window.location.reload();
     } catch (error) {
         showToast(`Odhlášení se nepodařilo: ${error.message}`, true);
@@ -411,6 +414,9 @@ async function initApp() {
     if (authErrorCode) {
         authError.textContent = authErrors[authErrorCode] || authErrors.discord_login;
         authError.classList.remove('hidden');
+        if (['invite_invalid', 'invite_expired', 'discord_already_registered', 'invite_roles_invalid'].includes(authErrorCode)) {
+            sessionStorage.removeItem('cvfl_invite_code');
+        }
     }
 
     // --- OPRAVA PRO POZVÁNKY ---
@@ -442,6 +448,16 @@ async function initApp() {
 
     state.currentUser = session.user;
     state.availableRoles = session.roles;
+    sessionStorage.removeItem('cvfl_invite_code');
+    urlParams.delete('authError');
+    urlParams.delete('invite');
+    urlParams.delete('state');
+    const remainingQuery = urlParams.toString();
+    window.history.replaceState(
+        window.history.state,
+        '',
+        `${window.location.pathname}${remainingQuery ? `?${remainingQuery}` : ''}${window.location.hash}`
+    );
     loginLink.classList.add('hidden');
     logoutButton.classList.remove('hidden');
     headerLogoutButton.classList.remove('hidden');
