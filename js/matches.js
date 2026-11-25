@@ -336,19 +336,19 @@ export function openMatchProtocol(matchId) {
                     <h5 class="font-bold text-purple-400 mb-2 text-xs">MOL Cup — Prodloužení</h5>
                     <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
                         <label class="flex items-center space-x-2 cursor-pointer text-white font-bold">
-                            <input type="checkbox" id="check-et1-started" ${match.periodChecks.et1Started ? 'checked' : ''} ${!canEditEverything \vert{}\vert{} match.isLocked \vert{}\vert{} !match.periodChecks.h2Ended \vert{}\vert{} !isTied ? 'disabled' : ''} onchange="updatePeriodChecks(${match.id})" class="accent-purple-400 w-4 h-4">
+                            <input type="checkbox" id="check-et1-started" ${match.periodChecks.et1Started ? 'checked' : ''} ${!canEditEverything || match.isLocked || !match.periodChecks.h2Ended || !isTied ? 'disabled' : ''} onchange="updatePeriodChecks(${match.id})" class="accent-purple-400 w-4 h-4">
                             <span>1. PP začalo</span>
                         </label>
                         <label class="flex items-center space-x-2 cursor-pointer text-white font-bold">
-                            <input type="checkbox" id="check-et1-ended" ${match.periodChecks.et1Ended ? 'checked' : ''} ${!canEditEverything \vert{}\vert{} match.isLocked \vert{}\vert{} !match.periodChecks.et1Started ? 'disabled' : ''} onchange="updatePeriodChecks(${match.id})" class="accent-purple-400 w-4 h-4">
+                            <input type="checkbox" id="check-et1-ended" ${match.periodChecks.et1Ended ? 'checked' : ''} ${!canEditEverything || match.isLocked || !match.periodChecks.et1Started ? 'disabled' : ''} onchange="updatePeriodChecks(${match.id})" class="accent-purple-400 w-4 h-4">
                             <span>1. PP skončilo</span>
                         </label>
                         <label class="flex items-center space-x-2 cursor-pointer text-white font-bold">
-                            <input type="checkbox" id="check-et2-started" ${match.periodChecks.et2Started ? 'checked' : ''} ${!canEditEverything \vert{}\vert{} match.isLocked \vert{}\vert{} !match.periodChecks.et1Ended ? 'disabled' : ''} onchange="updatePeriodChecks(${match.id})" class="accent-purple-400 w-4 h-4">
+                            <input type="checkbox" id="check-et2-started" ${match.periodChecks.et2Started ? 'checked' : ''} ${!canEditEverything || match.isLocked || !match.periodChecks.et1Ended ? 'disabled' : ''} onchange="updatePeriodChecks(${match.id})" class="accent-purple-400 w-4 h-4">
                             <span>2. PP začalo</span>
                         </label>
                         <label class="flex items-center space-x-2 cursor-pointer text-white font-bold">
-                            <input type="checkbox" id="check-et2-ended" ${match.periodChecks.et2Ended ? 'checked' : ''} ${!canEditEverything \vert{}\vert{} match.isLocked \vert{}\vert{} !match.periodChecks.et2Started ? 'disabled' : ''} onchange="updatePeriodChecks(${match.id})" class="accent-purple-400 w-4 h-4">
+                            <input type="checkbox" id="check-et2-ended" ${match.periodChecks.et2Ended ? 'checked' : ''} ${!canEditEverything || match.isLocked || !match.periodChecks.et2Started ? 'disabled' : ''} onchange="updatePeriodChecks(${match.id})" class="accent-purple-400 w-4 h-4">
                             <span>2. PP skončilo</span>
                         </label>
                     </div>
@@ -369,11 +369,11 @@ export function openMatchProtocol(matchId) {
                 ${isPlayoffSecondLeg && !isMolCup ? `
                     <div class="grid grid-cols-2 gap-3 rounded-xl border border-amber-400/30 bg-amber-500/5 p-4">
                         <label class="flex items-center gap-2 text-xs font-bold text-amber-200">
-                            <input type="checkbox" id="check-penalties-started" ${match.periodChecks.penaltiesStarted ? 'checked' : ''} ${!canEditEverything \vert{}\vert{} match.isLocked \vert{}\vert{} !penaltiesCanBeRecorded ? 'disabled' : ''} onchange="updatePeriodChecks(${match.id})" class="accent-amber-400">
+                            <input type="checkbox" id="check-penalties-started" ${match.periodChecks.penaltiesStarted ? 'checked' : ''} ${!canEditEverything || match.isLocked || !penaltiesCanBeRecorded ? 'disabled' : ''} onchange="updatePeriodChecks(${match.id})" class="accent-amber-400">
                             Penaltový rozstřel začal
                         </label>
                         <label class="flex items-center gap-2 text-xs font-bold text-amber-200">
-                            <input type="checkbox" id="check-penalties-ended" ${match.periodChecks.penaltiesEnded ? 'checked' : ''} ${!canEditEverything \vert{}\vert{} match.isLocked \vert{}\vert{} !penaltiesCanBeRecorded \vert{}\vert{} !match.periodChecks.penaltiesStarted ? 'disabled' : ''} onchange="updatePeriodChecks(${match.id})" class="accent-amber-400">
+                            <input type="checkbox" id="check-penalties-ended" ${match.periodChecks.penaltiesEnded ? 'checked' : ''} ${!canEditEverything || match.isLocked || !penaltiesCanBeRecorded || !match.periodChecks.penaltiesStarted ? 'disabled' : ''} onchange="updatePeriodChecks(${match.id})" class="accent-amber-400">
                             Penaltový rozstřel skončil
                         </label>
                         <p class="col-span-2 text-[10px] text-gray-400">${playoffAggregate ? `Součet obou utkání: ${playoffAggregate.homeScore}:${playoffAggregate.awayScore}.` : 'Čeká se na první zápas baráže.'} Penalty jsou možné pouze po odehrání obou zápasů při shodném součtu.</p>
@@ -405,10 +405,10 @@ export function openMatchProtocol(matchId) {
                 
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <label class="block text-[#aefb12] font-bold">${home ? escapeTeamName(home.name) : 'Domácí'}
-                        <input type="number" min="0" max="99" value="${match.homePenaltyScore}" ${!canEditEverything \vert{}\vert{} match.isLocked \vert{}\vert{} !penaltiesCanBeRecorded \vert{}\vert{} !match.periodChecks.penaltiesStarted ? 'disabled' : ''} onchange="updatePenaltyScores(${match.id})" id="home-penalty-score" class="mt-1 w-full bg-[#0e1a4f] border border-amber-400/30 rounded p-2 text-white disabled:opacity-50">
+                        <input type="number" min="0" max="99" value="${match.homePenaltyScore}" ${!canEditEverything || match.isLocked || !penaltiesCanBeRecorded || !match.periodChecks.penaltiesStarted ? 'disabled' : ''} onchange="updatePenaltyScores(${match.id})" id="home-penalty-score" class="mt-1 w-full bg-[#0e1a4f] border border-amber-400/30 rounded p-2 text-white disabled:opacity-50">
                     </label>
                     <label class="block text-[#05fda3] font-bold">${away ? escapeTeamName(away.name) : 'Hosté'}
-                        <input type="number" min="0" max="99" value="${match.awayPenaltyScore}" ${!canEditEverything \vert{}\vert{} match.isLocked \vert{}\vert{} !penaltiesCanBeRecorded \vert{}\vert{} !match.periodChecks.penaltiesStarted ? 'disabled' : ''} onchange="updatePenaltyScores(${match.id})" id="away-penalty-score" class="mt-1 w-full bg-[#0e1a4f] border border-amber-400/30 rounded p-2 text-white disabled:opacity-50">
+                        <input type="number" min="0" max="99" value="${match.awayPenaltyScore}" ${!canEditEverything || match.isLocked || !penaltiesCanBeRecorded || !match.periodChecks.penaltiesStarted ? 'disabled' : ''} onchange="updatePenaltyScores(${match.id})" id="away-penalty-score" class="mt-1 w-full bg-[#0e1a4f] border border-amber-400/30 rounded p-2 text-white disabled:opacity-50">
                     </label>
                 </div>
                 ${!penaltiesCanBeRecorded ? '<p class="text-amber-300">Penaltový rozstřel zatím nelze zaznamenat.</p>' : ''}
@@ -556,7 +556,7 @@ export function openMatchProtocol(matchId) {
                             } else {
                                 const p = playersData.find(pl => pl.id === e.playerId);
                                 const playerOnField = getPlayersOnFieldAtTime(match, isHome ? 'home' : 'away', timeDisplay).has(e.playerId);
-                                personHtml = `<span class="text-white font-bold">${escapeTeamName(p ? p.robloxNick : (e.playerName \vert{}\vert{} 'Hráč'))}${playerOnField ? '' : ' (mimo hřiště)'}</span>`;
+                                personHtml = `<span class="text-white font-bold">${escapeTeamName(p ? p.robloxNick : (e.playerName || 'Hráč'))}${playerOnField ? '' : ' (mimo hřiště)'}</span>`;
                             }
 
                             let cardBadge = '';
@@ -1774,24 +1774,21 @@ export function submitCard(matchId) {
 // ==================== ZAVŘENÍ PROTOKOLU S KONTROLOU NEULOŽENÝCH ZMĚN ====================
 
 export function closeMatchProtocolWithCheck(matchId) {
-    if (state.unsavedChangesGuard) {
-        openConfirmModal("Opustit Zápis O Utkání?", "Máte rozdělaný zápis s neuloženými změnami! Opravdu chcete zápis zavřít bez uložení?", () => {
-            const matchIndex = matchesData.findIndex(item => item.id === matchId);
-            if (matchIndex !== -1 && state.matchProtocolSnapshotId === matchId && state.matchProtocolSnapshot) {
-                matchesData[matchIndex] = JSON.parse(JSON.stringify(state.matchProtocolSnapshot));
-            }
-            state.unsavedChangesGuard = false;
-            state.matchProtocolSnapshot = null;
-            state.matchProtocolSnapshotId = null;
-            closeSpecificModal('modal-match-protocol');
-            showToast("Zápis byl opuštěn a neuložené změny byly zrušeny.");
-            renderMatches();
-        }, false);
-    } else {
-        state.matchProtocolSnapshot = null;
-        state.matchProtocolSnapshotId = null;
-        closeSpecificModal('modal-match-protocol');
+    if (state.unsavedChangesGuard && !window.confirm(
+        'Zápis obsahuje neuložené změny. Opravdu ho chcete zavřít bez uložení?'
+    )) return;
+
+    const matchIndex = matchesData.findIndex(item => item.id === matchId);
+    if (state.unsavedChangesGuard && matchIndex !== -1 &&
+        state.matchProtocolSnapshotId === matchId && state.matchProtocolSnapshot) {
+        matchesData[matchIndex] = JSON.parse(JSON.stringify(state.matchProtocolSnapshot));
+        showToast('Zápis byl opuštěn a neuložené změny byly zrušeny.');
     }
+    state.unsavedChangesGuard = false;
+    state.matchProtocolSnapshot = null;
+    state.matchProtocolSnapshotId = null;
+    closeSpecificModal('modal-match-protocol');
+    renderMatches();
 }
 
 export function closeMatchProtocolWithoutSave(matchId) {
@@ -1945,10 +1942,12 @@ export async function saveMatchProtocol(matchId) {
     if (reviewEl) match.delegateReview = reviewEl.value;
     if (alertEl) match.delegateAlertRefMgr = alertEl.checked;
 
-    // Počítat statistiky pouze pokud to není naplánovaný zápas 
-    // a ještě u něj nebyly staty spočítány
-    if (match.status === 'Completed' && !match.suspensionsDeducted) {
-        calculateMatchStats(match);
+    try {
+        await apiSaveMatch(match);
+    } catch (error) {
+        state.unsavedChangesGuard = true;
+        showToast(`Zápis se nepodařilo uložit: ${error.message}`, true);
+        return;
     }
 
     if (match.sendStatementToDK && match.punishmentStatement) {
@@ -1956,14 +1955,11 @@ export async function saveMatchProtocol(matchId) {
         showToast("Vyjádření k trestům bylo úspěšně odesláno k DK.");
     }
 
-    state.unsavedChangesGuard = false;
-
-    // Bezpečné uložení – pokud apiSaveMatch selže, nezablokujeme uživatele, ale upozorníme ho a dokončíme lokálně
-    try {
-        await apiSaveMatch(match);
-    } catch (e) {
-        console.warn("apiSaveMatch warning:", e);
+    if (match.status === 'Completed' && !match.suspensionsDeducted) {
+        calculateMatchStats(match);
     }
+
+    state.unsavedChangesGuard = false;
 
     // Započtení stopky (-1 zápas) se provede pouze při prvním dokončení zápisu
     if (match.status === 'Completed' && !match.suspensionsDeducted) {

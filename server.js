@@ -70,6 +70,23 @@ app.use((req, res, next) => {
 });
 app.use(express.static(__dirname, { dotfiles: 'deny' }));
 
+app.get([
+    '/statistiky',
+    '/souteze',
+    '/zapasy',
+    '/tymy',
+    '/rozhodci',
+    '/komise',
+    '/admin'
+], (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+app.get(['/disciplinarka', '/administrace'], (req, res) => {
+    const newPath = req.path === '/disciplinarka' ? '/komise' : '/admin';
+    res.redirect(301, `${newPath}${req.url.slice(req.path.length)}`);
+});
+
 let isPostgres = false;
 let dbClient = null;
 let isDatabaseReady = false;
@@ -629,7 +646,8 @@ function parseCookies(req) {
 }
 
 function authCookieOptions(maxAge, req) {
-    const isSecure = req?.secure || req?.headers?.['x-forwarded-proto'] === 'https' || process.env.NODE_ENV === 'production';
+    const isSecure = req?.secure || req?.headers?.['x-forwarded-proto'] === 'https' ||
+        process.env.NODE_ENV === 'production' || process.env.DISCORD_REDIRECT_URI?.startsWith('https://');
     return [
         'Path=/',
         'HttpOnly',
@@ -639,15 +657,52 @@ function authCookieOptions(maxAge, req) {
     ].filter(Boolean).join('; ');
 }
 
+function getOAuthCallbackHost() {
+    return new URL(
+        process.env.DISCORD_REDIRECT_URI || 'https://portal.cvfl.cz/api/auth/discord/callback'
+    ).hostname;
+}
+
+function getOAuthStateCookieDomain(req) {
+    const callbackHost = getOAuthCallbackHost();
+    const requestHost = req.hostname.toLowerCase();
+    if (requestHost !== callbackHost && !requestHost.endsWith(`.${callbackHost}`)) {
+        return null;
+    }
+    return callbackHost;
+}
+
 function oauthStateCookieOptions(maxAge, req) {
-    const isSecure = req?.secure || req?.headers?.['x-forwarded-proto'] === 'https' || process.env.NODE_ENV === 'production';
+    const isSecure = req?.secure || req?.headers?.['x-forwarded-proto'] === 'https' ||
+        process.env.NODE_ENV === 'production' || process.env.DISCORD_REDIRECT_URI?.startsWith('https://');
+    const cookieDomain = getOAuthStateCookieDomain(req);
     return [
         'Path=/',
         'HttpOnly',
         isSecure ? 'SameSite=None' : 'SameSite=Lax',
         isSecure ? 'Secure' : '',
+        cookieDomain ? `Domain=${cookieDomain}` : '',
         `Max-Age=${maxAge}`
     ].filter(Boolean).join('; ');
+}
+
+function getFrontendOrigin() {
+    const callbackOrigin = new URL(
+        process.env.DISCORD_REDIRECT_URI || 'https://portal.cvfl.cz/api/auth/discord/callback'
+    ).origin;
+    const configuredOrigin = process.env.APP_ORIGIN;
+    if (!configuredOrigin) return callbackOrigin;
+
+    const configuredUrl = new URL(configuredOrigin);
+    if (configuredUrl.hostname.startsWith('api.') &&
+        configuredUrl.hostname.slice('api.'.length) === getOAuthCallbackHost()) {
+        return callbackOrigin;
+    }
+    return configuredUrl.origin;
+}
+
+function authErrorUrl(code) {
+    return `${getFrontendOrigin()}/?authError=${encodeURIComponent(code)}`;
 }
 
 function getSessionSecret() {
@@ -884,19 +939,25 @@ app.get('/api/auth/discord', async (req, res) => {
         return res.status(503).json({ success: false, error: 'Nastavte Discord OAuth proměnné v .env.' });
     }
     if (!isDatabaseReady) return res.status(503).json({ success: false, error: 'Databáze není připravena.' });
+    if (!getOAuthStateCookieDomain(req)) {
+        return res.status(500).json({
+            success: false,
+            error: 'Doména Discord callbacku se musí shodovat s doménou API, aby šlo bezpečně ověřit přihlášení.'
+        });
+    }
     const inviteToken = typeof req.query.invite === 'string' ? req.query.invite : '';
     if (inviteToken && !/^[a-f0-9]{64}$/.test(inviteToken)) {
-        return res.redirect('/?authError=invite_invalid');
+        return res.redirect(authErrorUrl('invite_invalid'));
     }
     if (inviteToken) {
         const invite = await dbGet(
             "SELECT token_hash FROM discord_invites WHERE token_hash = ? AND used_at IS NULL AND revoked_at IS NULL AND expires_at > CURRENT_TIMESTAMP",
             [crypto.createHash('sha256').update(inviteToken).digest('hex')]
         );
-        if (!invite) return res.redirect('/?authError=invite_expired');
+        if (!invite) return res.redirect(authErrorUrl('invite_expired'));
     }
     const oauthState = `${crypto.randomBytes(32).toString('hex')}${inviteToken ? `~${inviteToken}` : ''}`;
-    res.setHeader('Set-Cookie', `cvfl_oauth_state=${createSignedState(oauthState)}; ${oauthStateCookieOptions(600, req)}`);
+    res.setHeader('Set-Cookie', `cvfl_oauth_state_v2=${createSignedState(oauthState)}; ${oauthStateCookieOptions(600, req)}`);
     const authorizeUrl = new URL('https://discord.com/oauth2/authorize');
     authorizeUrl.search = new URLSearchParams({
         client_id: process.env.DISCORD_CLIENT_ID,
@@ -910,9 +971,15 @@ app.get('/api/auth/discord', async (req, res) => {
 
 app.get('/api/auth/discord/callback', async (req, res) => {
     const cookies = parseCookies(req);
-    res.setHeader('Set-Cookie', `cvfl_oauth_state=; ${oauthStateCookieOptions(0, req)}`);
-    if (!hasDiscordOAuthConfig() || !isValidSignedState(cookies.cvfl_oauth_state, req.query.state)) {
-        return res.redirect('/?authError=discord_state');
+    res.setHeader('Set-Cookie', `cvfl_oauth_state_v2=; ${oauthStateCookieOptions(0, req)}`);
+    if (!hasDiscordOAuthConfig()) {
+        return res.redirect(authErrorUrl('discord_login'));
+    }
+    if (req.query.error || !req.query.code) {
+        return res.redirect(authErrorUrl('discord_login'));
+    }
+    if (!isValidSignedState(cookies.cvfl_oauth_state_v2, req.query.state)) {
+        return res.redirect(authErrorUrl('discord_state'));
     }
     const oauthState = req.query.state;
     const inviteSeparator = oauthState.indexOf('~');
@@ -1037,8 +1104,7 @@ app.get('/api/auth/discord/callback', async (req, res) => {
             `cvfl_oauth_state=; ${oauthStateCookieOptions(0, req)}`,
             `cvfl_session=${sessionToken}; ${authCookieOptions(7 * 24 * 60 * 60, req)}`
         ]);
-        const redirectOrigin = process.env.APP_ORIGIN || 'https://portal.cvfl.cz';
-        res.redirect(redirectOrigin);
+        res.redirect(getFrontendOrigin());
     } catch (err) {
         console.error('Chyba během Discord OAuth přihlášení:', err);
         const supportedErrors = new Set([
@@ -1046,8 +1112,7 @@ app.get('/api/auth/discord/callback', async (req, res) => {
             'invite_roles_invalid', 'access_revoked'
         ]);
         const code = supportedErrors.has(err.message) ? err.message : 'discord_login';
-        const redirectOrigin = process.env.APP_ORIGIN || 'https://portal.cvfl.cz';
-        res.redirect(`${redirectOrigin}/?authError=${code}`);
+        res.redirect(authErrorUrl(code));
     }
 });
 

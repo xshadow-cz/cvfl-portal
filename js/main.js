@@ -31,6 +31,7 @@ import {
 
 import {
     switchTab,
+    getTabFromPath,
     setUserRole,
     renderTeamManagersDropdown
 } from './navigation.js';
@@ -196,6 +197,16 @@ window.refereesData = refereesData;
 window.suspensionsData = suspensionsData;
 window.matchesData = matchesData;
 window.dkAuditLogs = dkAuditLogs;
+
+window.addEventListener('beforeunload', event => {
+    if (!state.unsavedChangesGuard) return;
+    event.preventDefault();
+    event.returnValue = '';
+});
+
+window.addEventListener('popstate', () => {
+    switchTab(getTabFromPath(window.location.pathname), { updateHistory: false });
+});
 
 // Globální vystavení funkcí pro kompatibilitu s HTML inline handlery (onclick, onchange atd.)
 Object.assign(window, {
@@ -454,7 +465,7 @@ async function initApp() {
     renderTeamManagersDropdown();
     applyRBACPermissions();
     applyMaintenanceVisibility();
-    switchTab('dashboard');
+    switchTab(getTabFromPath(window.location.pathname), { updateHistory: false });
     renderDashboard();
     updateAdminStats();
     renderDKAuditLogs();

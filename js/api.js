@@ -306,17 +306,12 @@ export async function apiSetMaintenance(enabled, notice = state.maintenanceNotic
  * Uloží nebo aktualizuje zápas v databázi
  */
 export async function apiSaveMatch(match) {
-    if (!isBackendConnected || !match) return false;
-    try {
-        await requestJSON(`/matches/${match.id}`, {
-            method: 'PUT',
-            body: JSON.stringify(match)
-        });
-        return true;
-    } catch (err) {
-        console.warn('[CVFL API] Chyba při synchronizaci zápasu:', err.message);
-        return false;
-    }
+    if (!match) throw new Error('Chybí údaje o zápasu.');
+    if (!isBackendConnected) throw new Error('Databáze není dostupná; zápis nebyl uložen.');
+    await requestJSON(`/matches/${match.id}`, {
+        method: 'PUT',
+        body: JSON.stringify(match)
+    });
 }
 
 /**

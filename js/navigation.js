@@ -13,13 +13,69 @@ import { renderDisciplinary } from './disciplinary.js';
 import { renderAdmin } from './admin.js';
 import { getTeamLogoMarkup, escapeTeamName } from './team-logo.js';
 
-export function switchTab(tabId) {
-    if (tabId === 'admin' && !state.availableRoles.includes('Admin')) {
-        showToast('Tato sekce je dostupná pouze účtům s rolí Vedení Ligy.', true);
-        return;
+const tabPaths = {
+    dashboard: '/statistiky',
+    competitions: '/souteze',
+    matches: '/zapasy',
+    teams: '/tymy',
+    referees: '/rozhodci',
+    disciplinary: '/komise',
+    admin: '/admin'
+};
+
+const pathTabs = Object.fromEntries(
+    Object.entries(tabPaths).flatMap(([tab, path]) => [
+        [path, tab],
+        ...(tab === 'disciplinary' ? [['/disciplinarka', tab]] : []),
+        ...(tab === 'admin' ? [['/administrace', tab]] : [])
+    ])
+);
+
+export function getTabFromPath(pathname) {
+    return pathTabs[pathname.replace(/\/+$/, '') || '/'] || 'dashboard';
+}
+
+function canAccessTab(tabId) {
+    const roles = state.availableRoles;
+    if (['dashboard', 'competitions', 'matches', 'teams'].includes(tabId)) return roles.length > 0;
+    if (tabId === 'referees') return roles.includes('Admin') || roles.includes('Referee_Manager');
+    if (tabId === 'disciplinary') {
+        return roles.some(role =>
+            ['Admin', 'DK', 'Referee_Manager', 'Referee'].includes(role) ||
+            role.startsWith('Team_Manager_')
+        );
     }
+    if (tabId === 'admin') return roles.includes('Admin');
+    return false;
+}
+
+export function switchTab(tabId, { updateHistory = true } = {}) {
+    if (!canAccessTab(tabId)) {
+        const sectionNames = {
+            referees: 'Rozhodčí',
+            disciplinary: 'Disciplinárka',
+            admin: 'Administrace'
+        };
+        showToast(
+            `K sekci ${sectionNames[tabId] || 'portálu'} nemáte přidělený přístup.`,
+            true
+        );
+        if (window.location.pathname !== tabPaths[state.activeTab]) {
+            window.history.replaceState(null, '', tabPaths[state.activeTab] || tabPaths.dashboard);
+        }
+        return false;
+    }
+
     const protocolModal = document.getElementById('modal-match-protocol');
     if (protocolModal && !protocolModal.classList.contains('hidden')) {
+        if (state.unsavedChangesGuard && !window.confirm(
+            'Zápis obsahuje neuložené změny. Opravdu chcete odejít bez uložení?'
+        )) {
+            if (!updateHistory) {
+                window.history.replaceState(null, '', tabPaths[state.activeTab] || tabPaths.dashboard);
+            }
+            return false;
+        }
         const match = matchesData.find(item => item.id === state.matchProtocolSnapshotId);
         if (match && state.matchProtocolSnapshot) Object.assign(match, state.matchProtocolSnapshot);
         state.unsavedChangesGuard = false;
@@ -28,6 +84,14 @@ export function switchTab(tabId) {
         closeSpecificModal('modal-match-protocol');
     }
     state.activeTab = tabId;
+    if (tabPaths[tabId] && window.location.pathname !== tabPaths[tabId]) {
+        if (updateHistory) {
+            window.history.pushState(null, '', tabPaths[tabId]);
+        } else {
+            window.history.replaceState(null, '', tabPaths[tabId]);
+        }
+    }
+
     ['dashboard', 'competitions', 'matches', 'teams', 'referees', 'disciplinary', 'admin'].forEach(tab => {
         const el = document.getElementById(`tab-${tab}`);
         const nav = document.getElementById(`nav-${tab}`);
@@ -53,6 +117,7 @@ export function switchTab(tabId) {
     if (tabId === 'referees') renderRefereesTab();
     if (tabId === 'disciplinary') renderDisciplinary();
     if (tabId === 'admin') renderAdmin();
+    return true;
 }
 
 export function renderTeamManagersDropdown() {
