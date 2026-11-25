@@ -458,6 +458,115 @@ function retryPortalConnection() {
 
 window.retryPortalConnection = retryPortalConnection;
 
+function setupResponsiveNavigation() {
+    const header = document.getElementById('app-header');
+    const headerContent = document.getElementById('header-content');
+    const brand = document.getElementById('header-brand');
+    const nav = document.getElementById('nav-links');
+    const headerRow = nav?.parentElement;
+    const tools = document.getElementById('header-tools');
+    const search = document.getElementById('header-search');
+    const roleControl = document.getElementById('role-dropdown')?.parentElement;
+    const toggle = document.getElementById('mobile-nav-toggle');
+    const backdrop = document.getElementById('mobile-nav-backdrop');
+    if (!header || !headerContent || !brand || !nav || !headerRow || !tools || !search || !roleControl || !toggle || !backdrop) return;
+
+    let updateScheduled = false;
+    let compactLayout = false;
+    const updateLayout = () => {
+        updateScheduled = false;
+        const wasOpen = nav.classList.contains('mobile-nav-open');
+        if (compactLayout) {
+            tools.insertBefore(search, roleControl);
+            headerRow.insertBefore(nav, tools);
+            nav.classList.remove('mobile-nav-panel');
+            nav.classList.remove('mobile-nav-open');
+            header.classList.remove('nav-compact');
+            compactLayout = false;
+        }
+        const availableWidth = headerContent.clientWidth;
+        const navWidth = Array.from(nav.children).reduce((total, link) => {
+            if (!(link instanceof HTMLElement) || link.getClientRects().length === 0) return total;
+            return total + link.getBoundingClientRect().width;
+        }, 0) + Math.max(0, nav.children.length - 1) * 8;
+        const requiredWidth = brand.getBoundingClientRect().width +
+            navWidth + tools.getBoundingClientRect().width + toggle.getBoundingClientRect().width + 40;
+        const shouldUseMenu = window.innerWidth < 768 || requiredWidth > availableWidth;
+        header.classList.toggle('nav-compact', shouldUseMenu);
+        if (shouldUseMenu) {
+            compactLayout = true;
+            document.body.append(nav);
+            nav.classList.add('mobile-nav-panel');
+            nav.prepend(search);
+            if (wasOpen) {
+                nav.inert = false;
+                nav.setAttribute('aria-hidden', 'false');
+                nav.classList.add('mobile-nav-open');
+            } else {
+                closeMenu();
+            }
+        } else {
+            closeMenu();
+        }
+    };
+    const scheduleUpdate = () => {
+        if (updateScheduled) return;
+        updateScheduled = true;
+        window.requestAnimationFrame(updateLayout);
+    };
+    const closeMenu = () => {
+        nav.classList.remove('mobile-nav-open');
+        backdrop.classList.remove('mobile-nav-backdrop-open');
+        nav.inert = header.classList.contains('nav-compact');
+        nav.setAttribute('aria-hidden', String(nav.inert));
+        toggle.setAttribute('aria-expanded', 'false');
+        toggle.setAttribute('aria-label', 'Otevřít navigaci');
+        toggle.innerHTML = '<i class="fa-solid fa-bars text-lg"></i>';
+        document.body.classList.remove('mobile-nav-visible');
+    };
+    const openMenu = () => {
+        nav.inert = false;
+        nav.setAttribute('aria-hidden', 'false');
+        nav.classList.add('mobile-nav-open');
+        backdrop.classList.add('mobile-nav-backdrop-open');
+        toggle.setAttribute('aria-expanded', 'true');
+        toggle.setAttribute('aria-label', 'Zavřít navigaci');
+        toggle.innerHTML = '<i class="fa-solid fa-xmark text-lg"></i>';
+        document.body.classList.add('mobile-nav-visible');
+    };
+
+    toggle.addEventListener('click', () => {
+        if (toggle.getAttribute('aria-expanded') === 'true') closeMenu();
+        else openMenu();
+    });
+    backdrop.addEventListener('click', closeMenu);
+    nav.addEventListener('click', event => {
+        if (event.target instanceof Element && event.target.closest('a')) closeMenu();
+    });
+    document.addEventListener('keydown', event => {
+        if (event.key === 'Escape' && toggle.getAttribute('aria-expanded') === 'true') {
+            closeMenu();
+            toggle.focus();
+        }
+    });
+    window.addEventListener('resize', scheduleUpdate, { passive: true });
+    if ('ResizeObserver' in window) {
+        const resizeObserver = new ResizeObserver(scheduleUpdate);
+        resizeObserver.observe(headerContent);
+        resizeObserver.observe(brand);
+        resizeObserver.observe(tools);
+    }
+    const navObserver = new MutationObserver(records => {
+        if (records.some(record => record.target !== nav &&
+            record.target instanceof Element && record.target.closest('a'))) {
+            scheduleUpdate();
+        }
+    });
+    navObserver.observe(nav, { attributes: true, childList: true, subtree: true, attributeFilter: ['class'] });
+    document.fonts?.ready.then(scheduleUpdate);
+    scheduleUpdate();
+}
+
 // Inicializace aplikace po načtení DOM
 async function initApp() {
     if (appInitializationPromise) return appInitializationPromise;
@@ -614,7 +723,11 @@ async function initializeApp() {
 }
 
 if (document.readyState === 'loading') {
-    window.addEventListener('DOMContentLoaded', initApp);
+    window.addEventListener('DOMContentLoaded', () => {
+        setupResponsiveNavigation();
+        initApp();
+    });
 } else {
+    setupResponsiveNavigation();
     initApp();
 }

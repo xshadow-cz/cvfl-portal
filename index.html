@@ -2,7 +2,7 @@
 <html lang="cs" class="dark">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>CVFL Portál - Systém Vedení a Správy Soutěží</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -68,11 +68,14 @@
     </div>
 
     <!-- Main Navigation Bar -->
-    <header class="bg-[#0e1a4f] border-b border-[#1e307d] sticky top-0 z-30 shadow-lg">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between h-16 items-center">
+    <header id="app-header" class="bg-[#0e1a4f] border-b border-[#1e307d] sticky top-0 z-30 shadow-lg">
+        <div id="header-content" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center gap-3">
+                <button id="mobile-nav-toggle" type="button" aria-label="Otevřít navigaci" aria-controls="nav-links" aria-expanded="false" class="hidden h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[#1e307d] text-white hover:bg-[#13236b] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#aefb12]">
+                    <i class="fa-solid fa-bars text-lg"></i>
+                </button>
                 <!-- Logo & Brand -->
-                <a href="/statistiky" class="flex items-center space-x-3 cursor-pointer" onclick="if (event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) { event.preventDefault(); switchTab('dashboard'); }">
+                <a id="header-brand" href="/statistiky" class="flex shrink-0 items-center space-x-3 cursor-pointer" onclick="if (event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) { event.preventDefault(); switchTab('dashboard'); }">
                     <img src="assets/cvfl-logo.png" alt="CVFL" class="h-10 w-10 object-contain">
                     <div>
                         <span class="font-black text-xl tracking-wider text-white">CVFL <span class="text-[#aefb12]">PORTÁL</span></span>
@@ -80,7 +83,7 @@
                 </a>
 
                 <!-- Desktop Navigation Links -->
-                <nav id="nav-links" class="hidden md:flex space-x-1 lg:space-x-2 text-sm font-bold">
+                <nav id="nav-links" aria-label="Hlavní navigace" class="flex shrink-0 items-center space-x-1 lg:space-x-2 text-sm font-bold">
                     <a href="/statistiky" onclick="if (event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) { event.preventDefault(); switchTab('dashboard'); }" id="nav-dashboard" class="px-3 py-2 rounded-lg text-[#aefb12] bg-[#aefb12]/10"><i class="fa-solid fa-chart-pie mr-2"></i>Přehled</a>
                     <a href="/souteze" onclick="if (event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) { event.preventDefault(); switchTab('competitions'); }" id="nav-competitions" class="px-3 py-2 rounded-lg hover:bg-white/5 text-gray-300"><i class="fa-solid fa-list mr-2"></i>Soutěže</a>
                     <a href="/zapasy" onclick="if (event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) { event.preventDefault(); switchTab('matches'); }" id="nav-matches" class="px-3 py-2 rounded-lg hover:bg-white/5 text-gray-300"><i class="fa-solid fa-calendar-days mr-2"></i>Zápasy</a>
@@ -91,8 +94,8 @@
                 </nav>
 
                 <!-- Search & User Role Badge -->
-                <div class="flex items-center space-x-3">
-                    <div class="relative hidden sm:block">
+                <div id="header-tools" class="flex shrink-0 items-center space-x-3">
+                    <div id="header-search" role="search" class="relative">
                         <input type="text" id="global-search" oninput="handleGlobalSearch(this.value)" placeholder="Hledat hráče, tým..." class="w-40 lg:w-56 bg-[#13236b] border border-[#1e307d] text-xs rounded-lg pl-8 pr-3 py-2 text-white focus:outline-none focus:border-[#aefb12]">
                         <i class="fa-solid fa-magnifying-glass absolute left-2.5 top-2.5 text-gray-400 text-xs"></i>
                         <div id="search-results" class="hidden absolute left-0 right-0 top-10 bg-[#0e1a4f] border border-[#1e307d] rounded-lg shadow-2xl z-50 max-h-60 overflow-y-auto text-xs p-2"></div>
@@ -136,6 +139,7 @@
             </div>
         </div>
     </header>
+    <button id="mobile-nav-backdrop" type="button" aria-label="Zavřít navigaci" class="hidden fixed inset-0 z-40 bg-black/60 opacity-0 transition-opacity"></button>
 
     <!-- Main Content Container -->
     <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
