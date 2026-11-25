@@ -55,6 +55,7 @@ import {
     openDelegateComingSoon,
     closeDelegateComingSoon,
     getMatchIdFromPath,
+    getFISTabFromPath,
     toggleSendToDK,
     toggleMatchReady,
     lockMatchRecord,
@@ -252,12 +253,18 @@ window.addEventListener('popstate', () => {
     const delegateReview = /\/hodnoceni-delegata\/?$/.test(window.location.pathname);
     const matchId = getMatchIdFromPath(window.location.pathname);
     if (matchId !== null) {
+        const matchPath = window.location.pathname;
         if (state.activeTab !== 'matches' && !switchTab('matches', { updateHistory: false })) return;
+        if (window.location.pathname !== matchPath) {
+            window.history.replaceState(window.history.state, '', matchPath);
+        }
         openMatchProtocol(matchId, { updateHistory: false });
         if (delegateReview) {
             openDelegateComingSoon(matchId);
         } else {
             document.getElementById('delegate-coming-soon-page')?.remove();
+            const fisTab = getFISTabFromPath(window.location.pathname);
+            if (fisTab) switchFISTab(fisTab, { updateHistory: false });
         }
         return;
     }
@@ -582,10 +589,17 @@ async function initializeApp() {
     const playerStatsPage = window.location.pathname === '/statistiky-hracu';
     const matchId = getMatchIdFromPath(window.location.pathname);
     if (matchId !== null) {
+        const matchPath = window.location.pathname;
         switchTab('matches', { updateHistory: false });
+        if (window.location.pathname !== matchPath) {
+            window.history.replaceState(window.history.state, '', matchPath);
+        }
         openMatchProtocol(matchId, { updateHistory: false });
         if (delegateReview) {
             openDelegateComingSoon(matchId, { updateHistory: false });
+        } else {
+            const fisTab = getFISTabFromPath(window.location.pathname);
+            if (fisTab) switchFISTab(fisTab, { updateHistory: false });
         }
     } else {
         switchTab(getTabFromPath(window.location.pathname), { updateHistory: false });

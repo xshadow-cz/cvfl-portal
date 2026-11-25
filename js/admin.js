@@ -942,5 +942,5 @@ export function updateAdminStats() {
     const elReferees = document.getElementById('dash-stat-referees');
 
     if (elPlayers) elPlayers.textContent = `${playersData.filter(player => !player.isArchived).length} Hráčů`;
-    if (elReferees) elReferees.textContent = `${refereesData.length} Rozhodčích`;
+    if (elReferees) elReferees.textContent = `${state.refereeCount || refereesData.length} Rozhodčích`;
 }

@@ -399,7 +399,7 @@ export function renderCompetitions() {
                                     <tr class="hover:bg-[#13236b]/60">
                                         <td class="p-2.5 text-center font-bold">
                                             <span class="inline-flex min-w-6 h-6 items-center justify-center gap-1 rounded-full bg-[#13236b] px-1 text-center font-black ${isConfirmedChampion ? 'text-amber-300' : 'text-gray-300'}" style="${badgeStyle}">
-                                                ${index + 1}${titleGroup && index === 0 ? '<i class="fa-solid fa-trophy text-amber-400" aria-label="Mistr ligy"></i>' : ''}
+                                                ${index + 1}${titleGroup && index === 0 ? '<i class="fa-solid fa-trophy text-black" aria-label="Mistr ligy"></i>' : ''}
                                             </span>
                                         </td>
                                         <td class="max-w-0 p-2.5 font-bold text-white">

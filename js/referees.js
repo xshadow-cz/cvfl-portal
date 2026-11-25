@@ -2,13 +2,21 @@
  * CVFL Portál - Rozhodčí, Licence a Nominace na Utkání
  */
 
-import { state, refereesData, matchesData, teamsData } from './state.js';
+import { state, refereesData, matchesData, refereeAssignmentsData, teamsData } from './state.js';
 import { openModal, closeSpecificModal, showToast, openConfirmModal } from './ui.js';
 import { logDKAction } from './disciplinary.js';
 import { updateAdminStats } from './admin.js';
 import { renderDashboard } from './dashboard.js';
 import { getTeamProfileLinkMarkup, escapeTeamName } from './team-logo.js';
 import { apiCreateReferee, apiUpdateReferee, apiDeleteReferee, apiSaveMatch } from './api.js';
+
+function canManageReferees() {
+    return ['Admin', 'Referee_Manager'].includes(state.currentUserRole);
+}
+
+function canSeeRefereeDirectory() {
+    return ['Admin', 'Referee_Manager', 'DK', 'Delegate'].includes(state.currentUserRole);
+}
 
 export function renderRefereesTab() {
     renderDelegateAlerts();
@@ -89,7 +97,17 @@ export function dismissDelegateAlert(matchId) {
 
 export function renderRefereesMainTable() {
     const body = document.getElementById('referees-main-table');
+    const directory = document.getElementById('referees-directory-panel');
+    const actionsHeading = document.getElementById('referee-directory-actions-heading');
+    const canSeeDirectory = canSeeRefereeDirectory();
+    const canManage = canManageReferees();
+    if (directory) directory.classList.toggle('hidden', !canSeeDirectory);
+    if (actionsHeading) actionsHeading.classList.toggle('hidden', !canManage);
     if (!body) return;
+    if (!canSeeDirectory) {
+        body.innerHTML = '';
+        return;
+    }
 
     body.innerHTML = refereesData.map(r => `
         <tr class="hover:bg-[#13236b]/60">
@@ -112,12 +130,12 @@ export function renderRefereesMainTable() {
             <td class="p-3">
                 ${r.isDelegate ? '<span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 font-bold text-[10px]"><i class="fa-solid fa-check mr-1"></i> ANO</span>' : '<span class="px-2 py-0.5 rounded bg-gray-800 text-gray-400 font-bold text-[10px]">NE</span>'}
             </td>
-            <td class="p-3 text-right space-x-1">
+            ${canManage ? `<td class="p-3 text-right space-x-1">
                 <button onclick="editRefereeModal(${r.id})" class="px-2 py-1 bg-[#13236b] hover:bg-[#1e307d] text-[#aefb12] rounded font-bold">Upravit</button>
                 <button onclick="deleteRefereeLicenseWithConfirm(${r.id})" class="px-2 py-1 bg-[#f33332]/20 hover:bg-[#f33332] text-[#f33332] hover:text-white rounded font-bold transition" title="Odebrat licencí / Smazat">
                     <i class="fa-solid fa-user-slash"></i>
                 </button>
-            </td>
+            </td>` : ''}
         </tr>
     `).join('');
 }
@@ -270,6 +288,10 @@ export function openRefereeCard(refereeId) {
 }
 
 export function deleteRefereeLicenseWithConfirm(refId) {
+    if (!canManageReferees()) {
+        showToast('Spravovat rozhodčí může pouze vedení ligy nebo vedení rozhodčích.', true);
+        return;
+    }
     const ref = refereesData.find(r => r.id === refId);
     if (!ref) return;
 
@@ -295,8 +317,10 @@ export function deleteRefereeLicenseWithConfirm(refId) {
 export function renderRefereeAssignments() {
     const container = document.getElementById('referee-assignments-list');
     if (!container) return;
+    const canManage = canManageReferees();
 
-    const unfinishedMatches = matchesData.filter(m =>
+    const assignmentSource = canManage ? matchesData : refereeAssignmentsData;
+    const unfinishedMatches = assignmentSource.filter(m =>
         m.status !== 'Completed' &&
         m.matchDate &&
         !['TBA', 'TBD'].includes(String(m.matchDate).trim().toUpperCase()) &&
@@ -340,48 +364,52 @@ export function renderRefereeAssignments() {
                 <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 text-xs">
                     <div>
                         <span class="text-[10px] text-gray-400 block mb-1">Hlavní Rozhodčí (HR):</span>
-                        <button onclick="openSlotPicker(${m.id}, 'referee')" class="w-full text-left p-2 rounded border transition flex justify-between items-center ${m.referee ? 'bg-[#0e1a4f] border-[#aefb12] text-[#aefb12] font-bold' : 'bg-[#0e1a4f]/50 border-[#1e307d] text-gray-400 hover:border-[#aefb12]'}">
+                        ${canManage ? `<button onclick="openSlotPicker(${m.id}, 'referee')" class="w-full text-left p-2 rounded border transition flex justify-between items-center ${m.referee ? 'bg-[#0e1a4f] border-[#aefb12] text-[#aefb12] font-bold' : 'bg-[#0e1a4f]/50 border-[#1e307d] text-gray-400 hover:border-[#aefb12]'}">
                             <span class="truncate">${escapeTeamName(m.referee || '+ Vybrat HR')}</span>
                             <i class="fa-solid fa-chevron-right text-[10px]"></i>
-                        </button>
+                        </button>` : `<div class="w-full p-2 rounded border ${m.referee ? 'bg-[#0e1a4f] border-[#aefb12] text-[#aefb12] font-bold' : 'bg-[#0e1a4f]/50 border-[#1e307d] text-gray-400'}">${escapeTeamName(m.referee || 'Nenominován')}</div>`}
                     </div>
 
                     <div>
                         <span class="text-[10px] text-gray-400 block mb-1">Delegát Utkání:</span>
-                        <button onclick="openSlotPicker(${m.id}, 'delegate')" class="w-full text-left p-2 rounded border transition flex justify-between items-center ${m.delegate ? 'bg-[#0e1a4f] border-amber-400 text-amber-400 font-bold' : 'bg-[#0e1a4f]/50 border-[#1e307d] text-gray-400 hover:border-amber-400'}">
+                        ${canManage ? `<button onclick="openSlotPicker(${m.id}, 'delegate')" class="w-full text-left p-2 rounded border transition flex justify-between items-center ${m.delegate ? 'bg-[#0e1a4f] border-amber-400 text-amber-400 font-bold' : 'bg-[#0e1a4f]/50 border-[#1e307d] text-gray-400 hover:border-amber-400'}">
                             <span class="truncate">${escapeTeamName(m.delegate || '+ Vybrat Delegáta')}</span>
                             <i class="fa-solid fa-chevron-right text-[10px]"></i>
-                        </button>
+                        </button>` : `<div class="w-full p-2 rounded border ${m.delegate ? 'bg-[#0e1a4f] border-amber-400 text-amber-400 font-bold' : 'bg-[#0e1a4f]/50 border-[#1e307d] text-gray-400'}">${escapeTeamName(m.delegate || 'Nenominován')}</div>`}
                     </div>
 
                     <div>
                         <span class="text-[10px] text-gray-400 block mb-1">Čtvrtý Rozhodčí (4R):</span>
-                        <button ${!m.referee ? 'disabled title="Nejprve přiřaďte hlavního rozhodčího."' : ''} onclick="openSlotPicker(${m.id}, 'fourthRef')" class="w-full text-left p-2 rounded border transition flex justify-between items-center disabled:cursor-not-allowed disabled:opacity-40 ${m.fourthRef ? 'bg-[#0e1a4f] border-[#05fda3] text-[#05fda3] font-bold' : 'bg-[#0e1a4f]/50 border-[#1e307d] text-gray-400 hover:border-[#05fda3]'}">
+                        ${canManage ? `<button ${!m.referee ? 'disabled title="Nejprve přiřaďte hlavního rozhodčího."' : ''} onclick="openSlotPicker(${m.id}, 'fourthRef')" class="w-full text-left p-2 rounded border transition flex justify-between items-center disabled:cursor-not-allowed disabled:opacity-40 ${m.fourthRef ? 'bg-[#0e1a4f] border-[#05fda3] text-[#05fda3] font-bold' : 'bg-[#0e1a4f]/50 border-[#1e307d] text-gray-400 hover:border-[#05fda3]'}">
                             <span class="truncate">${escapeTeamName(m.fourthRef || '+ Vybrat 4R')}</span>
                             <i class="fa-solid fa-chevron-right text-[10px]"></i>
-                        </button>
+                        </button>` : `<div class="w-full p-2 rounded border ${m.fourthRef ? 'bg-[#0e1a4f] border-[#05fda3] text-[#05fda3] font-bold' : 'bg-[#0e1a4f]/50 border-[#1e307d] text-gray-400'}">${escapeTeamName(m.fourthRef || 'Nenominován')}</div>`}
                     </div>
 
                     <div>
                         <span class="text-[10px] text-gray-400 block mb-1">Videorozhodčí (VAR):</span>
-                        <button ${!m.referee ? 'disabled title="Nejprve přiřaďte hlavního rozhodčího."' : ''} onclick="openSlotPicker(${m.id}, 'var')" class="w-full text-left p-2 rounded border transition flex justify-between items-center disabled:cursor-not-allowed disabled:opacity-40 ${m.var ? 'bg-[#0e1a4f] border-purple-400 text-purple-300 font-bold' : 'bg-[#0e1a4f]/50 border-[#1e307d] text-gray-400 hover:border-purple-400'}">
+                        ${canManage ? `<button ${!m.referee ? 'disabled title="Nejprve přiřaďte hlavního rozhodčího."' : ''} onclick="openSlotPicker(${m.id}, 'var')" class="w-full text-left p-2 rounded border transition flex justify-between items-center disabled:cursor-not-allowed disabled:opacity-40 ${m.var ? 'bg-[#0e1a4f] border-purple-400 text-purple-300 font-bold' : 'bg-[#0e1a4f]/50 border-[#1e307d] text-gray-400 hover:border-purple-400'}">
                             <span class="truncate">${escapeTeamName(m.var || '+ Vybrat VAR')}</span>
                             <i class="fa-solid fa-chevron-right text-[10px]"></i>
-                        </button>
+                        </button>` : `<div class="w-full p-2 rounded border ${m.var ? 'bg-[#0e1a4f] border-purple-400 text-purple-300 font-bold' : 'bg-[#0e1a4f]/50 border-[#1e307d] text-gray-400'}">${escapeTeamName(m.var || 'Nenominován')}</div>`}
                     </div>
                 </div>
 
-                <div class="flex justify-end pt-2 border-t border-[#1e307d]">
+                ${canManage ? `<div class="flex justify-end pt-2 border-t border-[#1e307d]">
                     <button onclick="saveRefereeAssignmentsForMatch(${m.id})" class="px-4 py-1.5 bg-[#05fda3] hover:bg-opacity-90 text-[#13236b] font-black rounded-lg text-xs shadow">
                         <i class="fa-solid fa-floppy-disk mr-1"></i> Uložit Nominaci
                     </button>
-                </div>
+                </div>` : ''}
             </div>
         `;
     }).join('');
 }
 
 export async function saveRefereeAssignmentsForMatch(matchId) {
+    if (!canManageReferees()) {
+        showToast('Nominace může upravovat pouze vedení ligy nebo vedení rozhodčích.', true);
+        return;
+    }
     const match = matchesData.find(item => item.id === matchId);
     if (!match) return;
     if (!await apiSaveMatch(match)) {
@@ -395,8 +423,8 @@ export async function saveRefereeAssignmentsForMatch(matchId) {
 export function openSlotPicker(matchId, role) {
     const match = matchesData.find(m => m.id === matchId);
     if (!match) return;
-    if (!['Admin', 'Referee_Manager'].includes(state.currentUserRole)) {
-        showToast('Nominace může upravovat pouze vedení rozhodčích.', true);
+    if (!canManageReferees()) {
+        showToast('Nominace může upravovat pouze vedení ligy nebo vedení rozhodčích.', true);
         return;
     }
     if (role !== 'referee' && role !== 'delegate' && !match.referee) {
@@ -473,6 +501,10 @@ export function openSlotPicker(matchId, role) {
 }
 
 export function selectRefereeForSlot(refName) {
+    if (!canManageReferees()) {
+        showToast('Nominace může upravovat pouze vedení ligy nebo vedení rozhodčích.', true);
+        return;
+    }
     const match = matchesData.find(m => m.id === state.activeSlotMatchId);
     if (!match || !state.activeSlotRole) return;
 
@@ -503,6 +535,10 @@ export function selectRefereeForSlotById(refereeId) {
 }
 
 export function openAddRefereeModal() {
+    if (!canManageReferees()) {
+        showToast('Spravovat rozhodčí může pouze vedení ligy nebo vedení rozhodčích.', true);
+        return;
+    }
     state.activeEditRefId = null;
     document.getElementById('referee-modal-title').innerHTML = `<i class="fa-solid fa-user-plus"></i> Přidat Rozhodčího`;
     document.getElementById('edit-ref-roblox').value = '';
@@ -520,6 +556,10 @@ export function openAddRefereeModal() {
 }
 
 export function editRefereeModal(refId) {
+    if (!canManageReferees()) {
+        showToast('Spravovat rozhodčí může pouze vedení ligy nebo vedení rozhodčích.', true);
+        return;
+    }
     const ref = refereesData.find(r => r.id === refId);
     if (!ref) return;
 
@@ -552,6 +592,10 @@ export function toggleRefStatusReasonInput() {
 }
 
 export async function saveRefereeChanges() {
+    if (!canManageReferees()) {
+        showToast('Spravovat rozhodčí může pouze vedení ligy nebo vedení rozhodčích.', true);
+        return;
+    }
     const roblox = document.getElementById('edit-ref-roblox').value.trim();
     const discord = document.getElementById('edit-ref-discord').value.trim();
     const discordId = document.getElementById('edit-ref-discord-id').value.trim();

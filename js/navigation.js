@@ -38,11 +38,11 @@ export function getTabFromPath(pathname) {
 function canAccessTab(tabId) {
     const roles = state.availableRoles;
     if (['dashboard', 'competitions', 'matches', 'teams'].includes(tabId)) return roles.length > 0;
-    if (tabId === 'referees') return roles.includes('Admin') || roles.includes('Referee_Manager');
+    if (tabId === 'referees') return roles.length > 0;
     if (tabId === 'disciplinary') {
         return roles.some(role =>
             ['Admin', 'DK', 'Referee_Manager', 'Referee'].includes(role) ||
-            role.startsWith('Team_Manager_')
+            role === 'Delegate' || role.startsWith('Team_Manager_')
         );
     }
     if (tabId === 'admin') return roles.includes('Admin');

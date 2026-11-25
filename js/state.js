@@ -15,6 +15,7 @@ export const state = {
     maintenanceNotice: '',
     systemAnnouncement: 'Vítejte v oficiálním CVFL Portálu!',
     playerSyncEnabled: false,
+    refereeCount: 0,
     competitionVisibility: {
         nadstavba: false,
         baraz: false,
@@ -42,5 +43,7 @@ export const refereesData = [];
 export const suspensionsData = [];
 
 export const matchesData = [];
+
+export const refereeAssignmentsData = [];
 
 export const dkAuditLogs = [];

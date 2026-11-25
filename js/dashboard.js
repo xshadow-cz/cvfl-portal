@@ -571,9 +571,11 @@ function renderDashboardMatchCards(matchList) {
                         <span class="px-2 py-0.5 rounded text-[10px] font-bold ${m.status === 'Completed' ? 'bg-gray-800 text-gray-300' : (m.status === 'Postponed' ? 'bg-amber-500/20 text-amber-300' : 'bg-[#aefb12]/20 text-[#aefb12]')}">
                             ${getMatchStatusLabel(m.status)}
                         </span>
-                        <button onclick="openMatchProtocol(${m.id})" class="px-3 py-1 bg-[#aefb12] hover:bg-opacity-90 text-[#13236b] font-black rounded-lg transition">
+                        ${(state.currentUserRole || '').startsWith('Team_Manager') &&
+                            state.activeTeamManagerTeamId !== m.homeTeamId &&
+                            state.activeTeamManagerTeamId !== m.awayTeamId ? '' : `<button onclick="openMatchProtocol(${m.id})" class="px-3 py-1 bg-[#aefb12] hover:bg-opacity-90 text-[#13236b] font-black rounded-lg transition">
                             Zápis Utkání
-                        </button>
+                        </button>`}
                     </div>
                 </div>
             </div>
@@ -594,7 +596,7 @@ export function renderDashboard() {
     const tStat = document.getElementById('dash-stat-teams');
 
     if (pStat) pStat.textContent = `${playersData.filter(player => !player.isArchived).length} Hráčů`;
-    if (rStat) rStat.textContent = `${refereesData.length} Rozhodčích`;
+    if (rStat) rStat.textContent = `${state.refereeCount || refereesData.length} Rozhodčích`;
     if (tStat) tStat.textContent = `${teamsData.length} Klubů`;
 
     renderDashboardLeaderboards();

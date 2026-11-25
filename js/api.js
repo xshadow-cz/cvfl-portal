@@ -16,6 +16,7 @@ import {
     trainersData,
     refereesData,
     matchesData,
+    refereeAssignmentsData,
     suspensionsData,
     dkAuditLogs
 } from './state.js';
@@ -282,6 +283,9 @@ export async function loadInitialStateFromAPI() {
                 refereesData.length = 0;
                 refereesData.push(...data.referees);
             }
+            if (Number.isInteger(data.refereeCount)) {
+                state.refereeCount = data.refereeCount;
+            }
 
             // Naplnění trenérů
             if (Array.isArray(data.trainers)) {
@@ -308,6 +312,10 @@ export async function loadInitialStateFromAPI() {
             if (Array.isArray(data.matches)) {
                 matchesData.length = 0;
                 matchesData.push(...data.matches);
+            }
+            if (Array.isArray(data.refereeAssignments)) {
+                refereeAssignmentsData.length = 0;
+                refereeAssignmentsData.push(...data.refereeAssignments);
             }
 
             // Naplnění disciplinárních trestů

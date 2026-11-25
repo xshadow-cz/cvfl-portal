@@ -93,9 +93,9 @@ export function renderMatches() {
                             Zrušit Kontumaci
                         </button>` : ''}
                     </div>
-                    <button onclick="openMatchProtocol(${m.id})" class="px-4 py-1.5 bg-[#aefb12] hover:bg-opacity-90 text-[#13236b] font-black rounded-lg shadow">
+                    ${canOpenMatchProtocol(m) ? `<button onclick="openMatchProtocol(${m.id})" class="px-4 py-1.5 bg-[#aefb12] hover:bg-opacity-90 text-[#13236b] font-black rounded-lg shadow">
                         Zápis Utkání
-                    </button>
+                    </button>` : ''}
                 </div>
             </div>
         `;
@@ -103,8 +103,33 @@ export function renderMatches() {
 }
 
 export function getMatchIdFromPath(pathname) {
-    const match = /^\/zapasy\/(\d+)(?:\/hodnoceni-delegata)?\/?$/.exec(pathname);
+    const match = /^\/zapasy\/(\d+)(?:\/[^/]+)?\/?$/.exec(pathname);
     return match ? Number(match[1]) : null;
+}
+
+const fisTabSlugs = {
+    sestavy: 'sestavy',
+    realizacni: 'realizacni',
+    'hraci-casti': 'hraci-casti',
+    stridani: 'stridani',
+    branky: 'branky',
+    vylouceni: 'karty',
+    online: 'komentar',
+    rozhodci: 'rozhodci',
+    kontrola: 'kontrola'
+};
+const fisSlugTabs = Object.fromEntries(Object.entries(fisTabSlugs).map(([tab, slug]) => [slug, tab]));
+
+export function getFISTabFromPath(pathname) {
+    const match = /^\/zapasy\/\d+\/([^/]+)\/?$/.exec(pathname);
+    return match ? (fisSlugTabs[match[1]] || null) : null;
+}
+
+export function canOpenMatchProtocol(match) {
+    if (!match) return false;
+    if (!(state.currentUserRole || '').startsWith('Team_Manager')) return true;
+    return state.activeTeamManagerTeamId === match.homeTeamId ||
+        state.activeTeamManagerTeamId === match.awayTeamId;
 }
 
 export function openDelegateComingSoon(matchId, { updateHistory = true } = {}) {
@@ -143,15 +168,16 @@ export function closeDelegateComingSoon(matchId) {
 
 export function openMatchProtocol(matchId, { updateHistory = true } = {}) {
     const match = matchesData.find(m => String(m.id) === String(matchId));
-    if (!match) {
-        showToast('Zápas se nepodařilo najít. Obnovte stránku a zkuste to znovu.', true);
+    if (!match || !canOpenMatchProtocol(match)) {
+        showToast(match ? 'Zápis můžete otevřít pouze u utkání svého týmu.' : 'Zápas se nepodařilo najít. Obnovte stránku a zkuste to znovu.', true);
         if (getMatchIdFromPath(window.location.pathname) !== null) {
             window.history.replaceState(null, '', '/zapasy');
         }
         return;
     }
 
-    const matchPath = `/zapasy/${encodeURIComponent(match.id)}`;
+    const requestedTab = getFISTabFromPath(window.location.pathname);
+    const matchPath = `/zapasy/${encodeURIComponent(match.id)}${requestedTab ? `/${fisTabSlugs[requestedTab]}` : ''}`;
     if (window.location.pathname !== matchPath) {
         if (updateHistory) {
             window.history.pushState({ cvflMatchId: match.id }, '', matchPath);
@@ -167,7 +193,8 @@ export function openMatchProtocol(matchId, { updateHistory = true } = {}) {
     if (!Array.isArray(match.awayStaff)) match.awayStaff = [];
 
     const protocolModal = document.getElementById('modal-match-protocol');
-    if (!protocolModal || protocolModal.classList.contains('hidden') || state.matchProtocolSnapshotId !== matchId) {
+    const isNewProtocol = !protocolModal || protocolModal.classList.contains('hidden') || state.matchProtocolSnapshotId !== matchId;
+    if (isNewProtocol) {
         state.matchProtocolSnapshotId = matchId;
         state.matchProtocolSnapshot = JSON.parse(JSON.stringify(match));
     }
@@ -781,6 +808,7 @@ export function openMatchProtocol(matchId, { updateHistory = true } = {}) {
     openModal('modal-match-protocol');
     renderSubstitutionPlayerOptions(matchId);
     renderPenaltyKickOptions(matchId);
+    switchFISTab(requestedTab || 'sestavy', { updateHistory: false });
 }
 
 function matchMinute(timeStr) {
@@ -1573,7 +1601,7 @@ export function updateMatchChecks(matchId) {
     state.unsavedChangesGuard = true;
 }
 
-export function switchFISTab(fisTabId) {
+export function switchFISTab(fisTabId, { updateHistory = true } = {}) {
     if (fisTabId === 'penalty') fisTabId = 'hraci-casti';
     state.activeFISTab = fisTabId;
     ['sestavy', 'realizacni', 'hraci-casti', 'stridani', 'branky', 'vylouceni', 'online', 'rozhodci', 'kontrola', 'delegat'].forEach(t => {
@@ -1587,6 +1615,17 @@ export function switchFISTab(fisTabId) {
     const targetBtn = document.getElementById(`fistab-${fisTabId}`);
     if (targetSec) targetSec.classList.remove('hidden');
     if (targetBtn) targetBtn.classList.add('active');
+
+    const matchId = state.matchProtocolSnapshotId;
+    const slug = fisTabSlugs[fisTabId];
+    if (matchId !== null && matchId !== undefined && slug && !document.getElementById('modal-match-protocol')?.classList.contains('hidden')) {
+        const path = `/zapasy/${encodeURIComponent(matchId)}/${slug}`;
+        if (window.location.pathname !== path) {
+            const historyState = { ...(window.history.state || {}), cvflMatchId: matchId };
+            if (updateHistory) window.history.pushState(historyState, '', path);
+            else window.history.replaceState(historyState, '', path);
+        }
+    }
 }
 
 // ==================== INTERAKTIVNÍ BRANKY (DOMÁCÍ / HOSTÉ) ====================

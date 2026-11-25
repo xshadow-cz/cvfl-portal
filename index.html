@@ -85,8 +85,8 @@
                     <a href="/souteze" onclick="if (event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) { event.preventDefault(); switchTab('competitions'); }" id="nav-competitions" class="px-3 py-2 rounded-lg hover:bg-white/5 text-gray-300"><i class="fa-solid fa-list mr-2"></i>Soutěže</a>
                     <a href="/zapasy" onclick="if (event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) { event.preventDefault(); switchTab('matches'); }" id="nav-matches" class="px-3 py-2 rounded-lg hover:bg-white/5 text-gray-300"><i class="fa-solid fa-calendar-days mr-2"></i>Zápasy</a>
                     <a href="/tymy" onclick="if (event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) { event.preventDefault(); switchTab('teams'); }" id="nav-teams" class="px-3 py-2 rounded-lg hover:bg-white/5 text-gray-300"><i class="fa-solid fa-shield-halved mr-2"></i>Týmy</a>
-                    <a href="/rozhodci" onclick="if (event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) { event.preventDefault(); switchTab('referees'); }" id="nav-referees" class="px-3 py-2 rounded-lg hover:bg-white/5 text-gray-300 role-perm-admin role-perm-ref-mgr"><i class="fa-solid fa-user-ninja mr-2"></i>Rozhodčí</a>
-                    <a href="/komise" onclick="if (event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) { event.preventDefault(); switchTab('disciplinary'); }" id="nav-disciplinary" class="px-3 py-2 rounded-lg hover:bg-white/5 text-gray-300 role-perm-admin role-perm-dk role-perm-ref-mgr role-perm-team-mgr role-perm-referee"><i class="fa-solid fa-gavel mr-2"></i>Disciplinárka</a>
+                    <a href="/rozhodci" onclick="if (event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) { event.preventDefault(); switchTab('referees'); }" id="nav-referees" class="px-3 py-2 rounded-lg hover:bg-white/5 text-gray-300"><i class="fa-solid fa-user-ninja mr-2"></i>Rozhodčí</a>
+                    <a href="/komise" onclick="if (event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) { event.preventDefault(); switchTab('disciplinary'); }" id="nav-disciplinary" class="px-3 py-2 rounded-lg hover:bg-white/5 text-gray-300 role-perm-admin role-perm-dk role-perm-ref-mgr role-perm-team-mgr role-perm-referee role-perm-delegate"><i class="fa-solid fa-gavel mr-2"></i>Disciplinárka</a>
                     <a href="/admin" onclick="if (event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) { event.preventDefault(); switchTab('admin'); }" id="nav-admin" class="px-3 py-2 rounded-lg hover:bg-white/5 text-gray-300 role-perm-admin"><i class="fa-solid fa-user-gear mr-2"></i>Administrace</a>
                 </nav>
 
@@ -268,7 +268,7 @@
                 <div id="referee-assignments-list" class="space-y-3"></div>
             </div>
 
-            <div class="bg-[#0e1a4f] border border-[#1e307d] rounded-xl p-4 shadow-xl">
+            <div id="referees-directory-panel" class="hidden bg-[#0e1a4f] border border-[#1e307d] rounded-xl p-4 shadow-xl">
                 <div class="flex justify-between items-center mb-3">
                     <h3 class="font-bold text-sm text-white">Seznam Registrovaných Rozhodčích</h3>
                     <button onclick="openAddRefereeModal()" class="px-3 py-1.5 bg-[#aefb12] hover:bg-opacity-90 text-[#13236b] text-xs font-black rounded-lg shadow role-perm-admin role-perm-ref-mgr">
@@ -285,7 +285,7 @@
                                 <th class="p-3">Licence</th>
                                 <th class="p-3">Status Licence</th>
                                 <th class="p-3">Je Delegát?</th>
-                                <th class="p-3 text-right">Akce</th>
+                                <th id="referee-directory-actions-heading" class="p-3 text-right">Akce</th>
                             </tr>
                         </thead>
                         <tbody id="referees-main-table" class="divide-y divide-[#1e307d]"></tbody>

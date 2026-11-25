@@ -1858,6 +1858,9 @@ app.get('/api/state', async (req, res) => {
                 matchHistory: matchStats.matches
             };
         });
+        const canViewRefereeDirectory = req.auth.roles.some(role =>
+            ['Admin', 'Referee_Manager', 'DK', 'Delegate'].includes(role)
+        );
 
         const trainers = trainersRaw.map(t => ({
             id: t.id,
@@ -1970,8 +1973,24 @@ app.get('/api/state', async (req, res) => {
                 teams,
                 players,
                 trainers,
-                referees,
+                referees: canViewRefereeDirectory ? referees : [],
+                refereeCount: referees.length,
                 matches,
+                refereeAssignments: allMatchesRaw.map(match => ({
+                    id: match.id,
+                    competition: match.competition,
+                    round: match.round,
+                    cupStage: match.cup_stage,
+                    matchDate: match.match_date,
+                    stadium: match.stadium,
+                    homeTeamId: match.home_team_id,
+                    awayTeamId: match.away_team_id,
+                    status: match.status,
+                    referee: match.referee,
+                    delegate: match.delegate,
+                    fourthRef: match.fourth_ref,
+                    var: match.var
+                })),
                 suspensions,
                 pointsDeductions,
                 dkAuditLogs,
@@ -2176,7 +2195,7 @@ app.delete('/api/players/:id', requireRoles('Admin'), async (req, res) => {
     }
 });
 
-app.get('/api/referees', async (req, res) => {
+app.get('/api/referees', requireRoles('Admin', 'Referee_Manager', 'DK', 'Delegate'), async (req, res) => {
     try {
         const rows = await dbAll(
             `SELECT id, roblox_nick AS "robloxNick", discord_nick AS "discordNick",
@@ -2341,6 +2360,18 @@ app.put('/api/matches/:id', requireMatchEditor, async (req, res) => {
         if (!currentMatch) return res.status(404).json({ success: false, error: 'Zápas nebyl nalezen.' });
 
         const roles = req.auth.roles;
+        const nominationFields = [
+            ['referee', 'referee'],
+            ['delegate', 'delegate'],
+            ['fourthRef', 'fourth_ref'],
+            ['var', 'var']
+        ];
+        const changedNomination = nominationFields.some(([field, column]) =>
+            m[field] !== undefined && !isDeepStrictEqual(m[field], currentMatch[column])
+        );
+        if (changedNomination && !roles.some(role => ['Admin', 'Referee_Manager'].includes(role))) {
+            return res.status(403).json({ success: false, error: 'Nominace může upravovat pouze vedení ligy nebo vedení rozhodčích.' });
+        }
         const canSetOfficialState = roles.some(role => ['Admin', 'DK', 'Referee_Manager'].includes(role)) ||
             (req.assignedOfficialMatch && roles.includes('Referee'));
         const canSetReady = canSetOfficialState;
