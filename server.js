@@ -666,10 +666,9 @@ function getOAuthCallbackHost() {
 function getOAuthStateCookieDomain(req) {
     const callbackHost = getOAuthCallbackHost();
     const requestHost = req.hostname.toLowerCase();
-    if (requestHost !== callbackHost && !requestHost.endsWith(`.${callbackHost}`)) {
-        return null;
-    }
-    return callbackHost;
+    if (requestHost === callbackHost || requestHost.endsWith(`.${callbackHost}`)) return callbackHost;
+    if (callbackHost.endsWith(`.${requestHost}`)) return requestHost;
+    return null;
 }
 
 function oauthStateCookieOptions(maxAge, req) {
