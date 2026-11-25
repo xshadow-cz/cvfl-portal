@@ -7,7 +7,7 @@ import { openModal, closeSpecificModal, showToast, openConfirmModal } from './ui
 import { logDKAction } from './disciplinary.js';
 import { updateAdminStats } from './admin.js';
 import { renderDashboard } from './dashboard.js';
-import { getTeamLogoMarkup, escapeTeamName } from './team-logo.js';
+import { getTeamNameMarkup, escapeTeamName } from './team-logo.js';
 import { apiCreateReferee, apiUpdateReferee, apiDeleteReferee, apiSaveMatch } from './api.js';
 
 export function renderRefereesTab() {
@@ -51,7 +51,7 @@ export function renderDelegateAlerts() {
                     <div class="p-3 bg-[#13236b] rounded-lg border border-[#1e307d] flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
                         <div class="space-y-1">
                             <div class="flex items-center gap-2 text-xs">
-                                <span class="inline-flex items-center gap-2 font-bold text-white">${home ? `${getTeamLogoMarkup(home)}${escapeTeamName(home.name)}` : ''} vs ${away ? `${getTeamLogoMarkup(away)}${escapeTeamName(away.name)}` : ''}</span>
+                                <span class="flex max-w-full items-center gap-2 overflow-x-auto font-bold text-white"><span class="shrink-0">${home ? getTeamNameMarkup(home) : ''}</span><span class="shrink-0">vs</span><span class="shrink-0">${away ? getTeamNameMarkup(away) : ''}</span></span>
                                 <span class="text-gray-400">| HR: <strong class="text-[#05fda3]">${escapeTeamName(m.referee || 'Nenominován')}</strong></span>
                                 <span class="text-gray-400">| Delegát: <strong class="text-purple-300">${escapeTeamName(m.delegate || 'Nenominován')}</strong></span>
                             </div>
@@ -155,16 +155,23 @@ export function renderRefereeAssignments() {
             m.competition === 'Baráž o 1. Ligu' ? `${Number(m.round) === 2 ? 'Odveta' : '1. zápas'} baráže` :
                 `${m.round}. Kolo`;
         const d = (m.matchDate && m.matchDate !== 'TBA') ? new Date(m.matchDate) : null;
-        const matchDateFormatted = m.matchDate === 'TBA' ? 'TBA' : (d ? `${d.getDate()}.${d.getMonth() + 1}. ${d.toLocaleTimeString('cs-CZ', {hour: '2-digit', minute:'2-digit'})}` : 'Termín TBD');
+        const validDate = d && !Number.isNaN(d.getTime());
+        const matchDateFormatted = m.matchDate === 'TBA' ? 'TBA' : validDate
+            ? `${d.toLocaleDateString('cs-CZ', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })} · ${d.toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' })}`
+            : 'Termín TBD';
 
         return `
             <div class="bg-[#13236b] p-4 rounded-xl border border-[#1e307d] space-y-3">
-                <div class="flex justify-between items-center text-xs">
+                <div class="flex flex-wrap justify-between items-center gap-2 text-xs">
                     <span class="font-bold text-[#aefb12]">${escapeTeamName(m.competition)} — ${escapeTeamName(roundLabel)}</span>
-                    <span class="text-gray-400">${matchDateFormatted}</span>
+                    <span class="inline-flex items-center gap-1.5 text-gray-300"><i class="fa-regular fa-calendar text-[#aefb12]"></i>${escapeTeamName(matchDateFormatted)}</span>
                 </div>
                 <div class="font-bold text-white text-sm">
-                    ${home ? `${getTeamLogoMarkup(home)}${escapeTeamName(home.name)}` : ''} <span class="text-gray-400 font-normal">vs</span> ${away ? `${getTeamLogoMarkup(away)}${escapeTeamName(away.name)}` : ''}
+                    <span class="flex max-w-full items-center gap-2 overflow-x-auto"><span class="shrink-0">${home ? getTeamNameMarkup(home) : ''}</span><span class="shrink-0 text-gray-400 font-normal">vs</span><span class="shrink-0">${away ? getTeamNameMarkup(away) : ''}</span></span>
+                </div>
+                <div class="flex items-center gap-1.5 text-xs text-gray-400">
+                    <i class="fa-solid fa-location-dot text-[#05fda3]"></i>
+                    <span>${escapeTeamName(m.stadium && m.stadium !== 'TBD' ? m.stadium : 'Stadion zatím není určen')}</span>
                 </div>
                 
                 <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 text-xs">

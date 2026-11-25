@@ -4,7 +4,7 @@
 
 import { state, playersData, refereesData, teamsData, matchesData } from './state.js';
 import { getMatchStatusLabel } from './match-status.js';
-import { getTeamLogoMarkup, escapeTeamName } from './team-logo.js';
+import { getTeamNameMarkup, escapeTeamName } from './team-logo.js';
 import { compareTeams1Liga } from './competitions.js';
 
 const STAT_CATEGORIES = [
@@ -435,7 +435,7 @@ function renderStatsModal() {
                                         <span class="text-gray-500 font-mono w-5 text-right text-[10px]">${idx + 1}.</span>${escapeTeamName(item.player.robloxNick)}
                                     </td>
                                     <td class="py-2.5 px-2 text-gray-300">
-                                        ${team ? `<div class="flex items-center gap-1.5">${getTeamLogoMarkup(team)}<span>${escapeTeamName(team.name)}</span></div>` : '<span class="text-gray-500">Bez týmu</span>'}
+                                        ${team ? `<div class="max-w-full overflow-x-auto">${getTeamNameMarkup(team, { className: 'gap-1.5' })}</div>` : '<span class="text-gray-500">Bez týmu</span>'}
                                     </td>
                                     <td class="py-2.5 px-2 text-center font-mono text-gray-300">${item.matchesPlayed}</td>
                                     ${STAT_CATEGORIES.map(cat => `
@@ -489,7 +489,7 @@ function renderDashboardLeagueTables() {
                             ${teams.slice(0, 4).map((team, index) => `
                                 <tr class="hover:bg-[#13236b]/60">
                                     <td class="p-2 text-center font-mono text-gray-400">${index + 1}.</td>
-                                    <td class="p-2 font-bold text-white">${getTeamLogoMarkup(team)}${escapeTeamName(team.name)}</td>
+                                    <td class="p-2 font-bold text-white"><div class="max-w-full overflow-x-auto">${getTeamNameMarkup(team, { logoClassName: 'h-5 w-5' })}</div></td>
                                     <td class="p-2 text-center text-gray-300">${team.played}</td>
                                     <td class="p-2 text-center font-mono text-gray-300">${team.gf}:${team.ga}</td>
                                     <td class="p-2 text-right font-black" style="color:${league.accent}">${team.finalPoints}</td>
@@ -515,11 +515,11 @@ function renderDashboardMatchCards(matchList) {
         return `
             <div class="bg-[#0e1a4f] p-4 rounded-xl border border-[#1e307d] flex flex-col sm:flex-row justify-between items-center gap-4 shadow-md hover:border-[#aefb12]/50 transition">
                 <div class="flex items-center space-x-4 w-full sm:w-auto justify-between sm:justify-start">
-                    <div class="flex items-center justify-end gap-2 w-32 font-bold text-sm truncate text-white">${home ? `${getTeamLogoMarkup(home)}<span class="truncate">${escapeTeamName(home.name)}</span>` : ''}</div>
+                    <div class="w-5/12 overflow-x-auto text-right font-bold text-sm text-white sm:w-32"><span class="inline-flex min-w-max items-center justify-end gap-2 whitespace-nowrap">${home ? getTeamNameMarkup(home) : ''}</span></div>
                     <div class="px-3 py-1 bg-[#13236b] rounded-lg text-[#aefb12] font-mono font-black text-sm border border-[#1e307d]">
                         ${m.status === 'Completed' || m.status === 'In_Progress' ? `${m.homeScore} :${m.awayScore}` : (m.status === 'Postponed' ? 'Odloženo' : 'VS')}
                     </div>
-                    <div class="flex items-center gap-2 w-32 font-bold text-sm truncate text-white">${away ? `${getTeamLogoMarkup(away)}<span class="truncate">${escapeTeamName(away.name)}</span>` : ''}</div>
+                    <div class="w-5/12 overflow-x-auto font-bold text-sm text-white sm:w-32">${away ? getTeamNameMarkup(away) : ''}</div>
                 </div>
                 <div class="flex flex-col sm:flex-row items-end sm:items-center space-y-1 sm:space-y-0 sm:space-x-3 text-xs text-right sm:text-left">
                     <div class="text-gray-300 font-medium">

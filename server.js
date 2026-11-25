@@ -2253,8 +2253,7 @@ app.put('/api/matches/:id', requireMatchEditor, async (req, res) => {
         params.push(id);
 
         if (updateFields.length > 1) {
-            const completionGuard = m.status === 'Completed' ? " AND status != 'Completed'" : '';
-            const result = await dbRun(`UPDATE matches SET ${updateFields.join(', ')} WHERE id = ?${completionGuard}`, params);
+            const result = await dbRun(`UPDATE matches SET ${updateFields.join(', ')} WHERE id = ?`, params);
             if (m.status === 'Completed' && !m.isForfeited && previousMatch && previousMatch.status !== 'Completed' && result.changes) {
                 await recordSuspensionMatches(id, m.homeTeamId, m.homeRoster || []);
                 await recordSuspensionMatches(id, m.awayTeamId, m.awayRoster || []);

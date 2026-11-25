@@ -11,7 +11,7 @@ import { renderTeams } from './teams.js';
 import { renderRefereesTab } from './referees.js';
 import { renderDisciplinary } from './disciplinary.js';
 import { renderAdmin } from './admin.js';
-import { getTeamLogoMarkup, escapeTeamName } from './team-logo.js';
+import { escapeTeamName } from './team-logo.js';
 
 const tabPaths = {
     dashboard: '/statistiky',

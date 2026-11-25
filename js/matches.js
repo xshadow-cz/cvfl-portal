@@ -11,7 +11,7 @@ import { renderRefereesTab } from './referees.js';
 import { apiSaveMatch } from './api.js';
 import { getMatchStatusLabel } from './match-status.js';
 import { getMatchRoundLabel, getRoundFilterOptions, matchesRoundFilter } from './match-rounds.js';
-import { getTeamLogoMarkup, escapeTeamName } from './team-logo.js';
+import { getTeamNameMarkup, escapeTeamName } from './team-logo.js';
 import { isPromotionPlayoffSecondLeg, getPromotionPlayoffAggregate } from './playoff-utils.js';
 
 export function onCompetitionFilterChange() {
@@ -70,12 +70,12 @@ export function renderMatches() {
                     <span class="text-gray-400">${m.stadium ? `<i class="fa-solid fa-location-dot mr-1"></i>${escapeTeamName(m.stadium)} | ` : ''}${matchDateFormatted}</span>
                 </div>
                 <div class="flex justify-between items-center">
-                    <div class="flex items-center justify-center gap-2 text-center w-5/12 font-bold text-sm text-white">${home ? `${getTeamLogoMarkup(home)}<span class="truncate">${escapeTeamName(home.name)}</span>` : ''}</div>
+                    <div class="w-5/12 overflow-x-auto text-center font-bold text-sm text-white"><div class="inline-flex min-w-max justify-center">${home ? getTeamNameMarkup(home) : ''}</div></div>
                     <div class="text-center font-black text-xl text-[#aefb12] px-3 py-1 bg-[#13236b] border border-[#1e307d] rounded flex flex-col items-center">
                         <span>${m.status === 'Completed' || m.status === 'In_Progress' ? `${m.homeScore} :${m.awayScore}` : (m.status === 'Postponed' ? 'Odloženo' : 'VS')}</span>
                         ${m.isForfeited ? '<span class="text-[9px] text-amber-400 uppercase font-black tracking-tight">Kontumováno</span>' : ''}
                     </div>
-                    <div class="flex items-center justify-center gap-2 text-center w-5/12 font-bold text-sm text-white">${away ? `${getTeamLogoMarkup(away)}<span class="truncate">${escapeTeamName(away.name)}</span>` : ''}</div>
+                    <div class="w-5/12 overflow-x-auto text-center font-bold text-sm text-white"><div class="inline-flex min-w-max justify-center">${away ? getTeamNameMarkup(away) : ''}</div></div>
                 </div>
                 <div class="flex justify-between items-center border-t border-[#1e307d] pt-3 text-xs">
                     <div class="flex items-center gap-2">
@@ -242,14 +242,16 @@ export function openMatchProtocol(matchId, { updateHistory = true } = {}) {
                 <div>
                     <span class="text-xs font-mono text-[#aefb12] uppercase tracking-wider">Oficiální Elektronický Zápis O Utkání (FIS ZOU)</span>
                     <div class="mt-2 grid grid-cols-[1fr_auto_1fr] items-center gap-2 sm:gap-5">
-                        <div class="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-2 font-black text-white">
-                            ${home ? getTeamLogoMarkup(home) : ''}
-                            <span class="truncate text-center">${escapeTeamName(home?.name || 'Domácí')}</span>
+                        <div class="min-w-0 overflow-x-auto font-black text-white">
+                            <div class="inline-flex min-w-max justify-center">
+                                ${home ? getTeamNameMarkup(home) : '<span class="whitespace-nowrap">Domácí</span>'}
+                            </div>
                         </div>
                         <strong id="zou-scoreboard" class="rounded-xl border border-[#1e307d] bg-[#13236b] px-4 py-2 text-center font-mono text-2xl font-black text-[#aefb12]">${match.homeScore} : ${match.awayScore}</strong>
-                        <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 font-black text-white">
-                            <span class="truncate text-center">${escapeTeamName(away?.name || 'Hosté')}</span>
-                            ${away ? getTeamLogoMarkup(away) : ''}
+                        <div class="min-w-0 overflow-x-auto text-right font-black text-white">
+                            <div class="inline-flex min-w-max justify-center">
+                                ${away ? getTeamNameMarkup(away) : '<span class="whitespace-nowrap">Hosté</span>'}
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -309,7 +311,7 @@ export function openMatchProtocol(matchId, { updateHistory = true } = {}) {
                 <div class="bg-[#13236b] p-4 rounded-xl border border-[#1e307d] space-y-3">
                     <div class="flex justify-between items-center border-b border-[#1e307d] pb-2">
                         <div>
-                            <h3 class="inline-flex items-center gap-2 font-bold text-[#aefb12] text-sm">${home ? `${getTeamLogoMarkup(home)}${escapeTeamName(home.name)}` : ''}</h3>
+                            <h3 class="max-w-full overflow-x-auto font-bold text-[#aefb12] text-sm">${home ? getTeamNameMarkup(home) : ''}</h3>
                             <span class="text-[10px] text-gray-400">3–5 v základu, max. 10 na soupisce, 1 brankář</span>
                         </div>
                         ${canEditHome && !match.isLocked ? `
@@ -325,7 +327,7 @@ export function openMatchProtocol(matchId, { updateHistory = true } = {}) {
                 <div class="bg-[#13236b] p-4 rounded-xl border border-[#1e307d] space-y-3">
                     <div class="flex justify-between items-center border-b border-[#1e307d] pb-2">
                         <div>
-                            <h3 class="inline-flex items-center gap-2 font-bold text-[#05fda3] text-sm">${away ? `${getTeamLogoMarkup(away)}${escapeTeamName(away.name)}` : ''}</h3>
+                            <h3 class="max-w-full overflow-x-auto font-bold text-[#05fda3] text-sm">${away ? getTeamNameMarkup(away) : ''}</h3>
                             <span class="text-[10px] text-gray-400">3–5 v základu, max. 10 na soupisce, 1 brankář</span>
                         </div>
                         ${canEditAway && !match.isLocked ? `
@@ -345,7 +347,7 @@ export function openMatchProtocol(matchId, { updateHistory = true } = {}) {
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div class="bg-[#13236b] p-4 rounded-xl border border-[#1e307d] space-y-3">
                     <div class="flex justify-between items-center border-b border-[#1e307d] pb-2">
-                        <h4 class="inline-flex items-center gap-2 font-bold text-[#aefb12]">Realizační Tým — ${home ? `${getTeamLogoMarkup(home)}${escapeTeamName(home.name)}` : ''} (${match.homeStaff.length}/5)</h4>
+                        <h4 class="flex min-w-0 items-center gap-2 font-bold text-[#aefb12]"><span class="shrink-0">Realizační Tým —</span><span class="block max-w-full overflow-x-auto">${home ? getTeamNameMarkup(home) : ''}</span><span class="shrink-0">(${match.homeStaff.length}/5)</span></h4>
                         ${canEditHome && !match.isLocked ? `<button onclick="openAddStaffModal(${match.id}, 'home')" class="px-2 py-1 bg-[#aefb12] text-[#13236b] font-bold text-[10px] rounded">+ Přidat Člena</button>` : ''}
                     </div>
                     <div class="space-y-2">
@@ -355,7 +357,7 @@ export function openMatchProtocol(matchId, { updateHistory = true } = {}) {
 
                 <div class="bg-[#13236b] p-4 rounded-xl border border-[#1e307d] space-y-3">
                     <div class="flex justify-between items-center border-b border-[#1e307d] pb-2">
-                        <h4 class="inline-flex items-center gap-2 font-bold text-[#05fda3]">Realizační Tým — ${away ? `${getTeamLogoMarkup(away)}${escapeTeamName(away.name)}` : ''} (${match.awayStaff.length}/5)</h4>
+                        <h4 class="flex min-w-0 items-center gap-2 font-bold text-[#05fda3]"><span class="shrink-0">Realizační Tým —</span><span class="block max-w-full overflow-x-auto">${away ? getTeamNameMarkup(away) : ''}</span><span class="shrink-0">(${match.awayStaff.length}/5)</span></h4>
                         ${canEditAway && !match.isLocked ? `<button onclick="openAddStaffModal(${match.id}, 'away')" class="px-2 py-1 bg-[#05fda3] text-[#13236b] font-bold text-[10px] rounded">+ Přidat Člena</button>` : ''}
                     </div>
                     <div class="space-y-2">
@@ -852,7 +854,7 @@ export function toggleMatchReady(matchId, checked) {
     }
 }
 
-export function lockMatchRecord(matchId) {
+export async function lockMatchRecord(matchId) {
     const match = matchesData.find(m => m.id === matchId);
     if (!match) return;
     if (!match.isReady || !match.checks.homeStaffReviewed || !match.checks.awayStaffReviewed) {
@@ -863,10 +865,34 @@ export function lockMatchRecord(matchId) {
         showToast('Zápis může uzamknout pouze rozhodčí nebo vedení rozhodčích.', true);
         return;
     }
-    match.isLocked = true;
-    state.unsavedChangesGuard = true;
-    showToast('Zápis je uzamčen. Uložte změnu.');
-    openMatchProtocol(matchId);
+    const lockButton = document.getElementById('btn-lock-match');
+    if (lockButton) lockButton.disabled = true;
+    try {
+        const saved = await saveMatchProtocol(matchId, { keepOpen: true });
+        if (!saved) return;
+        if (!match.isReady || !match.checks.homeStaffReviewed || !match.checks.awayStaffReviewed) {
+            showToast('Zápis byl uložen, ale kvůli změnám jej musí oba týmy znovu zkontrolovat.', true);
+            return;
+        }
+
+        match.isLocked = true;
+        await apiSaveMatch(match);
+        state.unsavedChangesGuard = false;
+        state.matchProtocolSnapshot = JSON.parse(JSON.stringify(match));
+        state.matchProtocolSnapshotId = matchId;
+        showToast('Zápis byl uložen a uzamčen.');
+        openMatchProtocol(matchId, { updateHistory: false });
+    } catch (error) {
+        match.isLocked = false;
+        state.unsavedChangesGuard = true;
+        showToast(`Zápis se nepodařilo uzamknout: ${error.message}`, true);
+    } finally {
+        const currentLockButton = document.getElementById('btn-lock-match');
+        if (currentLockButton && !match.isLocked) {
+            currentLockButton.disabled = !match.isReady || !match.checks.homeStaffReviewed ||
+                !match.checks.awayStaffReviewed || !['Admin', 'Referee_Manager', 'Referee'].includes(state.currentUserRole);
+        }
+    }
 }
 
 export function unlockMatchRecord(matchId) {
@@ -1886,13 +1912,13 @@ export function calculateMatchStats(match) {
     }
 }
 
-export async function saveMatchProtocol(matchId) {
+export async function saveMatchProtocol(matchId, { keepOpen = false } = {}) {
     // Než cokoliv uděláme, pro jistotu nasosáme nejnovější data z DOM prvků, pokud něco nebylo zachyceno onchangem
     updateMatchDetails(matchId);
     updateMatchChecks(matchId);
 
     const match = matchesData.find(m => m.id === matchId);
-    if (!match) return;
+    if (!match) return false;
 
     // Ještě jednou si ověříme logiku statusu, aby byla dokonale propsaná
     const isMolCup = match.competition === 'MOL Cup';
@@ -1968,7 +1994,7 @@ export async function saveMatchProtocol(matchId) {
     } catch (error) {
         state.unsavedChangesGuard = true;
         showToast(`Zápis se nepodařilo uložit: ${error.message}`, true);
-        return;
+        return false;
     }
 
     if (wasReadyForReview && !match.isReady) {
@@ -2002,6 +2028,12 @@ export async function saveMatchProtocol(matchId) {
     }
 
     showToast("Zápas byl úspěšně zkontrolován a uložen.");
+    if (keepOpen) {
+        state.matchProtocolSnapshot = JSON.parse(JSON.stringify(match));
+        state.matchProtocolSnapshotId = matchId;
+        openMatchProtocol(matchId, { updateHistory: false });
+        return true;
+    }
     state.matchProtocolSnapshot = null;
     state.matchProtocolSnapshotId = null;
     closeSpecificModal('modal-match-protocol');
@@ -2010,6 +2042,7 @@ export async function saveMatchProtocol(matchId) {
     if (match.delegateAlertRefMgr) {
         renderRefereesTab();
     }
+    return true;
 }
 
 // ==================== GLOBÁLNÍ REGISTRACE PRO HTML EVENTS ====================

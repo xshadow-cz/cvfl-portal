@@ -3,7 +3,7 @@
  */
 
 import { state, teamsData, matchesData } from './state.js';
-import { getTeamLogoMarkup, escapeTeamName } from './team-logo.js';
+import { getTeamNameMarkup, escapeTeamName } from './team-logo.js';
 
 export function switchCompTab(comp) {
     state.activeCompTab = comp;
@@ -145,7 +145,7 @@ export function renderCompetitions() {
                                 </span>
                             </td>
                             <td class="p-2.5 font-bold text-white ${t ? 'cursor-pointer hover:underline' : ''}" ${t ? `onclick="switchTab('teams'); selectTeam(${t.id});"` : ''}>
-                                ${t ? `<span class="inline-flex items-center gap-2">${getTeamLogoMarkup(t)}${escapeTeamName(t.name)}</span>` : '<span class="text-gray-700">—</span>'}
+                                ${t ? `<div class="max-w-full overflow-x-auto">${getTeamNameMarkup(t)}</div>` : '<span class="text-gray-700">—</span>'}
                             </td>
                             <td class="p-2.5 text-center text-gray-400">${t?.played ?? ''}</td>
                             <td class="p-2.5 text-center font-bold" style="color: ${accentColor}">${t?.won ?? ''}</td>
@@ -290,9 +290,9 @@ export function renderCompetitions() {
                         return `<section class="rounded-xl border border-[#f33332]/30 bg-[#13236b]/60 p-4 space-y-3">
                             <h4 class="text-center text-xs font-black uppercase tracking-wide text-[#f33332]">Baráž ${index + 1}</h4>
                             <div class="flex items-center justify-between gap-2 rounded-lg bg-[#0e1a4f] p-3 text-sm font-bold text-white">
-                                <span class="inline-flex min-w-0 items-center gap-2">${getTeamLogoMarkup(home)}<span class="truncate">${escapeTeamName(home?.name || 'Čeká se na tým')}</span></span>
+                                <div class="max-w-[40%] min-w-0 overflow-x-auto">${home ? getTeamNameMarkup(home) : '<span class="whitespace-nowrap">Čeká se na tým</span>'}</div>
                                 <span class="text-gray-500">vs</span>
-                                <span class="inline-flex min-w-0 items-center gap-2"><span class="truncate">${escapeTeamName(away?.name || 'Čeká se na tým')}</span>${getTeamLogoMarkup(away)}</span>
+                                <div class="max-w-[40%] min-w-0 overflow-x-auto">${away ? getTeamNameMarkup(away) : '<span class="whitespace-nowrap">Čeká se na tým</span>'}</div>
                             </div>
                             <div class="space-y-2">${renderLeg(firstLeg, 1)}${renderLeg(secondLeg, 2)}</div>
                             <div class="flex justify-between border-t border-[#1e307d] pt-2 text-xs">
@@ -344,12 +344,12 @@ export function renderCompetitions() {
                                             <div class="self-center rounded-lg border border-[#1e307d] bg-[#0e1a4f] p-2 text-xs" style="grid-row: ${index * rowsPerMatch + 1} / span ${rowsPerMatch};">
                                                 <div class="mb-1 text-[9px] uppercase text-gray-500">${match ? `Utkání #${match.id}` : `Utkání ${index + 1}`}</div>
                                                 <div class="flex justify-between gap-2 ${match ? 'text-white' : 'text-gray-600'}">
-                                                    <span class="inline-flex min-w-0 items-center gap-2"><span>${getTeamLogoMarkup(home)}</span><span class="truncate">${escapeTeamName(home?.name || 'Čeká se na tým')}</span></span>
+                                                    <div class="max-w-[80%] min-w-0 overflow-x-auto">${home ? getTeamNameMarkup(home, { logoClassName: 'h-5 w-5' }) : '<span class="whitespace-nowrap">Čeká se na tým</span>'}</div>
                                                     <strong>${score ? match.homeScore : '—'}</strong>
                                                 </div>
                                                 <div class="my-1 border-t border-[#1e307d]"></div>
                                                 <div class="flex justify-between gap-2 ${match ? 'text-white' : 'text-gray-600'}">
-                                                    <span class="inline-flex min-w-0 items-center gap-2"><span>${getTeamLogoMarkup(away)}</span><span class="truncate">${escapeTeamName(away?.name || 'Čeká se na tým')}</span></span>
+                                                    <div class="max-w-[80%] min-w-0 overflow-x-auto">${away ? getTeamNameMarkup(away, { logoClassName: 'h-5 w-5' }) : '<span class="whitespace-nowrap">Čeká se na tým</span>'}</div>
                                                     <strong>${score ? match.awayScore : '—'}</strong>
                                                 </div>
                                                 ${match ? `<div class="mt-2 text-[10px] text-gray-400">${match.status === 'Completed' ? 'Odehráno' : match.status === 'In_Progress' ? 'Probíhá' : match.status === 'Postponed' ? 'Odloženo' : 'Naplánováno'}</div>` : ''}

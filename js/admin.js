@@ -13,7 +13,7 @@ import { renderRefereeAssignments } from './referees.js';
 import { renderTeams } from './teams.js';
 import { getMatchStatusLabel } from './match-status.js';
 import { getMatchRoundLabel, getRoundFilterOptions, matchesRoundFilter } from './match-rounds.js';
-import { getTeamLogoMarkup, escapeTeamName } from './team-logo.js';
+import { getTeamLogoMarkup, getTeamNameMarkup, escapeTeamName } from './team-logo.js';
 import {
     apiCreateMatch, apiDeleteMatch, apiCreatePlayer, apiCreateTrainer, apiCreateTeam,
     apiUpdateTeam, apiDeleteTeam, apiGetDiscordUsers, apiSetDiscordUserRoles,
@@ -775,7 +775,7 @@ export function renderAdminMatchesDeleteList() {
             <div class="p-3 bg-[#13236b] rounded-lg border border-[#1e307d] flex flex-col gap-3 text-xs sm:flex-row sm:items-center sm:justify-between">
                 <div class="min-w-0 flex flex-wrap items-center gap-x-2 gap-y-1">
                     <span class="font-bold text-[#aefb12]">${m.competition} (${roundText})</span>
-                    <span class="inline-flex items-center gap-2 text-white font-bold">${home ? `${getTeamLogoMarkup(home)}${escapeTeamName(home.name)}` : ''} vs ${away ? `${getTeamLogoMarkup(away)}${escapeTeamName(away.name)}` : ''}</span>
+                    <span class="flex max-w-full items-center gap-2 overflow-x-auto font-bold text-white"><span class="shrink-0">${home ? getTeamNameMarkup(home) : ''}</span><span class="shrink-0">vs</span><span class="shrink-0">${away ? getTeamNameMarkup(away) : ''}</span></span>
                     <span class="text-gray-400">${getMatchStatusLabel(m.status)}</span>
                 </div>
                 <button onclick="deleteMatchFromAdmin(${m.id})" class="w-full px-3 py-2 bg-[#f33332] hover:bg-red-600 text-white font-bold rounded shadow transition whitespace-nowrap sm:w-auto sm:py-1">

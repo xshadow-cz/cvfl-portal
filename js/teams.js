@@ -2,9 +2,9 @@
  * CVFL Portál - Týmy, Soupiska Hráčů a Hráčské Karty
  */
 
-import { state, teamsData, playersData, trainersData, matchesData } from './state.js';
+import { state, teamsData, playersData, trainersData, matchesData, suspensionsData } from './state.js';
 import { openModal, closeSpecificModal } from './ui.js';
-import { getTeamLogoMarkup, escapeTeamName } from './team-logo.js';
+import { getTeamNameMarkup, escapeTeamName } from './team-logo.js';
 import { apiGetRobloxPlayerAvatar } from './api.js';
 
 /**
@@ -149,7 +149,7 @@ export function renderTeams() {
 
     selector.innerHTML = teamsData.map(t => `
         <button onclick="selectTeam(${t.id})" class="inline-flex shrink-0 items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition ${t.id === state.activeTeamId ? 'bg-[#aefb12] text-[#13236b] font-black shadow' : 'bg-[#13236b] text-gray-300 hover:bg-[#1e307d]'}">
-            ${getTeamLogoMarkup(t)}${escapeTeamName(t.name)}
+            ${getTeamNameMarkup(t, { className: 'gap-2' })}
         </button>
     `).join('');
 
@@ -177,7 +177,7 @@ export function renderSelectedTeamView() {
         <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-[#1e307d] pb-4">
             <div>
                 <span class="text-xs text-[#aefb12] font-bold uppercase">${team.league === '1_Liga' ? 'CVFL 1. Liga' : 'CVFL 2. Liga'}</span>
-                <h2 class="flex items-center gap-3 text-2xl font-black text-white">${getTeamLogoMarkup(team, 'h-10 w-10')}${escapeTeamName(team.name)}</h2>
+                <h2 class="mt-1 max-w-full overflow-x-auto text-2xl font-black text-white">${getTeamNameMarkup(team, { logoClassName: 'h-10 w-10', className: 'gap-3' })}</h2>
             </div>
         </div>
 
@@ -249,6 +249,9 @@ export function openPlayerCard(playerId) {
     const matchHistory = getPlayerMatchHistory(player.id);
     const profileStats = getPlayerProfileStats(player.id, matchHistory);
     const cards = getPlayerCardStats(player.id);
+    const activeSuspensions = suspensionsData.filter(suspension =>
+        Number(suspension.playerId) === Number(player.id) && suspension.isActive
+    );
 
     const content = document.getElementById('player-card-content');
     content.innerHTML = `
@@ -259,7 +262,9 @@ export function openPlayerCard(playerId) {
                     <div class="flex h-full w-full items-center justify-center text-3xl text-gray-500"><i class="fa-solid fa-user"></i></div>
                 </div>
                 <div class="min-w-0">
-                <span class="text-xs text-[#aefb12] font-bold uppercase">${escapeTeamName(team ? team.name : 'Bez klubu')}</span>
+                <div class="max-w-full overflow-x-auto text-xs font-bold uppercase text-[#aefb12]">
+                    ${team ? getTeamNameMarkup(team, { logoClassName: 'h-4 w-4', className: 'gap-1.5' }) : '<span class="whitespace-nowrap">Bez klubu</span>'}
+                </div>
                 <h2 class="mt-1 break-words text-xl font-black text-white sm:text-2xl">${escapeTeamName(player.robloxNick)}</h2>
                 <p class="mt-1 flex items-center gap-1.5 truncate text-xs text-gray-300"><i class="fa-brands fa-discord text-gray-300"></i><span>${escapeTeamName(player.discordNick)}</span></p>
                 ${player.isArchived ? '<span class="mt-2 inline-flex rounded border border-gray-500/40 bg-gray-500/10 px-2 py-1 text-[10px] font-bold uppercase text-gray-300">Archivovaný hráč</span>' : ''}
@@ -299,6 +304,37 @@ export function openPlayerCard(playerId) {
                 </div>
             </div>
 
+            <section class="space-y-2">
+                <div class="flex items-center justify-between gap-2 border-b border-[#1e307d] pb-2">
+                    <h3 class="font-black uppercase tracking-wide text-white"><i class="fa-solid fa-ban mr-1 text-red-400"></i>Aktivní disciplinární tresty</h3>
+                    <span class="rounded-full bg-red-500/15 px-2.5 py-1 font-bold text-red-300">${activeSuspensions.length}</span>
+                </div>
+                ${activeSuspensions.length ? activeSuspensions.map(suspension => {
+                    const suspensionEnd = suspension.untilDate ? new Date(suspension.untilDate) : null;
+                    const timeLimit = suspensionEnd && !Number.isNaN(suspensionEnd.getTime())
+                        ? suspensionEnd.toLocaleDateString('cs-CZ')
+                        : 'Neuvedeno';
+                    const remainingMatches = Number(suspension.remainingMatches ?? suspension.matchesLeft ?? 0);
+                    const matchWord = remainingMatches === 1
+                        ? 'zápas zbývá'
+                        : remainingMatches >= 2 && remainingMatches <= 4
+                            ? 'zápasy zbývají'
+                            : 'zápasů zbývá';
+                    const duration = suspension.type === 'Match_Count'
+                        ? `${remainingMatches} ${matchWord}`
+                        : `Do ${timeLimit}`;
+                    return `
+                        <article class="rounded-xl border border-red-500/30 bg-red-500/10 p-3">
+                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                <span class="font-black text-red-200">${suspension.type === 'Match_Count' ? 'Stopka na zápasy' : 'Časový trest'}</span>
+                                <span class="rounded bg-red-500/20 px-2 py-1 font-bold text-red-200">${escapeTeamName(duration)}</span>
+                            </div>
+                            <p class="mt-1 text-gray-300">${escapeTeamName(suspension.reason || 'Důvod nebyl uveden.')}</p>
+                        </article>
+                    `;
+                }).join('') : '<p class="rounded-xl border border-[#1e307d] bg-[#13236b]/50 p-3 text-gray-400">Hráč nemá žádný aktivní disciplinární trest.</p>'}
+            </section>
+
             <section class="space-y-3">
                 <div class="flex items-center justify-between gap-2 border-b border-[#1e307d] pb-2">
                     <h3 class="font-black uppercase tracking-wide text-white">Odehraná utkání</h3>
@@ -335,7 +371,7 @@ export function openPlayerCard(playerId) {
                                     </div>
                                     <div class="mt-2 flex items-center justify-between gap-3">
                                         <div class="min-w-0">
-                                            <div class="flex items-center gap-1.5 truncate font-bold text-white">${ownTeam ? getTeamLogoMarkup(ownTeam, 'h-5 w-5') : ''}<span>${escapeTeamName(ownTeam?.name || 'Tým')}</span></div>
+                                            <div class="max-w-full overflow-x-auto font-bold text-white">${ownTeam ? getTeamNameMarkup(ownTeam, { logoClassName: 'h-5 w-5', className: 'gap-1.5' }) : escapeTeamName('Tým')}</div>
                                             <div class="mt-1 truncate text-[10px] text-gray-400">vs ${escapeTeamName(opponent?.name || 'Soupeř')}</div>
                                         </div>
                                         <strong class="shrink-0 rounded-lg border border-[#1e307d] bg-[#0e1a4f] px-3 py-1.5 font-mono text-lg text-[#aefb12]">${score}</strong>
