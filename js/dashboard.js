@@ -4,8 +4,8 @@
 
 import { state, playersData, refereesData, teamsData, matchesData } from './state.js';
 import { getMatchStatusLabel } from './match-status.js';
-import { getTeamNameMarkup, escapeTeamName } from './team-logo.js';
-import { compareTeams1Liga } from './competitions.js';
+import { getTeamProfileLinkMarkup, escapeTeamName } from './team-logo.js';
+import { getBaseLeagueTable } from './competitions.js';
 
 const STAT_CATEGORIES = [
     { key: 'goals', label: 'Góly', icon: 'fa-futbol', color: 'text-[#aefb12]' },
@@ -29,6 +29,24 @@ const statsModalState = {
 function matchMinute(timeStr) {
     const [minutes, seconds] = String(timeStr || '0:00').split(':').map(value => Number.parseInt(value, 10) || 0);
     return minutes + seconds / 60;
+}
+
+function getMatchAppearancePlayerIds(match) {
+    const appearances = new Set();
+    [...(match.homeRoster || []), ...(match.awayRoster || [])]
+        .filter(player => player.isStarter)
+        .forEach(player => appearances.add(Number(player.playerId)));
+    (Array.isArray(match.events) ? match.events : []).forEach(event => {
+        if (event.type === 'Substitution') {
+            if (event.playerInId != null) appearances.add(Number(event.playerInId));
+            if (event.playerOutId != null) appearances.add(Number(event.playerOutId));
+        }
+        if (event.targetType !== 'staff' && event.playerId != null) appearances.add(Number(event.playerId));
+        if (event.type === 'Goal' && event.goalType === 'Regular' && event.secondaryPlayerId != null) {
+            appearances.add(Number(event.secondaryPlayerId));
+        }
+    });
+    return [...appearances].filter(playerId => Number.isFinite(playerId));
 }
 
 function getMatchCleanSheetPlayerIds(match) {
@@ -101,7 +119,8 @@ function collectLeaderboardStats() {
                 assists: 0,
                 cleanSheets: 0,
                 yellowCards: 0,
-                redCards: 0
+                redCards: 0,
+                matchesPlayed: 0
             });
         }
         target.get(playerId)[key] += 1;
@@ -114,6 +133,10 @@ function collectLeaderboardStats() {
         const groupStats = group ? statsByGroup.get(group.label) : null;
 
         const events = Array.isArray(match.events) ? match.events : [];
+        getMatchAppearancePlayerIds(match).forEach(playerId => {
+            if (groupStats) addStat(groupStats, playerId, 'matchesPlayed');
+            addStat(overallStats, playerId, 'matchesPlayed');
+        });
 
         events.forEach(event => {
             if (event.type === 'Goal' && event.goalType !== 'Own') {
@@ -155,7 +178,13 @@ function renderDashboardLeaderboards() {
         ['Celá liga · všechny soutěže', overallStats]
     ];
 
-    container.innerHTML = STAT_CATEGORIES.map(category => `
+    const appearanceLeaders = collectFilteredPlayerStats('all')
+        .filter(item => item.matchesPlayed > 0)
+        .sort((a, b) => b.matchesPlayed - a.matchesPlayed ||
+            a.player.robloxNick.localeCompare(b.player.robloxNick, 'cs'))
+        .slice(0, 5);
+
+    container.innerHTML = `${STAT_CATEGORIES.map(category => `
         <section class="rounded-xl border border-[#1e307d] bg-[#13236b]/40 p-4 space-y-3">
             <h3 class="font-black text-sm ${category.color} cursor-pointer hover:underline flex items-center justify-between group" 
                 onclick="openStatsModal('${category.key}')" 
@@ -190,7 +219,33 @@ function renderDashboardLeaderboards() {
                 }).join('')}
             </div>
         </section>
-    `).join('');
+    `).join('')}
+        <section class="rounded-xl border border-[#1e307d] bg-[#13236b]/40 p-4">
+            <h3 class="mb-3 flex items-center justify-between gap-3 border-b border-[#1e307d] pb-2 font-black text-sm text-cyan-300">
+                <span><i class="fa-solid fa-stopwatch mr-2"></i>Nejvíce odehraných utkání</span>
+                <button type="button" aria-label="Otevřít statistiky hráčů" title="Otevřít statistiky hráčů" onclick="openStatsModal('matchesPlayed')" class="shrink-0 rounded-lg p-2 text-cyan-300 transition hover:bg-white/10">
+                    <i class="fa-solid fa-up-right-from-square"></i>
+                </button>
+            </h3>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-xs">
+                    <thead class="text-[10px] uppercase text-gray-400">
+                        <tr><th class="p-2 text-center">#</th><th class="p-2">Hráč</th><th class="p-2">Tým</th><th class="p-2 text-right">Z</th></tr>
+                    </thead>
+                    <tbody class="divide-y divide-[#1e307d]">
+                        ${appearanceLeaders.length ? appearanceLeaders.map((item, index) => {
+                            const team = teamsData.find(candidate => candidate.id === item.player.teamId);
+                            return `<tr class="hover:bg-[#13236b]/60">
+                                <td class="p-2 text-center font-mono text-gray-500">${index + 1}.</td>
+                                <td class="p-2 font-bold text-white">${escapeTeamName(item.player.robloxNick)}</td>
+                                <td class="p-2 text-gray-300">${team ? getTeamProfileLinkMarkup(team, { logoClassName: 'h-4 w-4' }) : 'Bez klubu'}</td>
+                                <td class="p-2 text-right font-black text-cyan-300">${item.matchesPlayed}</td>
+                            </tr>`;
+                        }).join('') : '<tr><td colspan="4" class="p-3 text-center text-gray-500">Zatím nejsou odehraná utkání.</td></tr>'}
+                    </tbody>
+                </table>
+            </div>
+        </section>`;
 }
 
 /* ==========================================================================
@@ -233,22 +288,7 @@ function collectFilteredPlayerStats(competitionFilter) {
         }
 
         const events = Array.isArray(match.events) ? match.events : [];
-        const appearances = new Set();
-        [...(match.homeRoster || []), ...(match.awayRoster || [])]
-            .filter(player => player.isStarter)
-            .forEach(player => appearances.add(Number(player.playerId)));
-        events.forEach(event => {
-            if (event.type === 'Substitution') {
-                if (event.playerInId != null) appearances.add(Number(event.playerInId));
-                if (event.playerOutId != null) appearances.add(Number(event.playerOutId));
-            }
-            if (event.targetType !== 'staff' && event.playerId != null) appearances.add(Number(event.playerId));
-            if (event.type === 'Goal' && event.goalType === 'Regular' && event.secondaryPlayerId != null) {
-                appearances.add(Number(event.secondaryPlayerId));
-            }
-        });
-        appearances.forEach(playerId => {
-            if (!Number.isFinite(playerId)) return;
+        getMatchAppearancePlayerIds(match).forEach(playerId => {
             const stats = getOrCreatePlayerStats(playerId);
             if (stats) stats.matchesPlayed++;
         });
@@ -402,9 +442,6 @@ function renderStatsModal() {
                     </select>
                 </div>
 
-                <div class="ml-auto text-xs text-gray-400 font-mono">
-                    Nalezeno hráčů: <span class="font-bold text-[#aefb12]">${filtered.length}</span>
-                </div>
             </div>
 
             <!-- Tabulka statistik -->
@@ -414,7 +451,9 @@ function renderStatsModal() {
                         <tr>
                             <th class="py-3 px-2">Hráč</th>
                             <th class="py-3 px-2">Tým</th>
-                            <th class="py-3 px-2 text-center">Z</th>
+                            <th scope="col" class="cursor-pointer select-none py-3 px-2 text-center hover:text-white" onclick="toggleStatsModalSort('matchesPlayed')">
+                                Z ${sortKey === 'matchesPlayed' ? (sortAscending ? '<i class="fa-solid fa-arrow-up text-[#aefb12] ml-1"></i>' : '<i class="fa-solid fa-arrow-down text-[#aefb12] ml-1"></i>') : ''}
+                            </th>
                             ${STAT_CATEGORIES.map(cat => {
                                 const isActive = sortKey === cat.key;
                                 const arrow = isActive ? (sortAscending ? ' <i class="fa-solid fa-arrow-up text-[#aefb12] ml-1"></i>' : ' <i class="fa-solid fa-arrow-down text-[#aefb12] ml-1"></i>') : '';
@@ -434,8 +473,8 @@ function renderStatsModal() {
                                     <td class="py-2.5 px-2 font-bold text-white flex items-center gap-2">
                                         <span class="text-gray-500 font-mono w-5 text-right text-[10px]">${idx + 1}.</span>${escapeTeamName(item.player.robloxNick)}
                                     </td>
-                                    <td class="py-2.5 px-2 text-gray-300">
-                                        ${team ? `<div class="max-w-full overflow-x-auto">${getTeamNameMarkup(team, { className: 'gap-1.5' })}</div>` : '<span class="text-gray-500">Bez týmu</span>'}
+                                    <td class="max-w-0 py-2.5 px-2 text-gray-300">
+                                        ${team ? `<div class="max-w-full overflow-hidden">${getTeamProfileLinkMarkup(team, { className: 'gap-1.5' })}</div>` : '<span class="text-gray-500">Bez týmu</span>'}
                                     </td>
                                     <td class="py-2.5 px-2 text-center font-mono text-gray-300">${item.matchesPlayed}</td>
                                     ${STAT_CATEGORIES.map(cat => `
@@ -467,18 +506,12 @@ function renderDashboardLeagueTables() {
     leagues.forEach(league => {
         const container = document.getElementById(league.id);
         if (!container) return;
-        const teams = teamsData.filter(team => team.league === league.key).map(team => ({
-            ...team,
-            finalPoints: team.basePoints - team.deducted
-        }));
-        teams.sort(league.key === '1_Liga'
-            ? compareTeams1Liga
-            : (a, b) => b.finalPoints - a.finalPoints);
+        const teams = getBaseLeagueTable(league.key);
         container.innerHTML = `
             <section class="h-full rounded-xl border border-[#1e307d] bg-[#0e1a4f] p-4 shadow-md">
                 <div class="mb-3 flex items-center justify-between gap-3 border-b border-[#1e307d] pb-2">
                     <h2 class="font-bold text-lg" style="color:${league.accent}">${league.title} · Top 4</h2>
-                    <button type="button" aria-label="Otevřít hlavní tabulku" title="Otevřít hlavní tabulku" onclick="switchTab('competitions'); switchCompTab('${league.tab}')" class="shrink-0 rounded-lg p-2 text-[#aefb12] transition hover:bg-[#aefb12]/10" ><i class="fa-solid fa-up-right-from-square"></i></button>
+                    <button type="button" aria-label="Otevřít hlavní tabulku" title="Otevřít hlavní tabulku" onclick="switchTab('competitions'); switchCompTab('${league.tab}')" class="shrink-0 rounded-lg p-2 transition hover:bg-white/10" style="color:${league.accent}" ><i class="fa-solid fa-up-right-from-square"></i></button>
                 </div>
                 <div class="overflow-x-auto">
                     <table class="w-full text-left text-xs">
@@ -489,7 +522,7 @@ function renderDashboardLeagueTables() {
                             ${teams.slice(0, 4).map((team, index) => `
                                 <tr class="hover:bg-[#13236b]/60">
                                     <td class="p-2 text-center font-mono text-gray-400">${index + 1}.</td>
-                                    <td class="p-2 font-bold text-white"><div class="max-w-full overflow-x-auto">${getTeamNameMarkup(team, { logoClassName: 'h-5 w-5' })}</div></td>
+                                    <td class="p-2 font-bold text-white"><div class="max-w-full overflow-hidden">${getTeamProfileLinkMarkup(team, { logoClassName: 'h-5 w-5' })}</div></td>
                                     <td class="p-2 text-center text-gray-300">${team.played}</td>
                                     <td class="p-2 text-center font-mono text-gray-300">${team.gf}:${team.ga}</td>
                                     <td class="p-2 text-right font-black" style="color:${league.accent}">${team.finalPoints}</td>
@@ -515,11 +548,11 @@ function renderDashboardMatchCards(matchList) {
         return `
             <div class="bg-[#0e1a4f] p-4 rounded-xl border border-[#1e307d] flex flex-col sm:flex-row justify-between items-center gap-4 shadow-md hover:border-[#aefb12]/50 transition">
                 <div class="flex items-center space-x-4 w-full sm:w-auto justify-between sm:justify-start">
-                    <div class="w-5/12 overflow-x-auto text-right font-bold text-sm text-white sm:w-32"><span class="inline-flex min-w-max items-center justify-end gap-2 whitespace-nowrap">${home ? getTeamNameMarkup(home) : ''}</span></div>
+                    <div class="w-5/12 min-w-0 overflow-hidden text-right font-bold text-sm text-white sm:w-32"><span class="inline-flex min-w-0 max-w-full items-center justify-end gap-2 whitespace-nowrap">${home ? getTeamProfileLinkMarkup(home) : ''}</span></div>
                     <div class="px-3 py-1 bg-[#13236b] rounded-lg text-[#aefb12] font-mono font-black text-sm border border-[#1e307d]">
                         ${m.status === 'Completed' || m.status === 'In_Progress' ? `${m.homeScore} :${m.awayScore}` : (m.status === 'Postponed' ? 'Odloženo' : 'VS')}
                     </div>
-                    <div class="w-5/12 overflow-x-auto font-bold text-sm text-white sm:w-32">${away ? getTeamNameMarkup(away) : ''}</div>
+                    <div class="w-5/12 min-w-0 overflow-hidden font-bold text-sm text-white sm:w-32">${away ? getTeamProfileLinkMarkup(away) : ''}</div>
                 </div>
                 <div class="flex flex-col sm:flex-row items-end sm:items-center space-y-1 sm:space-y-0 sm:space-x-3 text-xs text-right sm:text-left">
                     <div class="text-gray-300 font-medium">

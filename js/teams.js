@@ -148,7 +148,7 @@ export function renderTeams() {
     }
 
     selector.innerHTML = teamsData.map(t => `
-        <button onclick="selectTeam(${t.id})" class="inline-flex shrink-0 items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition ${t.id === state.activeTeamId ? 'bg-[#aefb12] text-[#13236b] font-black shadow' : 'bg-[#13236b] text-gray-300 hover:bg-[#1e307d]'}">
+        <button onclick="selectTeam(${t.id})" class="inline-flex max-w-[16rem] shrink-0 items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition ${t.id === state.activeTeamId ? 'bg-[#aefb12] text-[#13236b] font-black shadow' : 'bg-[#13236b] text-gray-300 hover:bg-[#1e307d]'}">
             ${getTeamNameMarkup(t, { className: 'gap-2' })}
         </button>
     `).join('');
@@ -177,12 +177,12 @@ export function renderSelectedTeamView() {
         <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-[#1e307d] pb-4">
             <div>
                 <span class="text-xs text-[#aefb12] font-bold uppercase">${team.league === '1_Liga' ? 'CVFL 1. Liga' : 'CVFL 2. Liga'}</span>
-                <h2 class="mt-1 max-w-full overflow-x-auto text-2xl font-black text-white">${getTeamNameMarkup(team, { logoClassName: 'h-10 w-10', className: 'gap-3' })}</h2>
+                <h2 class="mt-1 max-w-full overflow-hidden text-2xl font-black text-white">${getTeamNameMarkup(team, { logoClassName: 'h-10 w-10', className: 'gap-3' })}</h2>
             </div>
         </div>
 
         <div>
-            <h3 class="font-bold text-sm mb-3 text-white">Trenéři (${trainers.length})</h3>
+            <h3 class="font-bold text-sm mb-3 text-white">Realizační tým (${trainers.length})</h3>
             <div class="overflow-x-auto">
                 <table class="w-full text-xs text-left">
                     <thead class="bg-[#13236b] text-gray-400 uppercase">
@@ -371,7 +371,7 @@ export function openPlayerCard(playerId) {
                                     </div>
                                     <div class="mt-2 flex items-center justify-between gap-3">
                                         <div class="min-w-0">
-                                            <div class="max-w-full overflow-x-auto font-bold text-white">${ownTeam ? getTeamNameMarkup(ownTeam, { logoClassName: 'h-5 w-5', className: 'gap-1.5' }) : escapeTeamName('Tým')}</div>
+                                            <div class="max-w-full overflow-hidden font-bold text-white">${ownTeam ? getTeamNameMarkup(ownTeam, { logoClassName: 'h-5 w-5', className: 'gap-1.5' }) : escapeTeamName('Tým')}</div>
                                             <div class="mt-1 truncate text-[10px] text-gray-400">vs ${escapeTeamName(opponent?.name || 'Soupeř')}</div>
                                         </div>
                                         <strong class="shrink-0 rounded-lg border border-[#1e307d] bg-[#0e1a4f] px-3 py-1.5 font-mono text-lg text-[#aefb12]">${score}</strong>

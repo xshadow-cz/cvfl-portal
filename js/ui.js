@@ -323,7 +323,7 @@ export function handleGlobalSearch(query) {
         results.innerHTML = `<div class="p-2 text-gray-400">Žádné výsledky</div>`;
     } else {
         results.innerHTML = `
-            ${matchedTeams.map(t => `<div onclick="switchTab('teams'); selectTeam(${t.id}); document.getElementById('search-results').classList.add('hidden');" class="max-w-full overflow-x-auto p-2 hover:bg-[#13236b] cursor-pointer font-bold text-[#aefb12]">${getTeamNameMarkup(t)}</div>`).join('')}
+            ${matchedTeams.map(t => `<div onclick="switchTab('teams'); selectTeam(${t.id}); document.getElementById('search-results').classList.add('hidden');" class="max-w-full overflow-hidden p-2 hover:bg-[#13236b] cursor-pointer font-bold text-[#aefb12]">${getTeamNameMarkup(t)}</div>`).join('')}
             ${matchedPlayers.map(p => `<div onclick="openPlayerCard(${p.id}); document.getElementById('search-results').classList.add('hidden');" class="p-2 hover:bg-[#13236b] cursor-pointer text-gray-200"><i class="fa-solid fa-user mr-1"></i> ${escapeTeamName(p.robloxNick)} (${escapeTeamName(p.discordNick)})</div>`).join('')}
         `;
     }

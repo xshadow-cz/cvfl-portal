@@ -13,7 +13,7 @@ import { renderRefereeAssignments } from './referees.js';
 import { renderTeams } from './teams.js';
 import { getMatchStatusLabel } from './match-status.js';
 import { getMatchRoundLabel, getRoundFilterOptions, matchesRoundFilter } from './match-rounds.js';
-import { getTeamLogoMarkup, getTeamNameMarkup, escapeTeamName } from './team-logo.js';
+import { getTeamLogoMarkup, getTeamProfileLinkMarkup, escapeTeamName } from './team-logo.js';
 import {
     apiCreateMatch, apiDeleteMatch, apiCreatePlayer, apiCreateTrainer, apiCreateTeam,
     apiUpdateTeam, apiDeleteTeam, apiGetDiscordUsers, apiSetDiscordUserRoles,
@@ -246,9 +246,11 @@ export function renderAdminAuditLogs() {
     if (!filter || !body) return;
 
     const selectedAction = filter.value;
-    const actions = [...new Set(adminAuditLogs.map(log => log.action))].sort((a, b) => a.localeCompare(b, 'cs'));
+    const actions = [...new Set(adminAuditLogs.map(log => log.action))].sort((a, b) =>
+        getAuditActionLabel(a).localeCompare(getAuditActionLabel(b), 'cs')
+    );
     filter.innerHTML = `<option value="">Všechny akce</option>${actions.map(action =>
-        `<option value="${escapeTeamName(action)}">${escapeTeamName(action)}</option>`
+        `<option value="${escapeTeamName(action)}">${escapeTeamName(getAuditActionLabel(action))}</option>`
     ).join('')}`;
     if (actions.includes(selectedAction)) filter.value = selectedAction;
 
@@ -258,12 +260,55 @@ export function renderAdminAuditLogs() {
     body.innerHTML = visibleLogs.length ? visibleLogs.map(log => `
         <tr class="hover:bg-[#13236b]/60">
             <td class="whitespace-nowrap p-2 text-gray-400">${escapeTeamName(new Date(log.created_at).toLocaleString('cs-CZ'))}</td>
-            <td class="p-2 font-bold text-amber-300">${escapeTeamName(log.action)}</td>
+            <td class="p-2 font-bold text-amber-300">${escapeTeamName(getAuditActionLabel(log.action))}</td>
             <td class="p-2 text-white">${escapeTeamName(log.actor_username)}</td>
             <td class="p-2 text-gray-300">${escapeTeamName(log.resource)}</td>
             <td class="p-2 text-gray-400">${escapeTeamName(log.details)}</td>
         </tr>
     `).join('') : `<tr><td colspan="5" class="p-4 text-center text-gray-400">Pro vybraný filtr nejsou žádné záznamy.</td></tr>`;
+}
+
+function getAuditActionLabel(action) {
+    const labels = {
+        'VYŘEŠEN PROBLÉM S FANOUŠKY': 'Vyřešení problému s fanoušky',
+        'ZRUŠENÍ_TRESTU': 'Zrušení trestu',
+        'ZRUŠENÍ_ODEČTU_BODŮ': 'Zrušení odečtu bodů',
+        'ODEČET_BODŮ': 'Odečet bodů',
+        'UDĚLENÍ_TRESTU': 'Udělení trestu',
+        'POST /api/teams': 'Vytvoření týmu',
+        'PUT /api/teams': 'Úprava týmu',
+        'DELETE /api/teams': 'Smazání týmu',
+        'POST /api/players': 'Přidání hráče',
+        'PUT /api/players': 'Úprava hráče',
+        'DELETE /api/players': 'Odebrání hráče',
+        'POST /api/matches': 'Vytvoření utkání',
+        'PUT /api/matches': 'Uložení změn zápisu utkání',
+        'DELETE /api/matches': 'Smazání utkání',
+        'POST /api/suspensions': 'Udělení disciplinárního trestu',
+        'DELETE /api/suspensions': 'Zrušení disciplinárního trestu',
+        'POST /api/deductions': 'Odečet bodů týmu',
+        'DELETE /api/deductions': 'Zrušení odečtu bodů',
+        'PUT /api/announcement': 'Změna oznámení portálu',
+        'PUT /api/maintenance': 'Změna režimu údržby',
+        'POST /api/admin/discord-invites': 'Vytvoření pozvánky',
+        'DELETE /api/admin/discord-invites': 'Zrušení pozvánky',
+        'PUT /api/admin/discord-users': 'Změna oprávnění účtu',
+        'DELETE /api/admin/discord-users': 'Odebrání přístupu Discord účtu'
+    };
+    if (labels[action]) return labels[action];
+    if (action.startsWith('POST /api/teams/')) return 'Úprava týmu';
+    if (action.startsWith('PUT /api/teams/')) return 'Úprava týmu';
+    if (action.startsWith('DELETE /api/teams/')) return 'Smazání týmu';
+    if (action.startsWith('POST /api/players/')) return 'Přidání hráče';
+    if (action.startsWith('PUT /api/players/')) return 'Úprava hráče';
+    if (action.startsWith('DELETE /api/players/')) return 'Odebrání hráče';
+    if (action.startsWith('POST /api/matches/')) return 'Vytvoření utkání';
+    if (action.startsWith('PUT /api/matches/')) return 'Uložení změn zápisu utkání';
+    if (action.startsWith('DELETE /api/matches/')) return 'Smazání utkání';
+    if (action.startsWith('POST /api/suspensions/')) return 'Udělení disciplinárního trestu';
+    if (action.startsWith('DELETE /api/suspensions/')) return 'Zrušení disciplinárního trestu';
+    if (action.startsWith('DELETE /api/deductions/')) return 'Zrušení odečtu bodů';
+    return action;
 }
 
 export async function renderDiscordRoleManagement() {
@@ -686,7 +731,10 @@ export function renderAdminTeamsList() {
     list.innerHTML = teamsData.map(team => `
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[auto_1fr_12rem_1fr_auto_auto] gap-2 items-center p-2 bg-[#13236b] rounded-lg border border-[#1e307d]">
             ${getTeamLogoMarkup(team, 'h-9 w-9')}
-            <input id="admin-team-name-${team.id}" value="${escapeHtml(team.name)}" maxlength="100" aria-label="Název týmu" class="min-w-0 bg-[#0e1a4f] border border-[#1e307d] rounded p-2 text-white">
+            <div class="min-w-0 space-y-1">
+                <div class="max-w-full overflow-hidden text-xs">${getTeamProfileLinkMarkup(team, { logoClassName: 'h-4 w-4' })}</div>
+                <input id="admin-team-name-${team.id}" value="${escapeHtml(team.name)}" maxlength="100" aria-label="Název týmu" class="w-full min-w-0 bg-[#0e1a4f] border border-[#1e307d] rounded p-2 text-white">
+            </div>
             <select id="admin-team-league-${team.id}" aria-label="Liga týmu" class="bg-[#0e1a4f] border border-[#1e307d] rounded p-2 text-white">
                 <option value="1_Liga" ${team.league === '1_Liga' ? 'selected' : ''}>CVFL 1. Liga</option>
                 <option value="2_Liga" ${team.league === '2_Liga' ? 'selected' : ''}>CVFL 2. Liga</option>
@@ -826,7 +874,7 @@ export function renderAdminMatchesDeleteList() {
             <div class="p-3 bg-[#13236b] rounded-lg border border-[#1e307d] flex flex-col gap-3 text-xs sm:flex-row sm:items-center sm:justify-between">
                 <div class="min-w-0 flex flex-wrap items-center gap-x-2 gap-y-1">
                     <span class="font-bold text-[#aefb12]">${m.competition} (${roundText})</span>
-                    <span class="flex max-w-full items-center gap-2 overflow-x-auto font-bold text-white"><span class="shrink-0">${home ? getTeamNameMarkup(home) : ''}</span><span class="shrink-0">vs</span><span class="shrink-0">${away ? getTeamNameMarkup(away) : ''}</span></span>
+                    <span class="flex min-w-0 max-w-full items-center gap-2 overflow-hidden font-bold text-white"><span class="min-w-0 shrink">${home ? getTeamProfileLinkMarkup(home) : ''}</span><span class="shrink-0">vs</span><span class="min-w-0 shrink">${away ? getTeamProfileLinkMarkup(away) : ''}</span></span>
                     <span class="text-gray-400">${getMatchStatusLabel(m.status)}</span>
                 </div>
                 <button onclick="deleteMatchFromAdmin(${m.id})" class="w-full px-3 py-2 bg-[#f33332] hover:bg-red-600 text-white font-bold rounded shadow transition whitespace-nowrap sm:w-auto sm:py-1">

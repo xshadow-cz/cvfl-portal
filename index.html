@@ -48,9 +48,12 @@
             <h2 id="auth-gate-title" class="text-xl font-black text-white">Přihlášení do CVFL portálu</h2>
             <p id="auth-gate-message" class="text-sm text-gray-300">Pro pokračování se přihlaste svým Discord účtem.</p>
             <p id="auth-gate-error" class="hidden text-sm text-red-400"></p>
-            <a id="discord-login-link" href="https://api.portal.cvfl.cz/api/auth/discord" class="inline-block px-5 py-2 bg-[#5865f2] hover:bg-[#4752c4] text-white font-black rounded-lg">
+            <a id="discord-login-link" href="https://api.portal.cvfl.cz/api/auth/discord" class="hidden px-5 py-2 bg-[#5865f2] hover:bg-[#4752c4] text-white font-black rounded-lg">
                 <i class="fa-brands fa-discord mr-2"></i>Přihlásit přes Discord
             </a>
+            <button id="auth-retry-button" type="button" onclick="retryPortalConnection()" class="hidden px-5 py-2 bg-[#aefb12] text-[#13236b] font-black rounded-lg">
+                <i class="fa-solid fa-rotate mr-2"></i>Zkusit znovu
+            </button>
             <button id="discord-logout-button" onclick="logoutDiscord()" class="hidden px-5 py-2 bg-[#1e307d] text-white font-bold rounded-lg">Odhlásit</button>
         </div>
     </div>
@@ -371,29 +374,6 @@
 
         <!-- ADMIN TAB -->
         <section id="tab-admin" class="hidden space-y-6">
-            <section class="space-y-3 rounded-xl border border-[#1e307d] bg-[#0e1a4f] p-4 shadow-md">
-                <div class="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                        <h3 class="flex items-center gap-2 text-sm font-black text-[#05fda3]"><i class="fa-solid fa-clock-rotate-left"></i> Auditní log všech akcí</h3>
-                        <p class="mt-1 text-[11px] text-gray-400">Změnové akce se ukládají do databáze; záznamy starší 30 dní se automaticky mažou.</p>
-                    </div>
-                    <div class="flex flex-wrap items-center gap-2">
-                        <label for="admin-audit-action-filter" class="text-xs text-gray-400">Filtrovat podle akce:</label>
-                        <select id="admin-audit-action-filter" onchange="renderAdminAuditLogs()" class="rounded-lg border border-[#1e307d] bg-[#13236b] p-2 text-xs font-bold text-white">
-                            <option value="">Všechny akce</option>
-                        </select>
-                        <button type="button" onclick="loadAdminAuditLogs(true)" class="rounded-lg border border-[#1e307d] px-3 py-2 text-xs font-bold text-white hover:bg-[#13236b]"><i class="fa-solid fa-rotate mr-1"></i> Obnovit</button>
-                    </div>
-                </div>
-                <div class="max-h-96 overflow-auto rounded-lg border border-[#1e307d]">
-                    <table class="w-full min-w-[44rem] text-left text-xs">
-                        <thead class="sticky top-0 bg-[#13236b] uppercase text-gray-300">
-                            <tr><th class="p-2">Čas</th><th class="p-2">Akce</th><th class="p-2">Uživatel</th><th class="p-2">Zdroj</th><th class="p-2">Výsledek</th></tr>
-                        </thead>
-                        <tbody id="admin-audit-log-body" class="divide-y divide-[#1e307d]"></tbody>
-                    </table>
-                </div>
-            </section>
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 <!-- VYTVOŘENÍ NOVÉHO UTKÁNÍ -->
                 <div class="bg-[#0e1a4f] p-5 rounded-xl border border-[#aefb12]/40 space-y-4 shadow-xl">
@@ -441,7 +421,7 @@
                 <!-- PŘIDÁNÍ NOVÉHO HRÁČE DO DATABÁZE -->
                 <div class="bg-[#0e1a4f] p-5 rounded-xl border border-[#05fda3]/40 space-y-4 shadow-xl">
                         <div>
-                            <h3 class="mb-3 text-xs font-black uppercase tracking-wider text-gray-400">Databáze</h3>
+                            <h3 class="mb-3 text-xs font-black uppercase tracking-wider text-gray-400">Synchronizace hráčů</h3>
                             <h3 class="font-bold text-sm flex items-center gap-2 text-[#05fda3]"><i class="fa-solid fa-user-plus"></i> Přidat Nového Hráče</h3>
                         </div>
                         <div id="admin-player-sync-panel" class="hidden rounded-lg border border-[#05fda3]/30 bg-[#05fda3]/10 p-3 text-xs text-gray-200">
@@ -605,6 +585,30 @@
                 </div>
                 <div id="admin-matches-delete-list" class="space-y-2"></div>
             </div>
+
+            <section class="space-y-3 rounded-xl border border-[#1e307d] bg-[#0e1a4f] p-4 shadow-md">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <h3 class="flex items-center gap-2 text-sm font-black text-[#05fda3]"><i class="fa-solid fa-clock-rotate-left"></i> Auditní log všech akcí</h3>
+                        <p class="mt-1 text-[11px] text-gray-400">Změnové akce se ukládají do databáze; záznamy starší 30 dní se automaticky mažou.</p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <label for="admin-audit-action-filter" class="text-xs text-gray-400">Filtrovat podle akce:</label>
+                        <select id="admin-audit-action-filter" onchange="renderAdminAuditLogs()" class="rounded-lg border border-[#1e307d] bg-[#13236b] p-2 text-xs font-bold text-white">
+                            <option value="">Všechny akce</option>
+                        </select>
+                        <button type="button" onclick="loadAdminAuditLogs(true)" class="rounded-lg border border-[#1e307d] px-3 py-2 text-xs font-bold text-white hover:bg-[#13236b]"><i class="fa-solid fa-rotate mr-1"></i> Obnovit</button>
+                    </div>
+                </div>
+                <div class="max-h-96 overflow-auto rounded-lg border border-[#1e307d]">
+                    <table class="w-full min-w-[44rem] text-left text-xs">
+                        <thead class="sticky top-0 bg-[#13236b] uppercase text-gray-300">
+                            <tr><th class="p-2">Čas</th><th class="p-2">Akce</th><th class="p-2">Uživatel</th><th class="p-2">Zdroj</th><th class="p-2">Výsledek</th></tr>
+                        </thead>
+                        <tbody id="admin-audit-log-body" class="divide-y divide-[#1e307d]"></tbody>
+                    </table>
+                </div>
+            </section>
         </section>
 
     </main>

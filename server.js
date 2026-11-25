@@ -702,7 +702,7 @@ function authCookieOptions(maxAge, req) {
     return [
         'Path=/',
         'HttpOnly',
-        isSecure ? 'SameSite=None' : 'SameSite=Lax',
+        'SameSite=Lax',
         isSecure ? 'Secure' : '',
         cookieDomain ? `Domain=${cookieDomain}` : '',
         `Max-Age=${maxAge}`
@@ -896,7 +896,8 @@ function refereeUniqueConflict(error) {
 
 async function resolveAuthenticatedUser(req) {
     if (!isDatabaseReady || !hasDiscordOAuthConfig()) return null;
-    const token = parseCookies(req).cvfl_session;
+    const cookies = parseCookies(req);
+    const token = cookies.cvfl_session_v2 || cookies.cvfl_session;
     if (!token || !/^[a-f0-9]{64}$/.test(token)) return null;
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
     return await dbGet(
@@ -919,6 +920,19 @@ async function requireAuthenticated(req, res, next) {
         }
         const user = await resolveAuthenticatedUser(req);
         if (!user) return res.status(401).json({ success: false, error: 'Přihlášení přes Discord je vyžadováno.' });
+        const cookies = parseCookies(req);
+        const token = cookies.cvfl_session_v2 || cookies.cvfl_session;
+        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+            .toISOString().replace('T', ' ').slice(0, 19);
+        await dbRun(
+            'UPDATE auth_sessions SET expires_at = ? WHERE token_hash = ?',
+            [expiresAt, crypto.createHash('sha256').update(token).digest('hex')]
+        );
+        res.setHeader('Set-Cookie', [
+            `cvfl_session_v2=${token}; ${authCookieOptions(30 * 24 * 60 * 60, req)}`,
+            `cvfl_session=; ${authCookieOptions(0, req)}`,
+            `cvfl_session=; ${authCookieOptions(0, req).replace(/;\s*Domain=[^;]+/, '')}`
+        ]);
         req.auth = {
             discordId: user.discord_id,
             username: user.username,
@@ -1170,7 +1184,7 @@ app.get('/api/auth/discord/callback', async (req, res) => {
         }
         await dbRun('DELETE FROM auth_sessions WHERE expires_at <= CURRENT_TIMESTAMP');
         const sessionToken = crypto.randomBytes(32).toString('hex');
-        const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
             .toISOString().replace('T', ' ').slice(0, 19);
         await dbRun(
             'INSERT INTO auth_sessions (token_hash, discord_id, expires_at) VALUES (?, ?, ?)',
@@ -1189,7 +1203,9 @@ app.get('/api/auth/discord/callback', async (req, res) => {
         }
         res.setHeader('Set-Cookie', [
             `cvfl_oauth_state=; ${oauthStateCookieOptions(0, req)}`,
-            `cvfl_session=${sessionToken}; ${authCookieOptions(7 * 24 * 60 * 60, req)}`
+            `cvfl_session_v2=${sessionToken}; ${authCookieOptions(30 * 24 * 60 * 60, req)}`,
+            `cvfl_session=; ${authCookieOptions(0, req)}`,
+            `cvfl_session=; ${authCookieOptions(0, req).replace(/;\s*Domain=[^;]+/, '')}`
         ]);
         res.redirect(getFrontendOrigin());
     } catch (err) {
@@ -1218,7 +1234,8 @@ app.get('/api/auth/me', requireAuthenticated, (req, res) => {
 
 app.post('/api/auth/logout', requireAuthenticated, async (req, res) => {
     try {
-        const token = parseCookies(req).cvfl_session;
+        const cookies = parseCookies(req);
+        const token = cookies.cvfl_session_v2 || cookies.cvfl_session;
         await dbRun('DELETE FROM auth_sessions WHERE token_hash = ?', [
             crypto.createHash('sha256').update(token).digest('hex')
         ]);
@@ -1233,7 +1250,12 @@ app.post('/api/auth/logout', requireAuthenticated, async (req, res) => {
         } catch (auditError) {
             console.error('Odhlášení proběhlo, ale audit odhlášení se nepodařilo uložit:', auditError);
         }
-        res.setHeader('Set-Cookie', `cvfl_session=; ${authCookieOptions(0, req)}`);
+        const cookieOptions = authCookieOptions(0, req);
+        res.setHeader('Set-Cookie', [
+            `cvfl_session_v2=; ${cookieOptions}`,
+            `cvfl_session=; ${cookieOptions}`,
+            `cvfl_session=; ${cookieOptions.replace(/;\s*Domain=[^;]+/, '')}`
+        ]);
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ success: false, error: 'Odhlášení se nepodařilo.' });
@@ -1263,6 +1285,50 @@ app.get('/api/health', (req, res) => {
 
 app.use('/api', requireAuthenticated);
 
+function getReadableAuditAction(method, path, manualAction = '') {
+    const manualActions = {
+        'VYŘEŠEN PROBLÉM S FANOUŠKY': 'Vyřešení problému s fanoušky',
+        'ZRUŠENÍ_TRESTU': 'Zrušení trestu',
+        'ZRUŠENÍ_ODEČTU_BODŮ': 'Zrušení odečtu bodů',
+        'ODEČET_BODŮ': 'Odečet bodů',
+        'UDĚLENÍ_TRESTU': 'Udělení trestu'
+    };
+    if (manualActions[manualAction]) return manualActions[manualAction];
+
+    const routeActions = [
+        ['POST', /^\/api\/teams$/, 'Vytvoření týmu'],
+        ['PUT', /^\/api\/teams\/\d+$/, 'Úprava týmu'],
+        ['DELETE', /^\/api\/teams\/\d+$/, 'Smazání týmu'],
+        ['POST', /^\/api\/players$/, 'Přidání hráče'],
+        ['PUT', /^\/api\/players\/\d+$/, 'Úprava hráče'],
+        ['DELETE', /^\/api\/players\/\d+$/, 'Odebrání hráče'],
+        ['POST', /^\/api\/trainers$/, 'Přidání člena realizačního týmu'],
+        ['POST', /^\/api\/referees$/, 'Přidání rozhodčího'],
+        ['PUT', /^\/api\/referees\/\d+$/, 'Úprava profilu rozhodčího'],
+        ['DELETE', /^\/api\/referees\/\d+$/, 'Odebrání rozhodčího'],
+        ['POST', /^\/api\/matches$/, 'Vytvoření utkání'],
+        ['PUT', /^\/api\/matches\/\d+$/, 'Uložení změn zápisu utkání'],
+        ['DELETE', /^\/api\/matches\/\d+$/, 'Smazání utkání'],
+        ['POST', /^\/api\/suspensions$/, 'Udělení disciplinárního trestu'],
+        ['DELETE', /^\/api\/suspensions\/\d+$/, 'Zrušení disciplinárního trestu'],
+        ['POST', /^\/api\/deductions$/, 'Odečet bodů týmu'],
+        ['DELETE', /^\/api\/deductions\/team\/\d+$/, 'Zrušení odečtů bodů týmu'],
+        ['DELETE', /^\/api\/deductions\/\d+$/, 'Zrušení odečtu bodů'],
+        ['PUT', /^\/api\/announcement$/, 'Změna oznámení portálu'],
+        ['PUT', /^\/api\/maintenance$/, 'Změna režimu údržby'],
+        ['POST', /^\/api\/admin\/discord-invites$/, 'Vytvoření pozvánky'],
+        ['DELETE', /^\/api\/admin\/discord-invites\/\d+$/, 'Zrušení pozvánky'],
+        ['PUT', /^\/api\/admin\/discord-users\/[^/]+\/roles$/, 'Změna oprávnění účtu'],
+        ['DELETE', /^\/api\/admin\/discord-users\/[^/]+$/, 'Odebrání přístupu Discord účtu']
+    ];
+    const routeAction = routeActions.find(([actionMethod, pattern]) =>
+        method === actionMethod && pattern.test(path)
+    );
+    if (routeAction) return routeAction[2];
+    if (path === '/api/audit-logs' && manualAction) return manualAction;
+    return 'Změna nastavení portálu';
+}
+
 app.use('/api', (req, res, next) => {
     if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) return next();
 
@@ -1273,10 +1339,13 @@ app.use('/api', (req, res, next) => {
             ? String(payload.error || 'Akce se nezdařila.').slice(0, 500)
             : '';
         const isManualAudit = req.originalUrl.startsWith('/api/audit-logs');
-        const action = isManualAudit &&
-            typeof req.body?.action === 'string' && req.body.action.trim()
-            ? req.body.action.trim().slice(0, 120)
-            : `${req.method} ${req.originalUrl.split('?')[0]}`;
+        const manualAction = isManualAudit &&
+            typeof req.body?.action === 'string' ? req.body.action.trim().slice(0, 120) : '';
+        const action = getReadableAuditAction(
+            req.method,
+            req.originalUrl.split('?')[0],
+            manualAction
+        );
         const auditDetails = isManualAudit && typeof req.body?.details === 'string'
             ? req.body.details.trim().slice(0, 500)
             : '';

@@ -11,7 +11,7 @@ import { renderRefereesTab } from './referees.js';
 import { apiSaveMatch } from './api.js';
 import { getMatchStatusLabel } from './match-status.js';
 import { getMatchRoundLabel, getRoundFilterOptions, matchesRoundFilter } from './match-rounds.js';
-import { getTeamNameMarkup, escapeTeamName } from './team-logo.js';
+import { getTeamNameMarkup, getTeamProfileLinkMarkup, escapeTeamName } from './team-logo.js';
 import { isPromotionPlayoffSecondLeg, getPromotionPlayoffAggregate } from './playoff-utils.js';
 
 export function onCompetitionFilterChange() {
@@ -70,12 +70,12 @@ export function renderMatches() {
                     <span class="text-gray-400">${m.stadium ? `<i class="fa-solid fa-location-dot mr-1"></i>${escapeTeamName(m.stadium)} | ` : ''}${matchDateFormatted}</span>
                 </div>
                 <div class="flex justify-between items-center">
-                    <div class="w-5/12 overflow-x-auto text-center font-bold text-sm text-white"><div class="inline-flex min-w-max justify-center">${home ? getTeamNameMarkup(home) : ''}</div></div>
+                    <div class="w-5/12 min-w-0 overflow-hidden text-center font-bold text-sm text-white"><div class="inline-flex min-w-0 max-w-full justify-center">${home ? getTeamProfileLinkMarkup(home) : ''}</div></div>
                     <div class="text-center font-black text-xl text-[#aefb12] px-3 py-1 bg-[#13236b] border border-[#1e307d] rounded flex flex-col items-center">
                         <span>${m.status === 'Completed' || m.status === 'In_Progress' ? `${m.homeScore} :${m.awayScore}` : (m.status === 'Postponed' ? 'Odloženo' : 'VS')}</span>
                         ${m.isForfeited ? '<span class="text-[9px] text-amber-400 uppercase font-black tracking-tight">Kontumováno</span>' : ''}
                     </div>
-                    <div class="w-5/12 overflow-x-auto text-center font-bold text-sm text-white"><div class="inline-flex min-w-max justify-center">${away ? getTeamNameMarkup(away) : ''}</div></div>
+                    <div class="w-5/12 min-w-0 overflow-hidden text-center font-bold text-sm text-white"><div class="inline-flex min-w-0 max-w-full justify-center">${away ? getTeamProfileLinkMarkup(away) : ''}</div></div>
                 </div>
                 <div class="flex justify-between items-center border-t border-[#1e307d] pt-3 text-xs">
                     <div class="flex items-center gap-2">
@@ -311,7 +311,7 @@ export function openMatchProtocol(matchId, { updateHistory = true } = {}) {
                 <div class="bg-[#13236b] p-4 rounded-xl border border-[#1e307d] space-y-3">
                     <div class="flex justify-between items-center border-b border-[#1e307d] pb-2">
                         <div>
-                            <h3 class="max-w-full overflow-x-auto font-bold text-[#aefb12] text-sm">${home ? getTeamNameMarkup(home) : ''}</h3>
+                            <h3 class="max-w-full overflow-hidden font-bold text-[#aefb12] text-sm">${home ? getTeamNameMarkup(home) : ''}</h3>
                             <span class="text-[10px] text-gray-400">3–5 v základu, max. 10 na soupisce, 1 brankář</span>
                         </div>
                         ${canEditHome && !match.isLocked ? `
@@ -327,7 +327,7 @@ export function openMatchProtocol(matchId, { updateHistory = true } = {}) {
                 <div class="bg-[#13236b] p-4 rounded-xl border border-[#1e307d] space-y-3">
                     <div class="flex justify-between items-center border-b border-[#1e307d] pb-2">
                         <div>
-                            <h3 class="max-w-full overflow-x-auto font-bold text-[#05fda3] text-sm">${away ? getTeamNameMarkup(away) : ''}</h3>
+                            <h3 class="max-w-full overflow-hidden font-bold text-[#05fda3] text-sm">${away ? getTeamNameMarkup(away) : ''}</h3>
                             <span class="text-[10px] text-gray-400">3–5 v základu, max. 10 na soupisce, 1 brankář</span>
                         </div>
                         ${canEditAway && !match.isLocked ? `
@@ -347,7 +347,7 @@ export function openMatchProtocol(matchId, { updateHistory = true } = {}) {
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div class="bg-[#13236b] p-4 rounded-xl border border-[#1e307d] space-y-3">
                     <div class="flex justify-between items-center border-b border-[#1e307d] pb-2">
-                        <h4 class="flex min-w-0 items-center gap-2 font-bold text-[#aefb12]"><span class="shrink-0">Realizační Tým —</span><span class="block max-w-full overflow-x-auto">${home ? getTeamNameMarkup(home) : ''}</span><span class="shrink-0">(${match.homeStaff.length}/5)</span></h4>
+                        <h4 class="flex min-w-0 items-center gap-2 font-bold text-[#aefb12]"><span class="shrink-0">Realizační Tým —</span><span class="block min-w-0 max-w-full overflow-hidden">${home ? getTeamNameMarkup(home) : ''}</span><span class="shrink-0">(${match.homeStaff.length}/5)</span></h4>
                         ${canEditHome && !match.isLocked ? `<button onclick="openAddStaffModal(${match.id}, 'home')" class="px-2 py-1 bg-[#aefb12] text-[#13236b] font-bold text-[10px] rounded">+ Přidat Člena</button>` : ''}
                     </div>
                     <div class="space-y-2">
@@ -357,7 +357,7 @@ export function openMatchProtocol(matchId, { updateHistory = true } = {}) {
 
                 <div class="bg-[#13236b] p-4 rounded-xl border border-[#1e307d] space-y-3">
                     <div class="flex justify-between items-center border-b border-[#1e307d] pb-2">
-                        <h4 class="flex min-w-0 items-center gap-2 font-bold text-[#05fda3]"><span class="shrink-0">Realizační Tým —</span><span class="block max-w-full overflow-x-auto">${away ? getTeamNameMarkup(away) : ''}</span><span class="shrink-0">(${match.awayStaff.length}/5)</span></h4>
+                        <h4 class="flex min-w-0 items-center gap-2 font-bold text-[#05fda3]"><span class="shrink-0">Realizační Tým —</span><span class="block min-w-0 max-w-full overflow-hidden">${away ? getTeamNameMarkup(away) : ''}</span><span class="shrink-0">(${match.awayStaff.length}/5)</span></h4>
                         ${canEditAway && !match.isLocked ? `<button onclick="openAddStaffModal(${match.id}, 'away')" class="px-2 py-1 bg-[#05fda3] text-[#13236b] font-bold text-[10px] rounded">+ Přidat Člena</button>` : ''}
                     </div>
                     <div class="space-y-2">

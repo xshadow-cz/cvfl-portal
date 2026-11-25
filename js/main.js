@@ -423,13 +423,39 @@ async function logoutDiscord() {
 
 window.logoutDiscord = logoutDiscord;
 
+let appInitializationPromise = null;
+
+function retryPortalConnection() {
+    return initApp();
+}
+
+window.retryPortalConnection = retryPortalConnection;
+
 // Inicializace aplikace po načtení DOM
 async function initApp() {
+    if (appInitializationPromise) return appInitializationPromise;
+    appInitializationPromise = initializeApp().finally(() => {
+        appInitializationPromise = null;
+    });
+    return appInitializationPromise;
+}
+
+async function initializeApp() {
     const authGate = document.getElementById('auth-gate-overlay');
     const authError = document.getElementById('auth-gate-error');
     const loginLink = document.getElementById('discord-login-link');
+    const retryButton = document.getElementById('auth-retry-button');
     const logoutButton = document.getElementById('discord-logout-button');
     const headerLogoutButton = document.getElementById('header-discord-logout-button');
+    const authTitle = document.getElementById('auth-gate-title');
+    const authMessage = document.getElementById('auth-gate-message');
+    authGate.classList.remove('hidden');
+    authError.classList.add('hidden');
+    loginLink.classList.add('hidden');
+    retryButton.classList.add('hidden');
+    logoutButton.classList.add('hidden');
+    authTitle.textContent = 'Ověřuji přihlášení';
+    authMessage.textContent = 'Kontroluji bezpečné připojení k portálu.';
     loginLink.href = `${getApiOrigin()}/api/auth/discord`;
     const authErrors = {
         invite_invalid: 'Odkaz na pozvánku není platný.',
@@ -477,11 +503,19 @@ async function initApp() {
     try {
         session = await loadDiscordSession();
     } catch (error) {
+        authTitle.textContent = 'Portál je dočasně nedostupný';
+        authMessage.textContent = 'Přihlášení zůstává zachováno. Zkuste se znovu připojit; není potřeba znovu ověřovat Discord.';
         authError.textContent = getFriendlyErrorMessage(error);
         authError.classList.remove('hidden');
+        retryButton.classList.remove('hidden');
         return;
     }
-    if (!session.authenticated) return;
+    if (!session.authenticated) {
+        authTitle.textContent = 'Přihlášení do CVFL portálu';
+        authMessage.textContent = 'Pro pokračování se přihlaste svým Discord účtem.';
+        loginLink.classList.remove('hidden');
+        return;
+    }
 
     state.currentUser = session.user;
     state.availableRoles = session.roles;
@@ -495,23 +529,22 @@ async function initApp() {
         '',
         `${window.location.pathname}${remainingQuery ? `?${remainingQuery}` : ''}${window.location.hash}`
     );
-    loginLink.classList.add('hidden');
     logoutButton.classList.remove('hidden');
     headerLogoutButton.classList.remove('hidden');
     if (state.availableRoles.length === 0) {
-        document.getElementById('auth-gate-title').textContent = 'Přístup čeká na schválení';
-        document.getElementById('auth-gate-message').textContent =
+        authTitle.textContent = 'Přístup čeká na schválení';
+        authMessage.textContent =
             `Účet ${session.user.username} (${session.user.discordId}) zatím nemá přidělenou žádnou roli. Požádejte vedení ligy o přístup.`;
         return;
     }
 
     const connected = await loadInitialStateFromAPI();
     if (!connected) {
-        document.getElementById('auth-gate-title').textContent = 'Databáze není dostupná';
-        document.getElementById('auth-gate-message').textContent =
-            'Přihlášení proběhlo, ale data portálu nelze načíst. Zkuste to později nebo kontaktujte správce.';
+        authTitle.textContent = 'Portál je dočasně nedostupný';
+        authMessage.textContent = 'Přihlášení zůstává zachováno, ale data portálu se nepodařilo načíst. Zkuste připojení znovu.';
         authError.textContent = 'Databázi se nepodařilo načíst.';
         authError.classList.remove('hidden');
+        retryButton.classList.remove('hidden');
         return;
     }
 

@@ -7,7 +7,7 @@ import { openModal, closeSpecificModal, showToast, openConfirmModal } from './ui
 import { logDKAction } from './disciplinary.js';
 import { updateAdminStats } from './admin.js';
 import { renderDashboard } from './dashboard.js';
-import { getTeamNameMarkup, escapeTeamName } from './team-logo.js';
+import { getTeamProfileLinkMarkup, escapeTeamName } from './team-logo.js';
 import { apiCreateReferee, apiUpdateReferee, apiDeleteReferee, apiSaveMatch } from './api.js';
 
 export function renderRefereesTab() {
@@ -52,9 +52,9 @@ export function renderDelegateAlerts() {
                         <div class="space-y-1">
                             <div class="flex flex-wrap items-center gap-2 text-xs">
                                 <span class="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 font-bold text-white">
-                                    <span class="min-w-0 overflow-hidden">${home ? getTeamNameMarkup(home, { truncate: true }) : ''}</span>
+                                    <span class="min-w-0 overflow-hidden">${home ? getTeamProfileLinkMarkup(home, { truncate: true }) : ''}</span>
                                     <span class="text-gray-400 font-normal">vs</span>
-                                    <span class="min-w-0 overflow-hidden text-right">${away ? getTeamNameMarkup(away, { truncate: true, className: 'justify-end' }) : ''}</span>
+                                    <span class="min-w-0 overflow-hidden text-right">${away ? getTeamProfileLinkMarkup(away, { truncate: true, className: 'justify-end' }) : ''}</span>
                                 </span>
                                 <span class="text-gray-400">| HR: <strong class="text-[#05fda3]">${escapeTeamName(m.referee || 'Nenominován')}</strong></span>
                                 <span class="text-gray-400">| Delegát: <strong class="text-purple-300">${escapeTeamName(m.delegate || 'Nenominován')}</strong></span>
@@ -249,9 +249,9 @@ export function openRefereeCard(refereeId) {
                                 <span class="font-bold ${match.status === 'In_Progress' ? 'text-emerald-300' : 'text-gray-400'}">${match.status === 'In_Progress' ? 'Probíhá' : 'Odehráno'}</span>
                             </div>
                             <div class="mt-2 grid min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2">
-                                <span class="min-w-0 overflow-hidden">${home ? getTeamNameMarkup(home, { logoClassName: 'h-5 w-5', truncate: true }) : escapeTeamName('Domácí tým')}</span>
+                                <span class="min-w-0 overflow-hidden">${home ? getTeamProfileLinkMarkup(home, { logoClassName: 'h-5 w-5', truncate: true }) : escapeTeamName('Domácí tým')}</span>
                                 <strong class="rounded-lg border border-[#1e307d] bg-[#0e1a4f] px-2 py-1 font-mono text-base text-[#aefb12]">${Number(match.homeScore) || 0}:${Number(match.awayScore) || 0}</strong>
-                                <span class="min-w-0 overflow-hidden text-right">${away ? getTeamNameMarkup(away, { logoClassName: 'h-5 w-5', className: 'justify-end', truncate: true }) : escapeTeamName('Hostující tým')}</span>
+                                <span class="min-w-0 overflow-hidden text-right">${away ? getTeamProfileLinkMarkup(away, { logoClassName: 'h-5 w-5', className: 'justify-end', truncate: true }) : escapeTeamName('Hostující tým')}</span>
                             </div>
                             <div class="mt-2 flex flex-wrap items-center gap-3 border-t border-[#1e307d]/70 pt-2 font-bold">
                                 <span class="text-yellow-300">🟨 ${yellowCards}</span>
@@ -322,9 +322,9 @@ export function renderRefereeAssignments() {
                     <span class="inline-flex items-center gap-1.5 text-gray-300"><i class="fa-regular fa-calendar text-[#aefb12]"></i>${escapeTeamName(matchDateFormatted)}</span>
                 </div>
                 <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 font-bold text-white text-sm">
-                    <span class="min-w-0 overflow-hidden">${home ? getTeamNameMarkup(home, { truncate: true }) : ''}</span>
+                    <span class="min-w-0 overflow-hidden">${home ? getTeamProfileLinkMarkup(home, { truncate: true }) : ''}</span>
                     <span class="text-gray-400 font-normal">vs</span>
-                    <span class="min-w-0 overflow-hidden text-right">${away ? getTeamNameMarkup(away, { truncate: true, className: 'justify-end' }) : ''}</span>
+                    <span class="min-w-0 overflow-hidden text-right">${away ? getTeamProfileLinkMarkup(away, { truncate: true, className: 'justify-end' }) : ''}</span>
                 </div>
                 <div class="flex min-w-0 items-center gap-1.5 text-xs text-gray-400">
                     <i class="fa-solid fa-location-dot shrink-0 text-[#aefb12]"></i>

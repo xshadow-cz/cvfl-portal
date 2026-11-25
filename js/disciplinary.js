@@ -9,7 +9,7 @@ import {
     apiCreateSuspension, apiDeleteSuspension, apiSaveMatch, apiLogDKAction,
     apiCreatePointsDeduction, apiDeletePointsDeductionsForTeam
 } from './api.js';
-import { getTeamNameMarkup, escapeTeamName } from './team-logo.js';
+import { getTeamProfileLinkMarkup, escapeTeamName } from './team-logo.js';
 
 export function logDKAction(type, target, details) {
     const now = new Date();
@@ -105,7 +105,7 @@ export function renderDisciplinary() {
         } else {
             deductBody.innerHTML = deductedTeams.map(t => `
                 <tr class="hover:bg-[#13236b]/60">
-                    <td class="p-3 font-bold text-white"><div class="max-w-full overflow-x-auto">${getTeamNameMarkup(t)}</div></td>
+                    <td class="max-w-0 p-3 font-bold text-white"><div class="max-w-full overflow-hidden">${getTeamProfileLinkMarkup(t)}</div></td>
                     <td class="p-3 text-gray-300">${t.league === '1_Liga' ? 'CVFL 1. Liga' : 'CVFL 2. Liga'}</td>
                     <td class="p-3 font-bold text-[#f33332]">-${t.deducted} bodů</td>
                     <td class="p-3 text-gray-300">${escapeTeamName(t.deductionReason || 'Rozhodnutí svazu')}</td>
