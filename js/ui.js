@@ -259,16 +259,46 @@ export function handleModalPopState() {
     return false;
 }
 
-export function showToast(message, isError = false) {
+export function getFriendlyErrorMessage(error) {
+    const message = String(error?.message || error || '').trim();
+    if (!message) return 'Operaci se nepodařilo dokončit. Zkuste to znovu.';
+    if (/failed to fetch|networkerror|nelze se připojit|fetch failed|timeout/i.test(message)) {
+        return 'Server právě neodpovídá. Zkuste to za chvíli znovu.';
+    }
+    if (/SQLITE|SQLSTATE|constraint|TypeError|ReferenceError|SyntaxError|internal server error|stack| at .+:\d+/i.test(message)) {
+        return 'Operaci se nepodařilo dokončit. Zkuste to znovu.';
+    }
+    const userMessages = {
+        discord_state: 'Ověření přihlášení se nezdařilo. Zkuste to znovu.',
+        invite_expired: 'Pozvánka už není platná. Požádejte o novou.',
+        invite_invalid: 'Odkaz na pozvánku není platný.',
+        invite_required: 'Pro registraci potřebujete platnou pozvánku.',
+        access_revoked: 'Tomuto účtu byl odebrán přístup.'
+    };
+    if (userMessages[message]) return userMessages[message];
+    if (/^[a-z][a-z0-9_]{2,}$/.test(message) || message.length > 180) {
+        return 'Operaci se nepodařilo dokončit. Zkuste to znovu.';
+    }
+    return message;
+}
+
+export function showToast(message, isError = false, isWarning = false) {
     const container = document.getElementById('toast-container');
     if (!container) return;
 
     const toast = document.createElement('div');
     toast.className = `p-3.5 rounded-xl shadow-2xl flex items-center space-x-2 text-xs font-bold text-white border pointer-events-auto transition duration-300 transform translate-y-0 ${
-        isError ? 'bg-[#0e1a4f] border-[#f33332] text-[#f33332]' : 'bg-[#0e1a4f] border-[#aefb12] text-[#aefb12]'
+        isWarning ? 'bg-[#0e1a4f] border-orange-400 text-orange-300' :
+            isError ? 'bg-[#0e1a4f] border-[#f33332] text-[#f33332]' : 'bg-[#0e1a4f] border-[#aefb12] text-[#aefb12]'
     }`;
-    
-    toast.innerHTML = `<i class="fa-solid ${isError ? 'fa-circle-exclamation text-[#f33332]' : 'fa-circle-check text-[#aefb12]'}"></i><span class="text-gray-200">${message}</span>`;
+    const icon = document.createElement('i');
+    icon.className = `fa-solid ${isWarning || isError ? 'fa-circle-exclamation' : 'fa-circle-check'} ${
+        isWarning ? 'text-orange-300' : isError ? 'text-[#f33332]' : 'text-[#aefb12]'
+    }`;
+    const text = document.createElement('span');
+    text.className = 'text-gray-200';
+    text.textContent = isError ? getFriendlyErrorMessage(message) : String(message);
+    toast.append(icon, text);
 
     container.appendChild(toast);
     setTimeout(() => {

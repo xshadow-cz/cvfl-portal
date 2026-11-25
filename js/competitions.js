@@ -218,7 +218,7 @@ export function renderCompetitions() {
                         <tbody class="divide-y divide-[#1e307d]">
                             ${Array.from({ length: 4 }, (_, index) => `
                                 <tr>
-                                    <td class="p-2.5 text-center"><span class="inline-flex h-6 min-w-6 items-center justify-center gap-0.5 rounded-full px-1 ${dangerType === 'relegation' && index === 3 ? 'bg-red-600/30 text-red-300' : dangerType === 'relegation' && index > 0 ? 'bg-red-500/20 text-red-300' : highlightWinner && index === 0 ? 'bg-[#0e1a4f] text-amber-300' : 'bg-[#0e1a4f] text-gray-400'}">${index + 1}${highlightWinner && index === 0 ? ' <i class="fa-solid fa-trophy text-amber-300"></i>' : ''}</span></td>
+                                    <td class="p-2.5 text-center"><span class="inline-flex h-6 min-w-6 items-center justify-center gap-0.5 rounded-full px-1 font-black ${index === 3 ? 'bg-[#991b1b] text-red-100' : 'bg-[#ef4444] text-[#450a0a]'}">${index + 1}${highlightWinner && index === 0 ? ' <i class="fa-solid fa-trophy text-amber-300"></i>' : ''}</span></td>
                                     <td class="h-10 p-2.5 text-gray-700">—</td><td></td><td></td><td></td><td></td><td></td><td></td>
                                 </tr>`).join('')}
                         </tbody>

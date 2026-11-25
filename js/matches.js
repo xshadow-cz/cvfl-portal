@@ -10,6 +10,7 @@ import { cancelForfeitWithConfirm } from './match-operations.js';
 import { renderRefereesTab } from './referees.js';
 import { apiSaveMatch } from './api.js';
 import { getMatchStatusLabel } from './match-status.js';
+import { getMatchRoundLabel, getRoundFilterOptions, matchesRoundFilter } from './match-rounds.js';
 import { getTeamLogoMarkup, escapeTeamName } from './team-logo.js';
 import { isPromotionPlayoffSecondLeg, getPromotionPlayoffAggregate } from './playoff-utils.js';
 
@@ -19,29 +20,9 @@ export function onCompetitionFilterChange() {
     const comp = compEl.value;
     const roundSelect = document.getElementById('match-filter-round');
 
-    if (comp === 'MOL Cup') {
-        roundSelect.innerHTML = `
-            <option value="ALL">Všechny Fáze MOL Cupu</option>
-            <option value="Osmifinále">Osmifinále</option>
-            <option value="Čtvrtfinále">Čtvrtfinále</option>
-            <option value="Semifinále">Semifinále</option>
-            <option value="Finále">Finále</option>
-        `;
-    } else if (comp === 'Baráž o 1. Ligu') {
-        roundSelect.innerHTML = `
-            <option value="ALL">Všechny zápasy baráže</option>
-            <option value="1">Baráž — 1. zápasy</option>
-            <option value="2">Baráž — odvety</option>
-        `;
-    } else if (comp === 'ALL') {
-        roundSelect.innerHTML = '<option value="ALL">Všechna Kola / Fáze</option>';
-    } else {
-        let options = `<option value="ALL">Všechna Kola (1-14)</option>`;
-        for (let r = 1; r <= 14; r++) {
-            options += `<option value="${r}">${r}. Kolo</option>`;
-        }
-        roundSelect.innerHTML = options;
-    }
+    roundSelect.innerHTML = getRoundFilterOptions(comp)
+        .map(option => `<option value="${option.value}">${option.label}</option>`)
+        .join('');
     renderMatches();
 }
 
@@ -63,13 +44,7 @@ export function renderMatches() {
         filtered = filtered.filter(m => m.competition === selectedComp);
     }
 
-    if (selectedRound !== 'ALL') {
-        if (selectedComp === 'MOL Cup') {
-            filtered = filtered.filter(m => m.cupStage === selectedRound);
-        } else {
-            filtered = filtered.filter(m => m.round === parseInt(selectedRound));
-        }
-    }
+    if (selectedRound !== 'ALL') filtered = filtered.filter(match => matchesRoundFilter(match, selectedRound));
 
     if (selectedStatus !== 'ALL') {
         filtered = filtered.filter(m => m.status === selectedStatus);
@@ -84,9 +59,7 @@ export function renderMatches() {
         const home = teamsData.find(t => t.id === m.homeTeamId);
         const away = teamsData.find(t => t.id === m.awayTeamId);
 
-        const roundText = m.competition === 'MOL Cup' ? m.cupStage :
-            m.competition === 'Baráž o 1. Ligu' ? `Baráž — ${Number(m.round) === 2 ? 'Odveta' : '1. zápas'}` :
-                `${m.round}. Kolo`;
+        const roundText = getMatchRoundLabel(m);
         const d = (m.matchDate && m.matchDate !== 'TBA') ? new Date(m.matchDate) : null;
         const matchDateFormatted = m.matchDate === 'TBA' ? 'TBA' : (d ? `${d.getDate()}.${d.getMonth() + 1}. ${d.toLocaleTimeString('cs-CZ', {hour: '2-digit', minute:'2-digit'})}` : 'Termín TBD');
 
@@ -122,8 +95,42 @@ export function renderMatches() {
 }
 
 export function getMatchIdFromPath(pathname) {
-    const match = /^\/zapasy\/(\d+)\/?$/.exec(pathname);
+    const match = /^\/zapasy\/(\d+)(?:\/hodnoceni-delegata)?\/?$/.exec(pathname);
     return match ? Number(match[1]) : null;
+}
+
+export function openDelegateComingSoon(matchId, { updateHistory = true } = {}) {
+    const path = `/zapasy/${encodeURIComponent(matchId)}/hodnoceni-delegata`;
+    if (window.location.pathname !== path) {
+        if (updateHistory) window.history.pushState({ cvflDelegateComingSoon: matchId }, '', path);
+        else window.history.replaceState({ cvflDelegateComingSoon: matchId }, '', path);
+    }
+    let page = document.getElementById('delegate-coming-soon-page');
+    if (!page) {
+        page = document.createElement('section');
+        page.id = 'delegate-coming-soon-page';
+        page.className = 'fixed inset-0 z-[210] flex min-h-dvh items-center justify-center bg-[#0e1a4f] p-4 text-center text-white sm:p-8';
+        document.body.appendChild(page);
+    }
+    page.innerHTML = `
+        <div class="w-full max-w-2xl rounded-2xl border border-[#1e307d] bg-[#13236b] p-6 shadow-2xl sm:p-10">
+            <i class="fa-solid fa-person-digging mb-5 text-4xl text-[#aefb12]"></i>
+            <h1 class="text-3xl font-black">Coming soon</h1>
+            <p class="mt-3 text-sm text-gray-300">Hodnocení delegáta připravujeme.</p>
+            <button type="button" onclick="closeDelegateComingSoon(${Number(matchId)})" class="mt-7 rounded-lg bg-[#aefb12] px-5 py-3 font-black text-[#13236b]">
+                <i class="fa-solid fa-arrow-left mr-2"></i> Zpět k zápisu
+            </button>
+        </div>`;
+}
+
+export function closeDelegateComingSoon(matchId) {
+    if (window.history.state?.cvflDelegateComingSoon) {
+        window.history.back();
+        return;
+    }
+    window.history.replaceState({ cvflMatchId: matchId }, '', `/zapasy/${encodeURIComponent(matchId)}`);
+    document.getElementById('delegate-coming-soon-page')?.remove();
+    openMatchProtocol(matchId, { updateHistory: false });
 }
 
 export function openMatchProtocol(matchId, { updateHistory = true } = {}) {
@@ -160,7 +167,16 @@ export function openMatchProtocol(matchId, { updateHistory = true } = {}) {
     const home = teamsData.find(t => t.id === match.homeTeamId);
     const away = teamsData.find(t => t.id === match.awayTeamId);
 
-    if (!match.checks) match.checks = { fansIssue: false, systemIssue: false, playersIssue: false, homeIdentityChecked: false, awayIdentityChecked: false };
+    if (!match.checks) match.checks = {};
+    match.checks = {
+        fansIssue: false,
+        systemIssue: false,
+        playersIssue: false,
+        staffIssue: false,
+        homeStaffReviewed: false,
+        awayStaffReviewed: false,
+        ...match.checks
+    };
     if (!match.periodChecks) match.periodChecks = {};
     match.periodChecks = {
         h1Started: false,
@@ -225,7 +241,17 @@ export function openMatchProtocol(matchId, { updateHistory = true } = {}) {
             <div class="flex flex-wrap items-center justify-between gap-4">
                 <div>
                     <span class="text-xs font-mono text-[#aefb12] uppercase tracking-wider">Oficiální Elektronický Zápis O Utkání (FIS ZOU)</span>
-                    <h2 class="text-2xl font-black text-white">${home ? home.name : ''} vs. ${away ? away.name : ''}</h2>
+                    <div class="mt-2 grid grid-cols-[1fr_auto_1fr] items-center gap-2 sm:gap-5">
+                        <div class="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-2 font-black text-white">
+                            ${home ? getTeamLogoMarkup(home) : ''}
+                            <span class="truncate text-center">${escapeTeamName(home?.name || 'Domácí')}</span>
+                        </div>
+                        <strong id="zou-scoreboard" class="rounded-xl border border-[#1e307d] bg-[#13236b] px-4 py-2 text-center font-mono text-2xl font-black text-[#aefb12]">${match.homeScore} : ${match.awayScore}</strong>
+                        <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 font-black text-white">
+                            <span class="truncate text-center">${escapeTeamName(away?.name || 'Hosté')}</span>
+                            ${away ? getTeamLogoMarkup(away) : ''}
+                        </div>
+                    </div>
                 </div>
                 <div class="flex items-center gap-3">
                     <span class="px-3 py-1 bg-amber-500/20 text-amber-400 border border-amber-500/30 text-xs font-bold rounded-lg">
@@ -255,7 +281,7 @@ export function openMatchProtocol(matchId, { updateHistory = true } = {}) {
                 </div>
                 <div>
                     <label class="text-gray-400 block mb-1">Hlavní Pořadatel</label>
-                    <input type="text" id="zou-recorder-input" value="${escapeTeamName(match.recorder || 'Vedení Ligy')}" ${!canEditEverything || match.isLocked ? 'disabled' : ''} onchange="updateMatchDetails(${match.id})" class="w-full bg-[#0e1a4f] border border-[#1e307d] p-1.5 rounded text-white font-semibold disabled:opacity-60">
+                    <input type="text" id="zou-recorder-input" value="${escapeTeamName(match.recorder || '')}" ${!canEditEverything || match.isLocked ? 'disabled' : ''} onchange="updateMatchDetails(${match.id})" class="w-full bg-[#0e1a4f] border border-[#1e307d] p-1.5 rounded text-white font-semibold disabled:opacity-60">
                 </div>
                 <div>
                     <label class="text-gray-400 block mb-1">Diváci / Počet Zápasů</label>
@@ -264,17 +290,17 @@ export function openMatchProtocol(matchId, { updateHistory = true } = {}) {
             </div>
         </div>
 
-        <div class="flex flex-wrap gap-1 border-b border-[#1e307d] mb-4 font-semibold text-xs text-gray-300">
-            <button onclick="switchFISTab('sestavy')" id="fistab-sestavy" class="fis-tab-btn active px-3 py-2">Sestavy týmů</button>
-            <button onclick="switchFISTab('realizacni')" id="fistab-realizacni" class="fis-tab-btn px-3 py-2">Realizační tým</button>
-            <button onclick="switchFISTab('hraci-casti')" id="fistab-hraci-casti" class="fis-tab-btn px-3 py-2">Prodloužení a penalty</button>
-            <button onclick="switchFISTab('stridani')" id="fistab-stridani" class="fis-tab-btn px-3 py-2">Střídání</button>
-            <button onclick="switchFISTab('branky')" id="fistab-branky" class="fis-tab-btn px-3 py-2">Branky a Asistence</button>
-            <button onclick="switchFISTab('vylouceni')" id="fistab-vylouceni" class="fis-tab-btn px-3 py-2">Karty</button>
-            <button onclick="switchFISTab('online')" id="fistab-online" class="fis-tab-btn px-3 py-2">Komentář k utkání</button>
-            <button onclick="switchFISTab('rozhodci')" id="fistab-rozhodci" class="fis-tab-btn px-3 py-2">Rozhodčí</button>
-            <button onclick="switchFISTab('kontrola')" id="fistab-kontrola" class="fis-tab-btn px-3 py-2">Kontrola ZOU</button>
-            ${canViewDelegateTab ? `<button onclick="switchFISTab('delegat')" id="fistab-delegat" class="fis-tab-btn px-3 py-2 text-purple-400 font-bold"><i class="fa-solid fa-user-tie mr-1"></i> Hodnocení delegáta</button>` : ''}
+        <div class="flex flex-nowrap gap-1 overflow-x-auto border-b border-[#1e307d] mb-4 font-semibold text-xs text-gray-300 custom-scrollbar">
+            <button onclick="switchFISTab('sestavy')" id="fistab-sestavy" class="fis-tab-btn active whitespace-nowrap px-3 py-2">Sestavy týmů</button>
+            <button onclick="switchFISTab('realizacni')" id="fistab-realizacni" class="fis-tab-btn whitespace-nowrap px-3 py-2">Realizační tým</button>
+            <button onclick="switchFISTab('hraci-casti')" id="fistab-hraci-casti" class="fis-tab-btn whitespace-nowrap px-3 py-2">Prodloužení a penalty</button>
+            <button onclick="switchFISTab('stridani')" id="fistab-stridani" class="fis-tab-btn whitespace-nowrap px-3 py-2">Střídání</button>
+            <button onclick="switchFISTab('branky')" id="fistab-branky" class="fis-tab-btn whitespace-nowrap px-3 py-2">Branky a Asistence</button>
+            <button onclick="switchFISTab('vylouceni')" id="fistab-vylouceni" class="fis-tab-btn whitespace-nowrap px-3 py-2">Karty</button>
+            <button onclick="switchFISTab('online')" id="fistab-online" class="fis-tab-btn whitespace-nowrap px-3 py-2">Komentář k utkání</button>
+            <button onclick="switchFISTab('rozhodci')" id="fistab-rozhodci" class="fis-tab-btn whitespace-nowrap px-3 py-2">Rozhodčí</button>
+            <button onclick="switchFISTab('kontrola')" id="fistab-kontrola" class="fis-tab-btn whitespace-nowrap px-3 py-2">Kontrola ZOU</button>
+            ${canViewDelegateTab ? `<button onclick="openDelegateComingSoon(${match.id})" id="fistab-delegat" class="fis-tab-btn whitespace-nowrap px-3 py-2 text-purple-400 font-bold"><i class="fa-solid fa-user-tie mr-1"></i> Hodnocení delegáta</button>` : ''}
         </div>
 
         <!-- TAB 1: SESTAVY -->
@@ -475,7 +501,6 @@ export function openMatchProtocol(matchId, { updateHistory = true } = {}) {
             <div class="flex flex-wrap justify-between items-center gap-2">
                 <div>
                     <h3 class="font-bold text-white text-sm">Záznam Vstřelených Branek a Asistencí</h3>
-                    <span class="text-xs text-gray-400">Průběžný stav: <strong class="text-[#aefb12] text-sm">${match.homeScore} : ${match.awayScore}</strong></span>
                 </div>
                 ${canEditEverything && !match.isLocked ? `
                 <div class="flex flex-wrap gap-2">
@@ -614,17 +639,7 @@ export function openMatchProtocol(matchId, { updateHistory = true } = {}) {
         <div id="fis-sec-rozhodci" class="hidden space-y-4 text-xs">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div class="bg-[#13236b] p-4 rounded-xl border border-[#1e307d] space-y-3">
-                    <h4 class="font-bold text-[#aefb12] text-sm">Kontrola Totožnosti</h4>
-                    <label class="flex items-center space-x-2 cursor-pointer text-white font-bold">
-                        <input type="checkbox" id="check-home-identity" ${match.checks.homeIdentityChecked ? 'checked' : ''} ${!canEditEverything || match.isLocked ? 'disabled' : ''} onchange="updateMatchChecks(${match.id})" class="accent-[#aefb12] w-4 h-4">
-                        <span>Kontrola totožnosti u domácích</span>
-                    </label>
-                    <label class="flex items-center space-x-2 cursor-pointer text-white font-bold">
-                        <input type="checkbox" id="check-away-identity" ${match.checks.awayIdentityChecked ? 'checked' : ''} ${!canEditEverything || match.isLocked ? 'disabled' : ''} onchange="updateMatchChecks(${match.id})" class="accent-[#aefb12] w-4 h-4">
-                        <span>Kontrola totožnosti u hostujících</span>
-                    </label>
-
-                    <div class="pt-3 border-t border-[#1e307d] space-y-2">
+                    <div class="space-y-2">
                         <h4 class="font-bold text-amber-400 text-sm">Problémy v Utkání</h4>
                         <label class="flex items-center gap-2 cursor-pointer text-amber-400 font-semibold">
                             <input type="checkbox" id="check-fans" ${match.checks.fansIssue ? 'checked' : ''} ${!canEditEverything || match.isLocked ? 'disabled' : ''} onchange="updateMatchChecks(${match.id})" class="accent-amber-400"> Problém s fanoušky
@@ -634,6 +649,9 @@ export function openMatchProtocol(matchId, { updateHistory = true } = {}) {
                         </label>
                         <label class="flex items-center gap-2 cursor-pointer text-amber-400 font-semibold">
                             <input type="checkbox" id="check-players" ${match.checks.playersIssue ? 'checked' : ''} ${!canEditEverything || match.isLocked ? 'disabled' : ''} onchange="updateMatchChecks(${match.id})" class="accent-amber-400"> Problém s hráči
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer text-amber-400 font-semibold">
+                            <input type="checkbox" id="check-staff" ${match.checks.staffIssue ? 'checked' : ''} ${!canEditEverything || match.isLocked ? 'disabled' : ''} onchange="updateMatchChecks(${match.id})" class="accent-amber-400"> Problém s členem realizačního týmu
                         </label>
                     </div>
                 </div>
@@ -660,11 +678,25 @@ export function openMatchProtocol(matchId, { updateHistory = true } = {}) {
                 <div class="space-y-3">
                     <label class="flex items-center space-x-2 cursor-pointer text-white font-bold">
                         <input type="checkbox" id="check-is-ready" ${match.isReady ? 'checked' : ''} ${!canEditEverything || match.isLocked ? 'disabled' : ''} onchange="toggleMatchReady(${match.id}, this.checked)" class="accent-[#aefb12] w-4 h-4">
-                        <span>Zápis je hotový</span>
+                        <span>Zápis je připraven ke kontrole</span>
                     </label>
 
+                    <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        ${[
+                            ['home', match.homeTeamId, home, match.checks.homeStaffReviewed],
+                            ['away', match.awayTeamId, away, match.checks.awayStaffReviewed]
+                        ].map(([side, teamId, team, checked]) => {
+                            const canReview = isTeamMgr && myTeamId === teamId;
+                            return `<label class="flex items-center gap-2 rounded-lg border border-[#1e307d] bg-[#0e1a4f] p-3 font-bold ${canReview ? 'text-white' : 'text-gray-500'}">
+                                <input type="checkbox" id="check-${side}-staff-review" ${checked ? 'checked' : ''} ${!canReview || !match.isReady || match.isLocked ? 'disabled' : ''} onchange="updateMatchChecks(${match.id})" class="accent-[#05fda3]">
+                                <span>Zkontroloval zápis: ${escapeTeamName(team?.name || (side === 'home' ? 'Domácí' : 'Hosté'))}</span>
+                            </label>`;
+                        }).join('')}
+                    </div>
+                    <p class="text-xs text-gray-400">Každý tým potvrdí kontrolu zvlášť. Rozhodčí může zápis uzamknout až po obou potvrzeních.</p>
+
                     <div class="flex items-center space-x-2">
-                        <button id="btn-lock-match" onclick="lockMatchRecord(${match.id})" ${!match.isReady || match.isLocked || !['Admin', 'Referee_Manager', 'Referee'].includes(state.currentUserRole) ? 'disabled' : ''} class="px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-40 text-black font-black rounded-lg shadow">
+                        <button id="btn-lock-match" onclick="lockMatchRecord(${match.id})" ${!match.isReady || !match.checks.homeStaffReviewed || !match.checks.awayStaffReviewed || match.isLocked || !['Admin', 'Referee_Manager', 'Referee'].includes(state.currentUserRole) ? 'disabled' : ''} class="px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-40 text-black font-black rounded-lg shadow">
                             <i class="fa-solid fa-lock mr-1"></i> Uzamknout Zápis
                         </button>
                         ${match.isLocked && ['Admin', 'Referee_Manager', 'DK'].includes(state.currentUserRole) ? `
@@ -675,46 +707,6 @@ export function openMatchProtocol(matchId, { updateHistory = true } = {}) {
                 </div>
             </div>
         </div>
-
-        <!-- TAB 9: HODNOCENÍ DELEGÁTA (DŮVĚRNÉ) -->
-        ${canViewDelegateTab ? `
-        <div id="fis-sec-delegat" class="hidden space-y-4 text-xs">
-            <div class="bg-[#13236b] p-4 rounded-xl border border-purple-500/40 space-y-3 shadow-lg">
-                <div class="flex flex-wrap justify-between items-center border-b border-[#1e307d] pb-2 gap-2">
-                    <div>
-                        <h4 class="font-bold text-purple-400 text-sm flex items-center gap-2">
-                            <i class="fa-solid fa-user-tie"></i> Hodnocení Rozhodčího Delegátem Utkání
-                        </h4>
-                        <span class="text-[10px] text-gray-400">Přísně důvěrné: Přístupné pouze delegátovi, vedení rozhodčích a vedení ligy.</span>
-                    </div>
-                    <span class="px-2.5 py-1 rounded bg-purple-900/60 text-purple-300 font-mono text-[11px] border border-purple-500/30">
-                        Delegát: ${escapeTeamName(match.delegate || 'Nenominován')}
-                    </span>
-                </div>
-
-                <div class="space-y-2">
-                    <label class="block text-gray-300 font-semibold">
-                        Slovní hodnocení výkonu rozhodčího (<strong class="text-[#05fda3]">${escapeTeamName(match.referee || 'Nenominován')}</strong>):
-                    </label>
-                    <textarea id="delegate-review-text" placeholder="Zadejte podrobné slovní hodnocení výkonu rozhodčího, řešení sporných situací, komunikace a řízení utkání..." ${!canEditDelegate || match.isLocked ? 'disabled' : ''} oninput="markUnsavedChanges()" class="w-full h-32 bg-[#0e1a4f] border border-[#1e307d] p-3 rounded-lg text-white disabled:opacity-60 font-sans">${escapeTeamName(match.delegateReview || '')}</textarea>
-                </div>
-
-                <div class="p-3 bg-[#0e1a4f] border border-amber-500/30 rounded-lg">
-                    <label class="flex items-center space-x-2.5 cursor-pointer text-amber-400 font-bold">
-                        <input type="checkbox" id="check-alert-ref-mgr" ${match.delegateAlertRefMgr ? 'checked' : ''} ${!canEditDelegate || match.isLocked ? 'disabled' : ''} onchange="markUnsavedChanges()" class="accent-amber-400 w-4 h-4">
-                        <span>Upozornit vedení rozhodčích v sekci rozhodčí</span>
-                    </label>
-                    <p class="text-[10px] text-gray-400 ml-6 mt-0.5">Při uložení se v záložce Rozhodčí zobrazí vedení rozhodčích prioritní notifikace.</p>
-                </div>
-
-                ${canEditDelegate && !match.isLocked ? `
-                <div class="flex justify-end pt-2">
-                    <button onclick="saveDelegateReview(${match.id})" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-black rounded-lg shadow flex items-center gap-2 transition">
-                        <i class="fa-solid fa-floppy-disk"></i> Uložit Hodnocení Delegáta
-                    </button>
-                </div>` : ''}
-            </div>
-        </div>` : ''}
 
         <!-- TLAČÍTKO OPUSŤENÍ VÝHRADNĚ DOLE -->
         <div class="flex flex-wrap justify-between items-center gap-2 pt-3 border-t border-[#1e307d]">
@@ -843,22 +835,38 @@ export function toggleMatchReady(matchId, checked) {
     const match = matchesData.find(m => m.id === matchId);
     if (match) {
         match.isReady = checked;
+        if (checked) {
+            match.checks.homeStaffReviewed = false;
+            match.checks.awayStaffReviewed = false;
+            const homeReview = document.getElementById('check-home-staff-review');
+            const awayReview = document.getElementById('check-away-staff-review');
+            if (homeReview) homeReview.checked = false;
+            if (awayReview) awayReview.checked = false;
+        }
         state.unsavedChangesGuard = true;
         const lockBtn = document.getElementById('btn-lock-match');
         if (lockBtn) {
-            lockBtn.disabled = !checked || match.isLocked || !['Admin', 'Referee_Manager', 'Referee'].includes(state.currentUserRole);
+            lockBtn.disabled = !checked || !match.checks.homeStaffReviewed || !match.checks.awayStaffReviewed ||
+                match.isLocked || !['Admin', 'Referee_Manager', 'Referee'].includes(state.currentUserRole);
         }
     }
 }
 
 export function lockMatchRecord(matchId) {
     const match = matchesData.find(m => m.id === matchId);
-    if (match) {
-        match.isLocked = true;
-        state.unsavedChangesGuard = true;
-        showToast("Zápis byl označen jako uzamčený (uložte zápas).");
-        openMatchProtocol(matchId);
+    if (!match) return;
+    if (!match.isReady || !match.checks.homeStaffReviewed || !match.checks.awayStaffReviewed) {
+        showToast('Nejprve oba týmy musí potvrdit kontrolu zápisu.', true);
+        return;
     }
+    if (!['Admin', 'Referee_Manager', 'Referee'].includes(state.currentUserRole)) {
+        showToast('Zápis může uzamknout pouze rozhodčí nebo vedení rozhodčích.', true);
+        return;
+    }
+    match.isLocked = true;
+    state.unsavedChangesGuard = true;
+    showToast('Zápis je uzamčen. Uložte změnu.');
+    openMatchProtocol(matchId);
 }
 
 export function unlockMatchRecord(matchId) {
@@ -1260,21 +1268,17 @@ export function addPlayerToRoster(playerId) {
 export function removePlayerFromRosterWithConfirm(matchId, side, playerId) {
     const player = playersData.find(p => p.id === playerId);
     const pName = player ? player.robloxNick : 'Hráče';
+    const match = matchesData.find(item => item.id === matchId);
+    if (!match) return;
 
-    openConfirmModal("Odebrat Hráče Ze Sestavy?", `Opravdu chcete odebrat hráče ${pName} ze zápasové sestavy?`, () => {
-        const match = matchesData.find(m => m.id === matchId);
-        if (!match) return;
-
-        const roster = side === 'home' ? match.homeRoster : match.awayRoster;
-        const idx = roster.findIndex(r => r.playerId === playerId);
-        if (idx !== -1) {
-            roster.splice(idx, 1);
-            state.unsavedChangesGuard = true;
-            logDKAction("ODEBRÁNÍ_HRÁČE", pName, `Odebrán ze sestavy.`);
-            showToast(`Hráč ${pName} odebrán ze sestavy.`);
-        }
-        openMatchProtocol(matchId);
-    }, false);
+    const roster = side === 'home' ? match.homeRoster : match.awayRoster;
+    const idx = roster.findIndex(item => item.playerId === playerId);
+    if (idx === -1) return;
+    roster.splice(idx, 1);
+    state.unsavedChangesGuard = true;
+    logDKAction("ODEBRÁNÍ_HRÁČE", pName, 'Odebrán ze sestavy.');
+    showToast(`Hráč ${pName} byl odebrán. Změnu potvrďte uložením zápisu.`, false, true);
+    openMatchProtocol(matchId);
 }
 
 export function openAddStaffModal(matchId, side) {
@@ -1384,13 +1388,21 @@ export function updateMatchChecks(matchId) {
     const match = matchesData.find(m => m.id === matchId);
     if (!match) return;
 
+    const readCheck = (id, fallback = false) => document.getElementById(id)?.checked ?? fallback;
     match.checks = {
-        fansIssue: document.getElementById('check-[#fans]') ? document.getElementById('check-[#fans]').checked : (document.getElementById('check-fans') ? document.getElementById('check-fans').checked : match.checks.fansIssue),
-        systemIssue: document.getElementById('check-system') ? document.getElementById('check-system').checked : match.checks.systemIssue,
-        playersIssue: document.getElementById('check-players') ? document.getElementById('check-players').checked : match.checks.playersIssue,
-        homeIdentityChecked: document.getElementById('check-home-identity') ? document.getElementById('check-home-identity').checked : match.checks.homeIdentityChecked,
-        awayIdentityChecked: document.getElementById('check-away-identity') ? document.getElementById('check-away-identity').checked : match.checks.awayIdentityChecked
+        ...match.checks,
+        fansIssue: readCheck('check-fans', match.checks.fansIssue),
+        systemIssue: readCheck('check-system', match.checks.systemIssue),
+        playersIssue: readCheck('check-players', match.checks.playersIssue),
+        staffIssue: readCheck('check-staff', match.checks.staffIssue),
+        homeStaffReviewed: readCheck('check-home-staff-review', match.checks.homeStaffReviewed),
+        awayStaffReviewed: readCheck('check-away-staff-review', match.checks.awayStaffReviewed)
     };
+    const lockBtn = document.getElementById('btn-lock-match');
+    if (lockBtn) {
+        lockBtn.disabled = !match.isReady || !match.checks.homeStaffReviewed || !match.checks.awayStaffReviewed ||
+            match.isLocked || !['Admin', 'Referee_Manager', 'Referee'].includes(state.currentUserRole);
+    }
     state.unsavedChangesGuard = true;
 }
 
@@ -1667,7 +1679,7 @@ export function renderCardForm(matchId, side = 'home', timeStr = '00:00') {
                     <select id="card-person-select" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-bold">
                         ${playerOptions ? `<optgroup label="Hráči na soupisce">${playerOptions}</optgroup>` : ''}
                         ${staffOptions ? `<optgroup label="Realizační tým">${staffOptions}</optgroup>` : ''}
-                        ${!playerOptions && !staffOptions ? '<option value="">(Žádné osoby v sestavě/staffu)</option>' : ''}
+                        ${!playerOptions ? '<option value="" disabled selected>Žádná osoba na soupisce</option>' : ''}
                     </select>
                 </div>
 
@@ -1948,12 +1960,19 @@ export async function saveMatchProtocol(matchId) {
     if (reviewEl) match.delegateReview = reviewEl.value;
     if (alertEl) match.delegateAlertRefMgr = alertEl.checked;
 
+    const wasReadyForReview = match.isReady;
     try {
-        await apiSaveMatch(match);
+        const savedMatch = await apiSaveMatch(match);
+        if (typeof savedMatch.isReady === 'boolean') match.isReady = savedMatch.isReady;
+        if (savedMatch.checks) match.checks = savedMatch.checks;
     } catch (error) {
         state.unsavedChangesGuard = true;
         showToast(`Zápis se nepodařilo uložit: ${error.message}`, true);
         return;
+    }
+
+    if (wasReadyForReview && !match.isReady) {
+        showToast('Změny byly uloženy. Zápis musí oba týmy znovu zkontrolovat.', false, true);
     }
 
     if (match.sendStatementToDK && match.punishmentStatement) {

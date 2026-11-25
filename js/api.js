@@ -322,7 +322,7 @@ export async function apiSetMaintenance(enabled, notice = state.maintenanceNotic
 export async function apiSaveMatch(match) {
     if (!match) throw new Error('Chybí údaje o zápasu.');
     if (!isBackendConnected) throw new Error('Databáze není dostupná; zápis nebyl uložen.');
-    await requestJSON(`/matches/${match.id}`, {
+    return await requestJSON(`/matches/${match.id}`, {
         method: 'PUT',
         body: JSON.stringify(match)
     });

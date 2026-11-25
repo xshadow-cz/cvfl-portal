@@ -12,6 +12,7 @@ import { renderTeamManagersDropdown } from './navigation.js';
 import { renderRefereeAssignments } from './referees.js';
 import { renderTeams } from './teams.js';
 import { getMatchStatusLabel } from './match-status.js';
+import { getMatchRoundLabel, getRoundFilterOptions, matchesRoundFilter } from './match-rounds.js';
 import { getTeamLogoMarkup, escapeTeamName } from './team-logo.js';
 import {
     apiCreateMatch, apiDeleteMatch, apiCreatePlayer, apiCreateTrainer, apiCreateTeam,
@@ -34,25 +35,9 @@ export function updateCreateMatchTeams() {
 
     if (!selectRound || !selectHome || !selectAway) return;
 
-    if (comp === 'MOL Cup') {
-        selectRound.innerHTML = `
-            <option value="Osmifinále">Osmifinále</option>
-            <option value="Čtvrtfinále">Čtvrtfinále</option>
-            <option value="Semifinále">Semifinále</option>
-            <option value="Finále">Finále</option>
-        `;
-    } else if (comp === 'Baráž o 1. Ligu') {
-        selectRound.innerHTML = `
-            <option value="1">Baráž — 1. zápas</option>
-            <option value="2">Baráž — odveta</option>
-        `;
-    } else {
-        let options = '';
-        for (let r = 1; r <= 14; r++) {
-            options += `<option value="${r}">${r}. Kolo</option>`;
-        }
-        selectRound.innerHTML = options;
-    }
+    selectRound.innerHTML = getRoundFilterOptions(comp, { includeAll: false })
+        .map(option => `<option value="${option.value}">${option.label}</option>`)
+        .join('');
 
     let leagueKey = '1_Liga';
     if (comp === 'CVFL 2. Liga') leagueKey = '2_Liga';
@@ -70,6 +55,7 @@ export function updateCreateMatchTeams() {
 export function submitCreateMatch() {
     const comp = document.getElementById('create-match-comp').value;
     const roundVal = document.getElementById('create-match-round').value;
+    const postseasonRound = /^stage:(Skupina o (?:titul|udržení)) — (\d+)\. kolo$/.exec(roundVal);
     const dateVal = document.getElementById('create-match-date').value;
     const stadiumVal = document.getElementById('create-match-stadium').value.trim() || 'TBD';
     const homeId = parseInt(document.getElementById('create-match-home').value);
@@ -82,9 +68,9 @@ export function submitCreateMatch() {
 
     const newMatch = {
         id: Date.now(),
-        round: comp === 'MOL Cup' ? 1 : parseInt(roundVal),
+        round: comp === 'MOL Cup' ? 1 : (postseasonRound ? Number(postseasonRound[2]) : parseInt(roundVal, 10)),
         competition: comp,
-        cupStage: comp === 'MOL Cup' ? roundVal : comp === 'Baráž o 1. Ligu' ? 'Semifinále' : null,
+        cupStage: comp === 'MOL Cup' ? roundVal.replace(/^stage:/, '') : comp === 'Baráž o 1. Ligu' ? 'Semifinále' : postseasonRound ? `${postseasonRound[1]} — ${postseasonRound[2]}. kolo` : null,
         homeTeamId: homeId,
         awayTeamId: awayId,
         homeScore: 0,
@@ -93,6 +79,7 @@ export function submitCreateMatch() {
         awayPenaltyScore: 0,
         stadium: stadiumVal,
         matchDate: dateVal || new Date().toISOString(),
+        recorder: '',
         status: "Scheduled",
         homeKitSelected: "Home",
         awayKitSelected: "Away",
@@ -105,7 +92,14 @@ export function submitCreateMatch() {
         homeStaff: [],
         awayStaff: [],
         periodChecks: { h1Started: false, h1Ended: false, h2Started: false, h2Ended: false, penaltiesStarted: false, penaltiesEnded: false },
-        checks: { fansIssue: false, systemIssue: false, playersIssue: false, homeIdentityChecked: false, awayIdentityChecked: false },
+        checks: {
+            fansIssue: false,
+            systemIssue: false,
+            playersIssue: false,
+            staffIssue: false,
+            homeStaffReviewed: false,
+            awayStaffReviewed: false
+        },
         events: []
     };
 
@@ -217,6 +211,7 @@ export function renderAdmin() {
     if (maintenanceToggle) maintenanceToggle.checked = state.isMaintenanceMode;
     renderAdminTeamsList();
     renderDiscordRoleManagement();
+    onAdminMatchFilterChange(true);
     renderAdminMatchesDeleteList();
 }
 
@@ -734,30 +729,56 @@ export function deleteAdminTeam(teamId) {
     }, false);
 }
 
+export function onAdminMatchFilterChange(updateRoundOptions = false) {
+    const compSelect = document.getElementById('admin-match-filter-competition');
+    const roundSelect = document.getElementById('admin-match-filter-round');
+    if (!compSelect || !roundSelect) return;
+    if (updateRoundOptions) {
+        const previousValue = roundSelect.value;
+        roundSelect.innerHTML = getRoundFilterOptions(compSelect.value)
+            .map(option => `<option value="${option.value}">${option.label}</option>`)
+            .join('');
+        if (Array.from(roundSelect.options).some(option => option.value === previousValue)) {
+            roundSelect.value = previousValue;
+        }
+    }
+    renderAdminMatchesDeleteList();
+}
+
 export function renderAdminMatchesDeleteList() {
     const list = document.getElementById('admin-matches-delete-list');
     if (!list) return;
 
-    if (matchesData.length === 0) {
+    const compSelect = document.getElementById('admin-match-filter-competition');
+    const roundSelect = document.getElementById('admin-match-filter-round');
+    const statusSelect = document.getElementById('admin-match-filter-status');
+    const selectedComp = compSelect?.value || 'ALL';
+    const selectedRound = roundSelect?.value || 'ALL';
+    const selectedStatus = statusSelect?.value || 'ALL';
+    const filteredMatches = matchesData.filter(match =>
+        (selectedComp === 'ALL' || match.competition === selectedComp) &&
+        matchesRoundFilter(match, selectedRound) &&
+        (selectedStatus === 'ALL' || match.status === selectedStatus)
+    );
+
+    if (filteredMatches.length === 0) {
         list.innerHTML = `<div class="p-4 text-center text-gray-400 text-xs">Žádné zápasy ke správě.</div>`;
         return;
     }
 
-    list.innerHTML = matchesData.map(m => {
+    list.innerHTML = filteredMatches.map(m => {
         const home = teamsData.find(t => t.id === m.homeTeamId);
         const away = teamsData.find(t => t.id === m.awayTeamId);
-        const roundText = m.competition === 'MOL Cup' ? m.cupStage :
-            m.competition === 'Baráž o 1. Ligu' ? `Baráž — ${Number(m.round) === 2 ? 'Odveta' : '1. zápas'}` :
-                `${m.round}. Kolo`;
+        const roundText = getMatchRoundLabel(m);
 
         return `
-            <div class="p-3 bg-[#13236b] rounded-lg border border-[#1e307d] flex justify-between items-center text-xs">
-                <div>
+            <div class="p-3 bg-[#13236b] rounded-lg border border-[#1e307d] flex flex-col gap-3 text-xs sm:flex-row sm:items-center sm:justify-between">
+                <div class="min-w-0 flex flex-wrap items-center gap-x-2 gap-y-1">
                     <span class="font-bold text-[#aefb12]">${m.competition} (${roundText})</span>
-                    <span class="inline-flex items-center gap-2 text-white font-bold ml-2">${home ? `${getTeamLogoMarkup(home)}${escapeTeamName(home.name)}` : ''} vs ${away ? `${getTeamLogoMarkup(away)}${escapeTeamName(away.name)}` : ''}</span>
-                    <span class="ml-2 text-gray-400">${getMatchStatusLabel(m.status)}</span>
+                    <span class="inline-flex items-center gap-2 text-white font-bold">${home ? `${getTeamLogoMarkup(home)}${escapeTeamName(home.name)}` : ''} vs ${away ? `${getTeamLogoMarkup(away)}${escapeTeamName(away.name)}` : ''}</span>
+                    <span class="text-gray-400">${getMatchStatusLabel(m.status)}</span>
                 </div>
-                <button onclick="deleteMatchFromAdmin(${m.id})" class="px-3 py-1 bg-[#f33332] hover:bg-red-600 text-white font-bold rounded shadow transition">
+                <button onclick="deleteMatchFromAdmin(${m.id})" class="w-full px-3 py-2 bg-[#f33332] hover:bg-red-600 text-white font-bold rounded shadow transition whitespace-nowrap sm:w-auto sm:py-1">
                     <i class="fa-solid fa-trash-can mr-1"></i> Smazat Zápas
                 </button>
             </div>

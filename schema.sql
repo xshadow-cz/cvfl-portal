@@ -84,7 +84,7 @@ CREATE TABLE IF NOT EXISTS matches (
     delegate TEXT,
     fourth_ref TEXT,
     var TEXT,
-    recorder TEXT DEFAULT 'Vedení Ligy',
+    recorder TEXT DEFAULT '',
     spectators INTEGER DEFAULT 120,
     start_time TEXT,
     end_time TEXT,

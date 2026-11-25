@@ -18,6 +18,7 @@ import {
     closeSpecificModal,
     handleModalPopState,
     showToast,
+    getFriendlyErrorMessage,
     openConfirmModal,
     closeConfirmModal,
     toggleMaintenance,
@@ -51,6 +52,8 @@ import {
     onCompetitionFilterChange,
     renderMatches,
     openMatchProtocol,
+    openDelegateComingSoon,
+    closeDelegateComingSoon,
     getMatchIdFromPath,
     toggleSendToDK,
     toggleMatchReady,
@@ -160,6 +163,7 @@ import {
     toggleExtraSection,
     renderAdmin,
     renderAdminMatchesDeleteList,
+    onAdminMatchFilterChange,
     deleteMatchFromAdmin,
     submitAdminAddTeam,
     renderAdminTeamsList,
@@ -206,14 +210,37 @@ window.addEventListener('beforeunload', event => {
     event.returnValue = '';
 });
 
+window.addEventListener('error', event => {
+    if (event.target !== window) return;
+    console.error('Chyba aplikace:', event.error || event.message);
+    showToast('Na stránce došlo k chybě. Zkuste akci znovu nebo obnovte stránku.', true);
+});
+
+window.addEventListener('unhandledrejection', event => {
+    console.error('Nezpracovaná chyba aplikace:', event.reason);
+    showToast('Operaci se nepodařilo dokončit. Zkuste to znovu.', true);
+});
+
 window.addEventListener('popstate', () => {
     if (handleModalPopState()) return;
+    if (window.location.pathname === '/statistiky-hracu') {
+        window.openStatsModal('goals', { updateHistory: false });
+        return;
+    }
+    window.closeStatsPageFromHistory?.();
+    const delegateReview = /\/hodnoceni-delegata\/?$/.test(window.location.pathname);
     const matchId = getMatchIdFromPath(window.location.pathname);
     if (matchId !== null) {
         if (state.activeTab !== 'matches' && !switchTab('matches', { updateHistory: false })) return;
         openMatchProtocol(matchId, { updateHistory: false });
+        if (delegateReview) {
+            openDelegateComingSoon(matchId);
+        } else {
+            document.getElementById('delegate-coming-soon-page')?.remove();
+        }
         return;
     }
+    document.getElementById('delegate-coming-soon-page')?.remove();
     switchTab(getTabFromPath(window.location.pathname), { updateHistory: false });
 });
 
@@ -251,6 +278,8 @@ Object.assign(window, {
     onCompetitionFilterChange,
     renderMatches,
     openMatchProtocol,
+    openDelegateComingSoon,
+    closeDelegateComingSoon,
     toggleSendToDK,
     toggleMatchReady,
     lockMatchRecord,
@@ -354,6 +383,7 @@ Object.assign(window, {
     toggleExtraSection,
     renderAdmin,
     renderAdminMatchesDeleteList,
+    onAdminMatchFilterChange,
     deleteMatchFromAdmin,
     submitAdminAddTeam,
     renderAdminTeamsList,
@@ -440,7 +470,7 @@ async function initApp() {
     try {
         session = await loadDiscordSession();
     } catch (error) {
-        authError.textContent = error.message;
+        authError.textContent = getFriendlyErrorMessage(error);
         authError.classList.remove('hidden');
         return;
     }
@@ -488,12 +518,21 @@ async function initApp() {
     renderTeamManagersDropdown();
     applyRBACPermissions();
     applyMaintenanceVisibility();
+    const delegateReview = /\/hodnoceni-delegata\/?$/.test(window.location.pathname);
+    const playerStatsPage = window.location.pathname === '/statistiky-hracu';
     const matchId = getMatchIdFromPath(window.location.pathname);
     if (matchId !== null) {
         switchTab('matches', { updateHistory: false });
         openMatchProtocol(matchId, { updateHistory: false });
+        if (delegateReview) {
+            openDelegateComingSoon(matchId, { updateHistory: false });
+        }
     } else {
         switchTab(getTabFromPath(window.location.pathname), { updateHistory: false });
+        if (playerStatsPage) {
+            window.history.replaceState({ cvflPlayerStats: true, cvflDirectStatsEntry: true }, '', '/statistiky-hracu');
+            window.openStatsModal('goals', { updateHistory: false });
+        }
     }
     renderDashboard();
     updateAdminStats();

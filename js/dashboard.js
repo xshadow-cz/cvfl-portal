@@ -11,9 +11,12 @@ const STAT_CATEGORIES = [
     { key: 'goals', label: 'Góly', icon: 'fa-futbol', color: 'text-[#aefb12]' },
     { key: 'assists', label: 'Asistence', icon: 'fa-handshake', color: 'text-[#05fda3]' },
     { key: 'cleanSheets', label: 'Čistá konta', icon: 'fa-shield-halved', color: 'text-amber-400' },
-    { key: 'yellowCards', label: 'Žluté karty', icon: 'fa-square', color: 'text-yellow-300' },
-    { key: 'redCards', label: 'Červené karty', icon: 'fa-square', color: 'text-red-400' }
+    { key: 'yellowCards', label: 'Žluté karty', icon: 'fa-square', color: 'text-yellow-300', cell: 'bg-yellow-500/20 text-yellow-200 border-yellow-400/40' },
+    { key: 'redCards', label: 'Červené karty', icon: 'fa-square', color: 'text-red-400', cell: 'bg-red-500/20 text-red-200 border-red-400/40' }
 ];
+STAT_CATEGORIES[0].cell = 'bg-lime-500/15 text-lime-200 border-lime-400/30';
+STAT_CATEGORIES[1].cell = 'bg-emerald-500/15 text-emerald-200 border-emerald-400/30';
+STAT_CATEGORIES[2].cell = 'bg-amber-500/15 text-amber-200 border-amber-400/30';
 
 // Stav okna statistik
 const statsModalState = {
@@ -250,16 +253,39 @@ function collectFilteredPlayerStats(competitionFilter) {
     return Array.from(playerStatsMap.values());
 }
 
-window.openStatsModal = function(statKey = 'goals') {
+window.openStatsModal = function(statKey = 'goals', { updateHistory = true } = {}) {
+    if (window.location.pathname !== '/statistiky-hracu') {
+        if (updateHistory) {
+            window.history.pushState({ cvflPlayerStats: true }, '', '/statistiky-hracu');
+        } else {
+            window.history.replaceState({ cvflPlayerStats: true }, '', '/statistiky-hracu');
+        }
+    }
     statsModalState.sortKey = statKey;
     statsModalState.sortAscending = false;
     renderStatsModal();
 };
 
 window.closeStatsModal = function() {
+    if (window.location.pathname === '/statistiky-hracu') {
+        if (window.history.state?.cvflDirectStatsEntry) {
+            window.history.replaceState(null, '', '/statistiky');
+            hideStatsPage();
+            window.switchTab('dashboard', { updateHistory: false });
+            return;
+        }
+        window.history.back();
+        return;
+    }
+    hideStatsPage();
+};
+
+function hideStatsPage() {
     const modal = document.getElementById('stats-modal-overlay');
     if (modal) modal.remove();
-};
+}
+
+window.closeStatsPageFromHistory = hideStatsPage;
 
 window.toggleStatsModalSort = function(statKey) {
     if (statsModalState.sortKey === statKey) {
@@ -284,7 +310,7 @@ function renderStatsModal() {
     if (!modal) {
         modal = document.createElement('div');
         modal.id = 'stats-modal-overlay';
-        modal.className = 'fixed inset-0 z-[70] flex items-center justify-center bg-black/80 p-4 sm:p-6 backdrop-blur-sm';
+        modal.className = 'fixed inset-0 z-[200] flex items-center justify-center bg-[#0e1a4f]';
         document.body.appendChild(modal);
     }
 
@@ -317,7 +343,7 @@ function renderStatsModal() {
     const activeTeams = teamsData.filter(t => !t.isArchived);
 
     modal.innerHTML = `
-        <div class="relative flex h-[calc(100dvh-2rem)] w-full max-w-7xl flex-col overflow-hidden rounded-xl border border-[#1e307d] bg-[#0e1a4f] p-4 shadow-2xl text-white sm:h-[calc(100dvh-3rem)] sm:p-6">
+        <div class="relative flex h-full w-full flex-col overflow-hidden bg-[#0e1a4f] p-3 text-white sm:p-6 lg:p-8">
             <!-- Záhlaví -->
             <div class="flex items-center justify-between pb-4 border-b border-[#1e307d]">
                 <div class="flex items-center gap-3">
@@ -329,13 +355,13 @@ function renderStatsModal() {
                         <p class="text-xs text-gray-400">Zobrazeni jsou pouze hráči s alespoň 1 zápisem ve statistikách</p>
                     </div>
                 </div>
-                <button onclick="closeStatsModal()" class="p-2 text-gray-400 hover:text-white hover:bg-[#13236b] rounded-lg transition">
-                    <i class="fa-solid fa-xmark text-xl"></i>
+                <button onclick="closeStatsModal()" class="flex shrink-0 items-center gap-2 rounded-lg border border-[#1e307d] px-3 py-2 text-sm font-bold text-gray-200 transition hover:bg-[#13236b] hover:text-white">
+                    <i class="fa-solid fa-arrow-left"></i><span>Zpět</span>
                 </button>
             </div>
 
             <!-- Filtry -->
-            <div class="flex flex-wrap items-center gap-4 py-3 border-b border-[#1e307d]/50 bg-[#13236b]/30 -mx-6 px-6">
+            <div class="flex flex-wrap items-center gap-3 border-b border-[#1e307d]/50 bg-[#13236b]/30 py-3 sm:gap-4 sm:px-2">
                 <div class="flex items-center gap-2 text-xs">
                     <label class="font-bold text-gray-300"><i class="fa-solid fa-trophy mr-1 text-[#aefb12]"></i> Soutěž:</label>
                     <select id="stats-modal-comp-filter" onchange="handleStatsModalFilterChange()" class="bg-[#0e1a4f] border border-[#1e307d] rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#aefb12]">
@@ -359,7 +385,7 @@ function renderStatsModal() {
 
             <!-- Tabulka statistik -->
             <div class="overflow-auto flex-1 my-2 pr-1">
-                <table class="w-full text-left text-xs border-collapse">
+                <table class="w-full min-w-[42rem] text-left text-xs border-collapse">
                     <thead class="sticky top-0 bg-[#0e1a4f] z-10 border-b border-[#1e307d] text-gray-400 font-bold uppercase text-[11px]">
                         <tr>
                             <th class="py-3 px-2">Hráč</th>
@@ -368,8 +394,8 @@ function renderStatsModal() {
                                 const isActive = sortKey === cat.key;
                                 const arrow = isActive ? (sortAscending ? ' <i class="fa-solid fa-arrow-up text-[#aefb12] ml-1"></i>' : ' <i class="fa-solid fa-arrow-down text-[#aefb12] ml-1"></i>') : '';
                                 return `
-                                    <th class="py-3 px-2 text-center cursor-pointer hover:text-white transition select-none ${isActive ? 'text-[#aefb12] bg-[#13236b]/40 rounded-t-lg' : ''}" onclick="toggleStatsModalSort('${cat.key}')">
-                                        <i class="fa-solid ${cat.icon} mr-1${cat.color}"></i>${cat.label}${arrow}
+                                    <th scope="col" class="py-3 px-2 text-center cursor-pointer hover:text-white transition select-none ${cat.color} ${isActive ? 'bg-[#13236b]/70 rounded-t-lg' : 'bg-[#13236b]/35'}" onclick="toggleStatsModalSort('${cat.key}')">
+                                        <i class="fa-solid ${cat.icon} ${cat.color} mr-2"></i> ${cat.label}${arrow}
                                     </th>
                                 `;
                             }).join('')}
@@ -387,7 +413,7 @@ function renderStatsModal() {
                                         ${team ? `<div class="flex items-center gap-1.5">${getTeamLogoMarkup(team)}<span>${escapeTeamName(team.name)}</span></div>` : '<span class="text-gray-500">Bez týmu</span>'}
                                     </td>
                                     ${STAT_CATEGORIES.map(cat => `
-                                        <td class="py-2.5 px-2 text-center font-bold ${sortKey === cat.key ? 'text-[#aefb12] bg-[#aefb12]/5' : (item[cat.key] > 0 ? 'text-gray-200' : 'text-gray-600')}">
+                                        <td class="border-x border-[#0e1a4f] py-2.5 px-2 text-center font-bold ${cat.cell}">
                                             ${item[cat.key]}
                                         </td>
                                     `).join('')}
@@ -426,7 +452,7 @@ function renderDashboardLeagueTables() {
             <section class="h-full rounded-xl border border-[#1e307d] bg-[#0e1a4f] p-4 shadow-md">
                 <div class="mb-3 flex items-center justify-between gap-3 border-b border-[#1e307d] pb-2">
                     <h2 class="font-bold text-lg" style="color:${league.accent}">${league.title} · Top 4</h2>
-                    <button type="button" onclick="switchTab('competitions'); switchCompTab('${league.tab}')" class="shrink-0 text-xs font-bold text-[#aefb12] hover:underline">Hlavní tabulka</button>
+                    <button type="button" aria-label="Otevřít hlavní tabulku" title="Otevřít hlavní tabulku" onclick="switchTab('competitions'); switchCompTab('${league.tab}')" class="shrink-0 rounded-lg p-2 text-[#aefb12] transition hover:bg-[#aefb12]/10" ><i class="fa-solid fa-up-right-from-square"></i></button>
                 </div>
                 <div class="overflow-x-auto">
                     <table class="w-full text-left text-xs">
@@ -495,7 +521,6 @@ export function renderDashboard() {
         welcome.textContent = username ? `Vítej, ${username}!` : 'Vítej!';
     }
     const list = document.getElementById('dashboard-matches-list');
-    const liveList = document.getElementById('dashboard-live-matches-list');
 
     const pStat = document.getElementById('dash-stat-players');
     const rStat = document.getElementById('dash-stat-referees');
@@ -509,20 +534,20 @@ export function renderDashboard() {
     renderDashboardLeagueTables();
     if (matchesData.length === 0) {
         if (list) list.innerHTML = `<div class="p-6 bg-[#0e1a4f] rounded-xl border border-[#1e307d] text-center text-gray-400 text-xs">V systému zatím nejsou žádná zápasy. Nová utkání vytvoříte v sekci Administrace.</div>`;
-        if (liveList) liveList.innerHTML = '<p class="text-sm text-gray-400">Právě neprobíhá žádné utkání.</p>';
         return;
     }
 
-    const liveMatches = matchesData.filter(match => match.status === 'In_Progress');
-    if (liveList) {
-        liveList.innerHTML = liveMatches.length
-            ? renderDashboardMatchCards(liveMatches)
-            : '<p class="text-sm text-gray-400">Právě neprobíhá žádné utkání.</p>';
-    }
-    const otherMatches = matchesData.filter(match => match.status !== 'In_Progress');
+    const upcomingMatches = matchesData
+        .filter(match => match.status === 'Scheduled')
+        .sort((a, b) => {
+            const dateA = a.matchDate && a.matchDate !== 'TBA' ? Date.parse(a.matchDate) : Number.POSITIVE_INFINITY;
+            const dateB = b.matchDate && b.matchDate !== 'TBA' ? Date.parse(b.matchDate) : Number.POSITIVE_INFINITY;
+            return dateA - dateB || Number(a.id) - Number(b.id);
+        })
+        .slice(0, 3);
     if (list) {
-        list.innerHTML = otherMatches.length
-            ? renderDashboardMatchCards(otherMatches)
-            : '<div class="p-6 rounded-xl border border-[#1e307d] bg-[#0e1a4f] text-center text-sm text-gray-400">Všechny dostupné zápasy právě probíhají.</div>';
+        list.innerHTML = upcomingMatches.length
+            ? renderDashboardMatchCards(upcomingMatches)
+            : '<div class="rounded-xl border border-[#1e307d] bg-[#0e1a4f] p-6 text-center text-sm text-gray-400">Žádná další utkání zatím nejsou naplánována.</div>';
     }
 }

@@ -35,16 +35,23 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 .role-badge-team-mgr { background-color: #11806a; color: #ffffff; }
 
 #modal-backdrop.match-protocol-backdrop {
-    padding: 1rem;
+    padding: 0;
+    background: #0e1a4f;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
 }
 
 #modal-match-protocol.match-protocol-fullscreen {
-    width: min(calc(100vw - 2rem), 80rem);
-    height: calc(100vh - 2rem);
-    height: calc(100dvh - 2rem);
+    box-sizing: border-box;
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
     max-width: none;
     max-height: none;
-    border-radius: 1rem;
+    border: 0;
+    border-radius: 0;
+    padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
+        max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
 }
 
 .nested-modal-overlay > [id^="modal-"] {
@@ -54,25 +61,27 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 }
 
 @media (min-width: 640px) {
-    #modal-backdrop.match-protocol-backdrop {
-        padding: 1.5rem;
-    }
-
     #modal-match-protocol.match-protocol-fullscreen {
-        width: min(calc(100vw - 3rem), 80rem);
-        height: calc(100vh - 3rem);
-        height: calc(100dvh - 3rem);
+        padding: max(1.5rem, env(safe-area-inset-top)) max(1.5rem, env(safe-area-inset-right))
+            max(1.5rem, env(safe-area-inset-bottom)) max(1.5rem, env(safe-area-inset-left));
     }
 }
 
 @media (min-width: 1024px) {
-    #modal-backdrop.match-protocol-backdrop {
-        padding: 2rem;
+    #modal-match-protocol.match-protocol-fullscreen {
+        padding: max(2rem, env(safe-area-inset-top)) max(2rem, env(safe-area-inset-right))
+            max(2rem, env(safe-area-inset-bottom)) max(2rem, env(safe-area-inset-left));
+    }
+}
+
+@media (max-width: 639px) {
+    #modal-match-protocol.match-protocol-fullscreen {
+        padding: max(0.75rem, env(safe-area-inset-top)) max(0.75rem, env(safe-area-inset-right))
+            max(0.75rem, env(safe-area-inset-bottom)) max(0.75rem, env(safe-area-inset-left));
     }
 
-    #modal-match-protocol.match-protocol-fullscreen {
-        width: min(calc(100vw - 4rem), 80rem);
-        height: calc(100vh - 4rem);
-        height: calc(100dvh - 4rem);
+    #match-protocol-content .fis-tab-btn {
+        flex: 0 0 auto;
+        min-height: 2.5rem;
     }
 }

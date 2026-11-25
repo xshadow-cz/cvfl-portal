@@ -78,6 +78,7 @@ app.use(express.static(__dirname, { dotfiles: 'deny' }));
 
 app.get([
     '/statistiky',
+    '/statistiky-hracu',
     '/souteze',
     '/zapasy',
     '/tymy',
@@ -89,6 +90,11 @@ app.get([
 });
 
 app.get('/zapasy/:matchId', (req, res) => {
+    if (!/^\d+$/.test(req.params.matchId)) return res.sendStatus(404);
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+app.get('/zapasy/:matchId/hodnoceni-delegata', (req, res) => {
     if (!/^\d+$/.test(req.params.matchId)) return res.sendStatus(404);
     res.sendFile(path.join(__dirname, 'index.html'));
 });
@@ -160,7 +166,7 @@ async function dbRun(sql, params = []) {
             changes: res.rowCount
         };
     } else {
-        const info = dbClient.prepare(sql).run(params);
+        const info = dbClient.prepare(sql).run(params.map(value => typeof value === 'boolean' ? Number(value) : value));
         return { lastID: info.lastInsertRowid, changes: info.changes };
     }
 }
@@ -1310,6 +1316,7 @@ app.post('/api/admin/discord-invites', requireRoles('Admin'), async (req, res) =
 
 app.get('/api/admin/discord-invites', requireRoles('Admin'), async (req, res) => {
     try {
+        await dbRun('DELETE FROM discord_invites WHERE expires_at <= CURRENT_TIMESTAMP');
         const invites = await dbAll(
             `SELECT token_hash AS id, token_encrypted AS "tokenEncrypted", roles_json AS "rolesJson",
                     expires_at AS "expiresAt", created_at AS "createdAt"
@@ -1924,10 +1931,10 @@ app.post('/api/matches', requireRoles('Admin'), async (req, res) => {
         const result = await dbRun(
             `INSERT INTO matches (
                 round, competition, cup_stage, home_team_id, away_team_id,
-                home_score, away_score, stadium, match_date, status,
+                home_score, away_score, stadium, match_date, status, recorder,
                 checks_json, period_checks_json, home_roster_json, away_roster_json,
                 home_staff_json, away_staff_json, events_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 m.round || 1,
                 m.competition || 'CVFL 1. Liga',
@@ -1939,6 +1946,7 @@ app.post('/api/matches', requireRoles('Admin'), async (req, res) => {
                 m.stadium || 'TBD',
                 m.matchDate || 'TBA',
                 m.status || 'Scheduled',
+                m.recorder || '',
                 JSON.stringify(m.checks || {}),
                 JSON.stringify(m.periodChecks || {}),
                 JSON.stringify(m.homeRoster || []),
@@ -1958,6 +1966,87 @@ app.put('/api/matches/:id', requireMatchEditor, async (req, res) => {
     try {
         const id = req.params.id;
         const m = req.body || {};
+        const currentMatch = req.matchRecord || await dbGet('SELECT * FROM matches WHERE id = ?', [id]);
+        if (!currentMatch) return res.status(404).json({ success: false, error: 'Zápas nebyl nalezen.' });
+
+        const roles = req.auth.roles;
+        const canSetOfficialState = roles.some(role => ['Admin', 'DK', 'Referee_Manager'].includes(role)) ||
+            (req.assignedOfficialMatch && roles.includes('Referee'));
+        const canSetReady = canSetOfficialState;
+        if (m.isReady !== undefined && Boolean(m.isReady) !== Boolean(currentMatch.is_ready) && !canSetReady) {
+            return res.status(403).json({ success: false, error: 'Zápis může připravit ke kontrole pouze rozhodčí.' });
+        }
+
+        const storedChecks = JSON.parse(currentMatch.checks_json || '{}');
+        const defaults = {
+            fansIssue: false, systemIssue: false, playersIssue: false, staffIssue: false,
+            homeStaffReviewed: false, awayStaffReviewed: false
+        };
+        const nextChecks = { ...defaults, ...storedChecks, ...(m.checks || {}) };
+        const reviewKeys = ['homeStaffReviewed', 'awayStaffReviewed'];
+        const managedTeamIds = roles
+            .filter(role => role.startsWith('Team_Manager_'))
+            .map(role => Number(role.slice('Team_Manager_'.length)));
+        const reviewTeamIds = {
+            homeStaffReviewed: currentMatch.home_team_id,
+            awayStaffReviewed: currentMatch.away_team_id
+        };
+        for (const key of reviewKeys) {
+            if (m.checks?.[key] === undefined || Boolean(m.checks[key]) === Boolean(({ ...defaults, ...storedChecks })[key])) continue;
+            if (!managedTeamIds.includes(reviewTeamIds[key])) {
+                return res.status(403).json({ success: false, error: 'Kontrolu může potvrdit pouze vedoucí příslušného týmu.' });
+            }
+            if (!currentMatch.is_ready || currentMatch.is_locked) {
+                return res.status(403).json({ success: false, error: 'Kontrolu týmu lze potvrdit až po přípravě zápisu.' });
+            }
+        }
+
+        if (req.teamManagerTeamIds) {
+            const allowedReviewKeys = new Set([
+                ...(req.teamManagerTeamIds.includes(currentMatch.home_team_id) ? ['homeStaffReviewed'] : []),
+                ...(req.teamManagerTeamIds.includes(currentMatch.away_team_id) ? ['awayStaffReviewed'] : [])
+            ]);
+            const requestedChecks = { ...defaults, ...storedChecks, ...(m.checks || {}) };
+            for (const key of reviewKeys) {
+                if (!allowedReviewKeys.has(key)) requestedChecks[key] = Boolean(({ ...defaults, ...storedChecks })[key]);
+            }
+            const hasOtherCheckChanges = Object.keys({ ...defaults, ...storedChecks, ...(m.checks || {}) })
+                .some(key => !allowedReviewKeys.has(key) && !reviewKeys.includes(key) &&
+                    !isDeepStrictEqual(requestedChecks[key], { ...defaults, ...storedChecks }[key]));
+            if (hasOtherCheckChanges || reviewKeys.some(key => !allowedReviewKeys.has(key) &&
+                requestedChecks[key] !== Boolean(({ ...defaults, ...storedChecks })[key]))) {
+                return res.status(403).json({ success: false, error: 'Vedoucí týmu může potvrdit pouze kontrolu svého týmu.' });
+            }
+            if (m.checks && reviewKeys.some(key => allowedReviewKeys.has(key) && m.checks[key] !== undefined &&
+                Boolean(m.checks[key]) !== Boolean(({ ...defaults, ...storedChecks })[key])) &&
+                (!currentMatch.is_ready || currentMatch.is_locked)) {
+                return res.status(403).json({ success: false, error: 'Kontrolu týmu lze potvrdit až po přípravě zápisu.' });
+            }
+            m.checks = requestedChecks;
+            Object.assign(nextChecks, requestedChecks);
+        }
+
+        const changedProtocolFields = [
+            ['homeScore', 'home_score'],
+            ['awayScore', 'away_score'],
+            ['homePenaltyScore', 'home_penalty_score'],
+            ['awayPenaltyScore', 'away_penalty_score'],
+            ['homeRoster', 'home_roster_json'],
+            ['awayRoster', 'away_roster_json'],
+            ['homeStaff', 'home_staff_json'],
+            ['awayStaff', 'away_staff_json'],
+            ['events', 'events_json'],
+            ['periodChecks', 'period_checks_json']
+        ].some(([field, column]) => m[field] !== undefined &&
+            !isDeepStrictEqual(m[field], typeof currentMatch[column] === 'string' && currentMatch[column].startsWith('[')
+                ? JSON.parse(currentMatch[column])
+                : typeof currentMatch[column] === 'string' && currentMatch[column].startsWith('{')
+                    ? JSON.parse(currentMatch[column])
+                    : currentMatch[column]));
+        const changedIssueChecks = ['fansIssue', 'systemIssue', 'playersIssue', 'staffIssue'].some(key =>
+            nextChecks[key] !== Boolean(({ ...defaults, ...storedChecks })[key]));
+        const resetReviewRequired = currentMatch.is_ready && (changedProtocolFields || changedIssueChecks);
+
         if (req.teamManagerTeamIds) {
             const immutableFields = [
                 ['homeScore', 'home_score'],
@@ -1999,13 +2088,11 @@ app.put('/api/matches/:id', requireMatchEditor, async (req, res) => {
                     }
                 }
             }
-            for (const [field, column] of [['checks', 'checks_json'], ['periodChecks', 'period_checks_json'], ['events', 'events_json']]) {
+            for (const [field, column] of [['periodChecks', 'period_checks_json'], ['events', 'events_json']]) {
                 if (m[field] !== undefined) {
-                    const defaults = field === 'checks'
-                        ? { fansIssue: false, systemIssue: false, playersIssue: false, homeIdentityChecked: false, awayIdentityChecked: false }
-                        : field === 'periodChecks'
-                            ? { h1Started: false, h1Ended: false, h2Started: false, h2Ended: false }
-                            : [];
+                    const defaults = field === 'periodChecks'
+                        ? { h1Started: false, h1Ended: false, h2Started: false, h2Ended: false }
+                        : [];
                     const storedValue = JSON.parse(req.matchRecord[column] || (field === 'events' ? '[]' : '{}'));
                     const comparableStored = Array.isArray(defaults) ? storedValue : { ...defaults, ...storedValue };
                     const comparableRequest = Array.isArray(defaults) ? m[field] : { ...defaults, ...m[field] };
@@ -2013,6 +2100,19 @@ app.put('/api/matches/:id', requireMatchEditor, async (req, res) => {
                         return res.status(403).json({ success: false, error: 'Vedoucí mužstva nemůže měnit protokol zápasu.' });
                     }
                 }
+            }
+        }
+        if (resetReviewRequired || m.isReady === false) {
+            m.isReady = false;
+            nextChecks.homeStaffReviewed = false;
+            nextChecks.awayStaffReviewed = false;
+            m.checks = nextChecks;
+        }
+
+        if (m.isLocked === true && !currentMatch.is_locked) {
+            if (!canSetOfficialState) return res.status(403).json({ success: false, error: 'Zápis může uzamknout pouze rozhodčí.' });
+            if (!currentMatch.is_ready || !nextChecks.homeStaffReviewed || !nextChecks.awayStaffReviewed) {
+                return res.status(400).json({ success: false, error: 'Oba týmy musí nejprve potvrdit kontrolu zápisu.' });
             }
         }
         const penaltyError = await validateMatchPenalties(m, id);
@@ -2037,6 +2137,7 @@ app.put('/api/matches/:id', requireMatchEditor, async (req, res) => {
         if (m.awayPenaltyScore !== undefined) { updateFields.push('away_penalty_score = ?'); params.push(m.awayPenaltyScore); }
         if (m.stadium !== undefined) { updateFields.push('stadium = ?'); params.push(m.stadium); }
         if (m.matchDate !== undefined) { updateFields.push('match_date = ?'); params.push(m.matchDate); }
+        if (m.recorder !== undefined) { updateFields.push('recorder = ?'); params.push(m.recorder); }
         if (m.status !== undefined) { updateFields.push('status = ?'); params.push(m.status); }
         if (m.referee !== undefined) { updateFields.push('referee = ?'); params.push(m.referee); }
         if (m.delegate !== undefined) { updateFields.push('delegate = ?'); params.push(m.delegate); }
@@ -2071,7 +2172,7 @@ app.put('/api/matches/:id', requireMatchEditor, async (req, res) => {
                 await recordSuspensionMatches(id, m.awayTeamId, m.awayRoster || []);
             }
         }
-        res.json({ success: true });
+        res.json({ success: true, isReady: Boolean(m.isReady ?? currentMatch.is_ready), checks: m.checks || nextChecks });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
     }
@@ -2153,9 +2254,6 @@ async function validateMatchLineups(match) {
         if (playerIds.length !== roster.length || new Set(playerIds).size !== roster.length) {
             return 'Sestava obsahuje neplatného nebo duplicitního hráče.';
         }
-        const starters = roster.filter(player => player.isStarter).length;
-        if (starters < 3 || starters > 5) return 'Každý týmy musí mít 3 až 5 hráčů v základní sestavě.';
-        if (roster.filter(player => player.isGK).length !== 1) return 'Každý tým musí mít určeného právě jednoho brankáře.';
     }
     return await validateMatchSuspensions(match);
 }
@@ -2384,6 +2482,13 @@ if (PLAYER_BOT_API_URL && PLAYER_BOT_API_TOKEN) {
     const syncTimer = setInterval(() => runPlayerSync().catch(() => {}), PLAYER_BOT_SYNC_INTERVAL_MS);
     syncTimer.unref();
 }
+
+const inviteCleanupTimer = setInterval(() => {
+    if (!isDatabaseReady) return;
+    dbRun('DELETE FROM discord_invites WHERE expires_at <= CURRENT_TIMESTAMP')
+        .catch(error => console.error('Vypršené pozvánky se nepodařilo odebrat:', error.message));
+}, 60 * 60 * 1000);
+inviteCleanupTimer.unref();
 
 app.listen(PORT, () => {
     const publicUrl = process.env.APP_ORIGIN || 'https://portal.cvfl.cz';
