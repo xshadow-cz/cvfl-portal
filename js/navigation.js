@@ -72,7 +72,11 @@ export function switchTab(tabId, { updateHistory = true } = {}) {
             'Zápis obsahuje neuložené změny. Opravdu chcete odejít bez uložení?'
         )) {
             if (!updateHistory) {
-                window.history.replaceState(null, '', tabPaths[state.activeTab] || tabPaths.dashboard);
+                const matchId = state.matchProtocolSnapshotId;
+                const matchPath = matchId === null || matchId === undefined
+                    ? tabPaths[state.activeTab] || tabPaths.dashboard
+                    : `/zapasy/${encodeURIComponent(matchId)}`;
+                window.history.pushState(matchId ? { cvflMatchId: matchId } : null, '', matchPath);
             }
             return false;
         }

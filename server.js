@@ -82,6 +82,11 @@ app.get([
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
+app.get('/zapasy/:matchId', (req, res) => {
+    if (!/^\d+$/.test(req.params.matchId)) return res.sendStatus(404);
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
 app.get(['/disciplinarka', '/administrace'], (req, res) => {
     const newPath = req.path === '/disciplinarka' ? '/komise' : '/admin';
     res.redirect(301, `${newPath}${req.url.slice(req.path.length)}`);
@@ -1967,7 +1972,7 @@ app.put('/api/matches/:id', requireMatchEditor, async (req, res) => {
                 }
             }
         }
-        const penaltyError = await validatePromotionPlayoffPenalties(m, id);
+        const penaltyError = await validateMatchPenalties(m, id);
         if (penaltyError) return res.status(400).json({ success: false, error: penaltyError });
         if (m.status === 'Completed' && !m.isForfeited || m.periodChecks && m.periodChecks.h1Started) {
             const lineupError = await validateMatchLineups(m);
@@ -2029,7 +2034,7 @@ app.put('/api/matches/:id', requireMatchEditor, async (req, res) => {
     }
 });
 
-async function validatePromotionPlayoffPenalties(match, matchId) {
+async function validateMatchPenalties(match, matchId) {
     const current = await dbGet(
         'SELECT competition, cup_stage, round, home_team_id, away_team_id, home_score, away_score, status FROM matches WHERE id = ?',
         [matchId]
@@ -2043,10 +2048,6 @@ async function validatePromotionPlayoffPenalties(match, matchId) {
     const awayPenalties = match.awayPenaltyScore ?? 0;
     const penaltyActivity = periodChecks.penaltiesStarted || periodChecks.penaltiesEnded ||
         homePenalties > 0 || awayPenalties > 0;
-    if (!isSecondLeg) {
-        if (penaltyActivity) return 'Penalty jsou dostupné pouze ve druhém semifinálovém utkání baráže.';
-        return null;
-    }
     if (![homePenalties, awayPenalties].every(score => Number.isInteger(score) && score >= 0 && score <= 99)) {
         return 'Výsledek penalt musí být celé číslo od 0 do 99.';
     }
@@ -2058,33 +2059,41 @@ async function validatePromotionPlayoffPenalties(match, matchId) {
     }
     if (!penaltyActivity) return null;
 
-    const priorLegs = await dbAll(
-        `SELECT round, home_team_id, away_team_id, home_score, away_score, status
-         FROM matches
-         WHERE competition = ? AND cup_stage = ? AND id != ?
-           AND home_team_id IN (?, ?) AND away_team_id IN (?, ?)`,
-        [
-            'Baráž o 1. Ligu', 'Semifinále', matchId,
-            current.home_team_id, current.away_team_id,
-            current.home_team_id, current.away_team_id
-        ]
-    );
-    const firstLeg = priorLegs.find(leg => Number(leg.round) === 1 &&
-        new Set([leg.home_team_id, leg.away_team_id]).size === 2 &&
-        [leg.home_team_id, leg.away_team_id].includes(current.home_team_id) &&
-        [leg.home_team_id, leg.away_team_id].includes(current.away_team_id));
-    if (!firstLeg || firstLeg.status !== 'Completed') {
-        return 'Penalty lze zahájit až po odehrání obou zápasů semifinále.';
+    const regulationHasEnded = current.status === 'Completed' ||
+        match.status === 'Completed' || periodChecks.h2Ended;
+    if (!regulationHasEnded) return 'Penaltový rozstřel lze zahájit až po skončení druhého poločasu.';
+    if (periodChecks.et1Started && !periodChecks.et2Ended) {
+        return 'Penaltový rozstřel lze zahájit až po skončení prodloužení.';
     }
+
     const currentHomeScore = match.homeScore ?? current.home_score;
     const currentAwayScore = match.awayScore ?? current.away_score;
-    const homeAggregate = (firstLeg.home_team_id === current.home_team_id ? firstLeg.home_score : firstLeg.away_score) +
-        currentHomeScore;
-    const awayAggregate = (firstLeg.home_team_id === current.away_team_id ? firstLeg.home_score : firstLeg.away_score) +
-        currentAwayScore;
-    if (homeAggregate !== awayAggregate) return 'Penalty lze zahrát pouze při shodném součtu skóre obou utkání.';
-    if (current.status !== 'Completed' && match.status !== 'Completed' && !periodChecks.h2Ended) {
-        return 'Penaltový rozstřel lze zahájit až po skončení druhého utkání.';
+    if (isSecondLeg) {
+        const priorLegs = await dbAll(
+            `SELECT round, home_team_id, away_team_id, home_score, away_score, status
+             FROM matches
+             WHERE competition = ? AND cup_stage = ? AND id != ?
+               AND home_team_id IN (?, ?) AND away_team_id IN (?, ?)`,
+            [
+                'Baráž o 1. Ligu', 'Semifinále', matchId,
+                current.home_team_id, current.away_team_id,
+                current.home_team_id, current.away_team_id
+            ]
+        );
+        const firstLeg = priorLegs.find(leg => Number(leg.round) === 1 &&
+            new Set([leg.home_team_id, leg.away_team_id]).size === 2 &&
+            [leg.home_team_id, leg.away_team_id].includes(current.home_team_id) &&
+            [leg.home_team_id, leg.away_team_id].includes(current.away_team_id));
+        if (!firstLeg || firstLeg.status !== 'Completed') {
+            return 'Penalty lze zahájit až po odehrání obou zápasů semifinále.';
+        }
+        const homeAggregate = (firstLeg.home_team_id === current.home_team_id ? firstLeg.home_score : firstLeg.away_score) +
+            currentHomeScore;
+        const awayAggregate = (firstLeg.home_team_id === current.away_team_id ? firstLeg.home_score : firstLeg.away_score) +
+            currentAwayScore;
+        if (homeAggregate !== awayAggregate) return 'Penalty lze zahrát pouze při shodném součtu skóre obou utkání.';
+    } else if (currentHomeScore !== currentAwayScore) {
+        return 'Penalty lze zahrát pouze při nerozhodném výsledku.';
     }
     if (periodChecks.penaltiesEnded && homePenalties === awayPenalties) {
         return 'Penaltový rozstřel musí mít vítěze.';

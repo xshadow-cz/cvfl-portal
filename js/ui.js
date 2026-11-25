@@ -149,18 +149,32 @@ export function toggleRoleSelector() {
 }
 
 export function openModal(id) {
-    document.getElementById('modal-backdrop').classList.remove('hidden');
+    const backdrop = document.getElementById('modal-backdrop');
+    backdrop.classList.remove('hidden');
     const target = document.getElementById(id);
-    if (target) target.classList.remove('hidden');
+    if (target) {
+        target.classList.remove('hidden');
+        if (id === 'modal-match-protocol') {
+            backdrop.classList.add('!p-0', '!bg-black', '!backdrop-blur-none');
+            target.classList.add('!w-screen', '!h-screen', '!max-w-none', '!max-h-none', '!rounded-none', '!border-0');
+        }
+    }
 }
 
 export function closeSpecificModal(id) {
+    const backdrop = document.getElementById('modal-backdrop');
     const target = document.getElementById(id);
-    if (target) target.classList.add('hidden');
+    if (target) {
+        target.classList.add('hidden');
+        if (id === 'modal-match-protocol') {
+            target.classList.remove('!w-screen', '!h-screen', '!max-w-none', '!max-h-none', '!rounded-none', '!border-0');
+            backdrop.classList.remove('!p-0', '!bg-black', '!backdrop-blur-none');
+        }
+    }
 
     const anyVisible = document.querySelectorAll('#modal-backdrop > div:not(.hidden)').length > 0;
     if (!anyVisible) {
-        document.getElementById('modal-backdrop').classList.add('hidden');
+        backdrop.classList.add('hidden');
     }
 }
 

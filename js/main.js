@@ -50,6 +50,7 @@ import {
     onCompetitionFilterChange,
     renderMatches,
     openMatchProtocol,
+    getMatchIdFromPath,
     toggleSendToDK,
     toggleMatchReady,
     lockMatchRecord,
@@ -205,6 +206,12 @@ window.addEventListener('beforeunload', event => {
 });
 
 window.addEventListener('popstate', () => {
+    const matchId = getMatchIdFromPath(window.location.pathname);
+    if (matchId !== null) {
+        if (state.activeTab !== 'matches' && !switchTab('matches', { updateHistory: false })) return;
+        openMatchProtocol(matchId, { updateHistory: false });
+        return;
+    }
     switchTab(getTabFromPath(window.location.pathname), { updateHistory: false });
 });
 
@@ -465,7 +472,13 @@ async function initApp() {
     renderTeamManagersDropdown();
     applyRBACPermissions();
     applyMaintenanceVisibility();
-    switchTab(getTabFromPath(window.location.pathname), { updateHistory: false });
+    const matchId = getMatchIdFromPath(window.location.pathname);
+    if (matchId !== null) {
+        switchTab('matches', { updateHistory: false });
+        openMatchProtocol(matchId, { updateHistory: false });
+    } else {
+        switchTab(getTabFromPath(window.location.pathname), { updateHistory: false });
+    }
     renderDashboard();
     updateAdminStats();
     renderDKAuditLogs();
