@@ -13,10 +13,10 @@ import { apiGetRobloxPlayerAvatar } from './api.js';
 function getPlayerCardStats(playerId) {
     let yellowCards = 0;
     let redCards = 0;
-    const completedMatches = matchesData.filter(m => m.status === 'Completed' && Array.isArray(m.events));
-    completedMatches.forEach(m => {
+    const activeMatches = matchesData.filter(m => ['Completed', 'In_Progress'].includes(m.status) && Array.isArray(m.events));
+    activeMatches.forEach(m => {
         m.events.forEach(event => {
-            if (event.targetType === 'player' && event.playerId === playerId) {
+            if (event.targetType !== 'staff' && Number(event.playerId) === Number(playerId)) {
                 if (event.type === 'Yellow_Card' || event.type === 'Second_Yellow_Card') yellowCards++;
                 if (event.type === 'Red_Card' || event.type === 'Second_Yellow_Card') redCards++;
             }
@@ -25,37 +25,104 @@ function getPlayerCardStats(playerId) {
     return { yellowCards, redCards };
 }
 
+function getPlayerProfileStats(playerId, matchHistory) {
+    const stats = { goals: 0, assists: 0, cleanSheets: 0 };
+    matchHistory.forEach(({ match }) => {
+        const events = match.events || [];
+        events.forEach(event => {
+            if (event.type === 'Goal' && event.goalType !== 'Own' && Number(event.playerId) === Number(playerId)) {
+                stats.goals++;
+            }
+            if (event.type === 'Goal' && event.goalType === 'Regular' &&
+                Number(event.secondaryPlayerId) === Number(playerId)) {
+                stats.assists++;
+            }
+        });
+
+        if (match.status !== 'Completed') return;
+        for (const side of ['home', 'away']) {
+            const roster = side === 'home' ? match.homeRoster || [] : match.awayRoster || [];
+            const goalkeeperIds = new Set(roster.filter(player => player.isGK).map(player => Number(player.playerId)));
+            const substitutions = events
+                .filter(event => event.type === 'Substitution' && event.teamSide === side)
+                .sort((a, b) => matchMinute(a.timeStr) - matchMinute(b.timeStr) || (a.id || 0) - (b.id || 0));
+            const intervals = [];
+            let activeKeeper = Number(roster.find(player => player.isGK && player.isStarter)?.playerId) || null;
+            let intervalStart = 0;
+
+            substitutions.forEach(event => {
+                const changeTime = matchMinute(event.timeStr);
+                if (Number(event.playerOutId) === activeKeeper) {
+                    if (activeKeeper !== null) intervals.push({ playerId: activeKeeper, start: intervalStart, end: changeTime });
+                    activeKeeper = goalkeeperIds.has(Number(event.playerInId)) ? Number(event.playerInId) : null;
+                    intervalStart = changeTime;
+                } else if (Number(event.playerInId) === activeKeeper) {
+                    if (activeKeeper !== null) intervals.push({ playerId: activeKeeper, start: intervalStart, end: changeTime });
+                    activeKeeper = null;
+                } else if (activeKeeper === null && goalkeeperIds.has(Number(event.playerInId))) {
+                    activeKeeper = Number(event.playerInId);
+                    intervalStart = changeTime;
+                }
+            });
+            if (activeKeeper !== null) intervals.push({ playerId: activeKeeper, start: intervalStart, end: 20 });
+
+            intervals.forEach(interval => {
+                const conceded = events.some(event => {
+                    if (event.type !== 'Goal') return false;
+                    const scoringSide = event.teamSide ||
+                        (match.homeRoster?.some(player => Number(player.playerId) === Number(event.playerId)) ? 'home' : 'away');
+                    const minute = matchMinute(event.timeStr || `${event.minute || 0}:00`);
+                    return scoringSide !== side && minute >= interval.start &&
+                        (minute < interval.end || (interval.end === 20 && minute === interval.end));
+                });
+                if (Number(interval.playerId) === Number(playerId) && interval.end - interval.start >= 10 && !conceded) {
+                    stats.cleanSheets++;
+                }
+            });
+        }
+    });
+    return stats;
+}
+
+function matchMinute(timeStr) {
+    const [minutes, seconds = '0'] = String(timeStr || '0:00').split(':');
+    const parsedMinutes = Number.parseInt(minutes, 10);
+    const parsedSeconds = Number.parseInt(seconds, 10);
+    return (Number.isFinite(parsedMinutes) ? parsedMinutes : 0) +
+        (Number.isFinite(parsedSeconds) ? parsedSeconds / 60 : 0);
+}
+
 function getPlayerMatchHistory(playerId) {
     return matchesData
         .filter(match => {
             if (!['Completed', 'In_Progress'].includes(match.status)) return false;
             const started = [...(match.homeRoster || []), ...(match.awayRoster || [])]
-                .some(entry => entry.playerId === playerId && entry.isStarter);
+                .some(entry => Number(entry.playerId) === Number(playerId) && entry.isStarter);
             const inEvents = (match.events || []).some(event =>
-                event.playerId === playerId || event.secondaryPlayerId === playerId ||
-                event.playerInId === playerId || event.playerOutId === playerId
+                Number(event.playerId) === Number(playerId) || Number(event.secondaryPlayerId) === Number(playerId) ||
+                Number(event.playerInId) === Number(playerId) || Number(event.playerOutId) === Number(playerId)
             );
             return started || inEvents;
         })
         .map(match => {
-            const isHome = match.homeRoster?.some(entry => entry.playerId === playerId) ||
+            const isHome = match.homeRoster?.some(entry => Number(entry.playerId) === Number(playerId)) ||
                 match.events?.some(event =>
-                    (event.playerId === playerId || event.secondaryPlayerId === playerId ||
-                        event.playerInId === playerId || event.playerOutId === playerId) &&
+                    (Number(event.playerId) === Number(playerId) || Number(event.secondaryPlayerId) === Number(playerId) ||
+                        Number(event.playerInId) === Number(playerId) || Number(event.playerOutId) === Number(playerId)) &&
                     event.teamSide === 'home'
                 );
             const events = (match.events || []).filter(event => event.targetType !== 'staff');
             const goals = events.filter(event =>
-                event.type === 'Goal' && event.goalType !== 'Own' && event.playerId === playerId
+                event.type === 'Goal' && event.goalType !== 'Own' && Number(event.playerId) === Number(playerId)
             ).length;
             const assists = events.filter(event =>
-                event.type === 'Goal' && event.goalType === 'Regular' && event.secondaryPlayerId === playerId
+                event.type === 'Goal' && event.goalType === 'Regular' && Number(event.secondaryPlayerId) === Number(playerId)
             ).length;
             const yellowCards = events.filter(event =>
-                event.playerId === playerId && ['Yellow_Card', 'Second_Yellow_Card'].includes(event.type)
+                Number(event.playerId) === Number(playerId) && ['Yellow_Card', 'Second_Yellow_Card'].includes(event.type)
             ).length;
             const redCards = events.filter(event =>
-                event.playerId === playerId && ['Red_Card', 'Second_Yellow_Card'].includes(event.type)
+                Number(event.playerId) === Number(playerId) && ['Red_Card', 'Second_Yellow_Card'].includes(event.type)
             ).length;
             const date = match.matchDate && match.matchDate !== 'TBA' ? new Date(match.matchDate) : null;
 
@@ -179,8 +246,9 @@ export function openPlayerCard(playerId) {
     if (!player) return;
 
     const team = teamsData.find(t => t.id === player.teamId);
-    const cards = getPlayerCardStats(player.id);
     const matchHistory = getPlayerMatchHistory(player.id);
+    const profileStats = getPlayerProfileStats(player.id, matchHistory);
+    const cards = getPlayerCardStats(player.id);
 
     const content = document.getElementById('player-card-content');
     content.innerHTML = `
@@ -205,15 +273,15 @@ export function openPlayerCard(playerId) {
             <div class="grid grid-cols-3 gap-2 p-3 bg-[#13236b] rounded-xl border border-[#1e307d] text-center">
                 <div>
                     <span class="block text-gray-400">Góly</span>
-                    <span class="text-lg font-black text-[#aefb12]">${player.goals || 0}</span>
+                    <span class="text-lg font-black text-[#aefb12]">${profileStats.goals}</span>
                 </div>
                 <div>
                     <span class="block text-gray-400">Asistence</span>
-                    <span class="text-lg font-black text-[#05fda3]">${player.assists || 0}</span>
+                    <span class="text-lg font-black text-[#05fda3]">${profileStats.assists}</span>
                 </div>
                 <div>
                     <span class="block text-gray-400">Čistá konta</span>
-                    <span class="text-lg font-black text-amber-400">${player.cleanSheets || 0}</span>
+                    <span class="text-lg font-black text-amber-400">${profileStats.cleanSheets}</span>
                 </div>
             </div>
 
