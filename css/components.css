@@ -92,6 +92,19 @@ body {
     overflow-x: clip;
 }
 
+body.auth-gated #system-banner,
+body.auth-gated #app-header,
+body.auth-gated main,
+body.auth-gated footer {
+    display: none !important;
+}
+
+#auth-gate-overlay a:not(.hidden),
+#auth-gate-overlay button:not(.hidden) {
+    display: inline-flex;
+    max-width: 100%;
+}
+
 #header-content,
 #header-content > div,
 #header-tools,
@@ -129,6 +142,10 @@ main .grid > * {
 
 #app-header.nav-compact #mobile-nav-toggle {
     display: inline-flex;
+}
+
+#app-header.nav-compact #header-brand.brand-title-hidden > div {
+    display: none;
 }
 
 #nav-links.mobile-nav-panel {

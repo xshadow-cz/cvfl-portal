@@ -424,9 +424,7 @@ export function openPlayerCard(playerId) {
                                 : match.cupStage?.startsWith('Skupina o ')
                                     ? match.cupStage
                                     : `${match.round}. kolo`;
-                            const score = match.isForfeited
-                                ? `Kontumace ${match.homeScore}:${match.awayScore}`
-                                : `${match.homeScore}:${match.awayScore}`;
+                            const score = `${match.homeScore}:${match.awayScore}`;
                             const stats = [
                                 goals ? `<span class="text-[#aefb12]"><i class="fa-solid fa-futbol mr-1"></i>${goals} G</span>` : '',
                                 assists ? `<span class="text-[#05fda3]"><i class="fa-solid fa-handshake mr-1"></i>${assists} A</span>` : '',
@@ -444,7 +442,10 @@ export function openPlayerCard(playerId) {
                                             <div class="max-w-full overflow-hidden font-bold text-white">${ownTeam ? getTeamNameMarkup(ownTeam, { logoClassName: 'h-5 w-5', className: 'gap-1.5' }) : escapeTeamName('Tým')}</div>
                                             <div class="mt-1 truncate text-[10px] text-gray-400">vs ${escapeTeamName(opponent?.name || 'Soupeř')}</div>
                                         </div>
-                                        <strong class="shrink-0 rounded-lg border border-[#1e307d] bg-[#0e1a4f] px-3 py-1.5 font-mono text-lg text-[#aefb12]">${score}</strong>
+                                        <strong class="flex shrink-0 flex-col items-center rounded-lg border border-[#1e307d] bg-[#0e1a4f] px-2 py-1.5 font-mono text-base text-[#aefb12] sm:px-3 sm:text-lg">
+                                            <span class="whitespace-nowrap">${score}</span>
+                                            ${match.isForfeited ? '<span class="font-sans text-[9px] font-black uppercase text-amber-400">Kontumace</span>' : ''}
+                                        </strong>
                                     </div>
                                     ${stats ? `<div class="mt-2 flex flex-wrap gap-3 border-t border-[#1e307d]/70 pt-2 font-bold">${stats}</div>` : ''}
                                 </article>

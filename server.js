@@ -752,14 +752,11 @@ function getFrontendOrigin() {
         process.env.DISCORD_REDIRECT_URI || 'https://portal.cvfl.cz/api/auth/discord/callback'
     ).origin;
     const configuredOrigin = process.env.APP_ORIGIN;
-    if (!configuredOrigin) return callbackOrigin;
-
-    const configuredUrl = new URL(configuredOrigin);
-    if (configuredUrl.hostname.startsWith('api.') &&
-        configuredUrl.hostname.slice('api.'.length) === getOAuthCallbackHost()) {
-        return callbackOrigin;
+    const frontendUrl = new URL(configuredOrigin || callbackOrigin);
+    if (frontendUrl.hostname.toLowerCase().startsWith('api.')) {
+        frontendUrl.hostname = frontendUrl.hostname.slice('api.'.length);
     }
-    return configuredUrl.origin;
+    return frontendUrl.origin;
 }
 
 function authErrorUrl(code) {

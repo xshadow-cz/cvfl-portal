@@ -78,8 +78,8 @@ export function renderMatches() {
                 </div>
                 <div class="flex justify-between items-center">
                     <div class="w-5/12 min-w-0 overflow-hidden text-center font-bold text-sm text-white"><div class="inline-flex min-w-0 max-w-full justify-center">${home ? getTeamProfileLinkMarkup(home) : ''}</div></div>
-                    <div class="text-center font-black text-xl text-[#aefb12] px-3 py-1 bg-[#13236b] border border-[#1e307d] rounded flex flex-col items-center">
-                        <span>${m.status === 'Completed' || m.status === 'In_Progress' ? `${m.homeScore} :${m.awayScore}` : (m.status === 'Postponed' ? 'Odloženo' : 'VS')}</span>
+                    <div class="shrink-0 whitespace-nowrap text-center font-black text-base sm:text-xl text-[#aefb12] px-2 sm:px-3 py-1 bg-[#13236b] border border-[#1e307d] rounded flex flex-col items-center">
+                        <span class="whitespace-nowrap">${m.status === 'Completed' || m.status === 'In_Progress' ? `${m.homeScore}:${m.awayScore}` : (m.status === 'Postponed' ? 'Odloženo' : 'VS')}</span>
                         ${penaltyResult}
                         ${m.isForfeited ? '<span class="text-[9px] text-amber-400 uppercase font-black tracking-tight">Kontumováno</span>' : ''}
                     </div>
@@ -282,7 +282,7 @@ export function openMatchProtocol(matchId, { updateHistory = true } = {}) {
                                 ${home ? getTeamNameMarkup(home) : '<span class="whitespace-nowrap">Domácí</span>'}
                             </div>
                         </div>
-                        <strong id="zou-scoreboard" class="rounded-xl border border-[#1e307d] bg-[#13236b] px-4 py-2 text-center font-mono text-2xl font-black text-[#aefb12]">${match.homeScore} : ${match.awayScore}</strong>
+                        <strong id="zou-scoreboard" class="shrink-0 whitespace-nowrap rounded-xl border border-[#1e307d] bg-[#13236b] px-2 py-2 text-center font-mono text-lg font-black text-[#aefb12] sm:px-4 sm:text-2xl">${match.homeScore}:${match.awayScore}</strong>
                         <div class="min-w-0 overflow-x-auto text-right font-black text-white">
                             <div class="inline-flex min-w-max justify-center">
                                 ${away ? getTeamNameMarkup(away) : '<span class="whitespace-nowrap">Hosté</span>'}

@@ -451,7 +451,7 @@ export function renderCompetitions() {
             const played = ['Completed', 'In_Progress'].includes(leg.status);
             return `<div class="flex items-center justify-between gap-2 text-[11px] ${played ? 'text-gray-200' : 'text-gray-500'}">
                 <span class="flex min-w-0 items-center gap-1"><span class="truncate">${legNumber}.</span>${home ? getTeamProfileLinkMarkup(home, { logoClassName: 'h-4 w-4' }) : '<span>Čeká se na tým</span>'}<span>–</span>${away ? getTeamProfileLinkMarkup(away, { logoClassName: 'h-4 w-4' }) : '<span>Čeká se na tým</span>'}</span>
-                <strong class="shrink-0">${played ? `${leg.homeScore}:${leg.awayScore}` : '—'}</strong>
+                <strong class="shrink-0 whitespace-nowrap">${played ? `${leg.homeScore}:${leg.awayScore}` : '—'}</strong>
             </div>`;
         };
         container.innerHTML = `

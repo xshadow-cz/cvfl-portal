@@ -223,8 +223,8 @@ function renderDashboardLeaderboards() {
         <section class="rounded-xl border border-[#1e307d] bg-[#13236b]/40 p-4">
             <h3 class="mb-3 flex items-center justify-between gap-3 border-b border-[#1e307d] pb-2 font-black text-sm text-cyan-300">
                 <span><i class="fa-solid fa-stopwatch mr-2"></i>Nejvíce odehraných utkání</span>
-                <button type="button" aria-label="Otevřít statistiky hráčů" title="Otevřít statistiky hráčů" onclick="openStatsModal('matchesPlayed')" class="shrink-0 rounded-lg p-2 font-normal text-cyan-300 transition hover:bg-white/10">
-                    <i class="fa-solid fa-up-right-from-square"></i>
+                <button type="button" aria-label="Otevřít statistiky hráčů" title="Otevřít statistiky hráčů" onclick="openStatsModal('matchesPlayed')" class="shrink-0 rounded-lg p-2 font-normal text-cyan-300 opacity-50 transition hover:bg-white/10 hover:opacity-100">
+                    <i class="fa-solid fa-up-right-from-square text-xs"></i>
                 </button>
             </h3>
             <div class="overflow-x-auto">
@@ -556,8 +556,8 @@ function renderDashboardMatchCards(matchList) {
             <div class="bg-[#0e1a4f] p-4 rounded-xl border border-[#1e307d] flex flex-col sm:flex-row justify-between items-center gap-4 shadow-md hover:border-[#aefb12]/50 transition">
                 <div class="flex items-center space-x-4 w-full sm:w-auto justify-between sm:justify-start">
                     <div class="w-5/12 min-w-0 overflow-hidden text-right font-bold text-sm text-white sm:w-32"><span class="inline-flex min-w-0 max-w-full items-center justify-end gap-2 whitespace-nowrap">${home ? getTeamProfileLinkMarkup(home) : ''}</span></div>
-                    <div class="px-3 py-1 bg-[#13236b] rounded-lg text-[#aefb12] font-mono font-black text-sm border border-[#1e307d]">
-                        ${m.status === 'Completed' || m.status === 'In_Progress' ? `${m.homeScore} :${m.awayScore}` : (m.status === 'Postponed' ? 'Odloženo' : 'VS')}
+                    <div class="shrink-0 whitespace-nowrap px-2 py-1 bg-[#13236b] rounded-lg text-[#aefb12] font-mono font-black text-xs sm:px-3 sm:text-sm border border-[#1e307d]">
+                        <span class="whitespace-nowrap">${m.status === 'Completed' || m.status === 'In_Progress' ? `${m.homeScore}:${m.awayScore}` : (m.status === 'Postponed' ? 'Odloženo' : 'VS')}</span>
                         ${penaltyResult}
                     </div>
                     <div class="w-5/12 min-w-0 overflow-hidden font-bold text-sm text-white sm:w-32">${away ? getTeamProfileLinkMarkup(away) : ''}</div>

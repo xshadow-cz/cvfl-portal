@@ -462,6 +462,7 @@ function setupResponsiveNavigation() {
     const header = document.getElementById('app-header');
     const headerContent = document.getElementById('header-content');
     const brand = document.getElementById('header-brand');
+    const brandTitle = brand?.querySelector(':scope > div');
     const nav = document.getElementById('nav-links');
     const headerRow = nav?.parentElement;
     const tools = document.getElementById('header-tools');
@@ -469,7 +470,7 @@ function setupResponsiveNavigation() {
     const roleControl = document.getElementById('role-dropdown')?.parentElement;
     const toggle = document.getElementById('mobile-nav-toggle');
     const backdrop = document.getElementById('mobile-nav-backdrop');
-    if (!header || !headerContent || !brand || !nav || !headerRow || !tools || !search || !roleControl || !toggle || !backdrop) return;
+    if (!header || !headerContent || !brand || !brandTitle || !nav || !headerRow || !tools || !search || !roleControl || !toggle || !backdrop) return;
 
     let updateScheduled = false;
     let compactLayout = false;
@@ -484,6 +485,7 @@ function setupResponsiveNavigation() {
             header.classList.remove('nav-compact');
             compactLayout = false;
         }
+        brand.classList.remove('brand-title-hidden');
         const availableWidth = headerContent.clientWidth;
         const navWidth = Array.from(nav.children).reduce((total, link) => {
             if (!(link instanceof HTMLElement) || link.getClientRects().length === 0) return total;
@@ -498,6 +500,9 @@ function setupResponsiveNavigation() {
             document.body.append(nav);
             nav.classList.add('mobile-nav-panel');
             nav.prepend(search);
+            const compactHeaderWidth = toggle.getBoundingClientRect().width +
+                brand.getBoundingClientRect().width + tools.getBoundingClientRect().width + 32;
+            brand.classList.toggle('brand-title-hidden', compactHeaderWidth > availableWidth);
             if (wasOpen) {
                 nav.inert = false;
                 nav.setAttribute('aria-hidden', 'false');
@@ -540,8 +545,21 @@ function setupResponsiveNavigation() {
         else openMenu();
     });
     backdrop.addEventListener('click', closeMenu);
+    const searchResults = document.getElementById('search-results');
+    document.addEventListener('pointerdown', event => {
+        const target = event.target;
+        if (!(target instanceof Node)) return;
+        if (toggle.getAttribute('aria-expanded') === 'true' &&
+            !nav.contains(target) && !toggle.contains(target)) closeMenu();
+        if (!search.contains(target) && !searchResults?.contains(target)) {
+            searchResults?.classList.add('hidden');
+        }
+    }, true);
     nav.addEventListener('click', event => {
         if (event.target instanceof Element && event.target.closest('a')) closeMenu();
+    });
+    searchResults?.addEventListener('click', event => {
+        if (event.target instanceof Element && event.target.closest('[onclick]')) closeMenu();
     });
     document.addEventListener('keydown', event => {
         if (event.key === 'Escape' && toggle.getAttribute('aria-expanded') === 'true') {
@@ -585,6 +603,7 @@ async function initializeApp() {
     const headerLogoutButton = document.getElementById('header-discord-logout-button');
     const authTitle = document.getElementById('auth-gate-title');
     const authMessage = document.getElementById('auth-gate-message');
+    document.body.classList.add('auth-gated');
     authGate.classList.remove('hidden');
     authError.classList.add('hidden');
     loginLink.classList.add('hidden');
@@ -685,6 +704,7 @@ async function initializeApp() {
     }
 
     authGate.classList.add('hidden');
+    document.body.classList.remove('auth-gated');
     const preferredRole = state.availableRoles.includes('Admin') ? 'Admin' : state.availableRoles[0];
     if (preferredRole.startsWith('Team_Manager_')) {
         setUserRole('Team_Manager', Number(preferredRole.slice('Team_Manager_'.length)), { silent: true, skipTabSwitch: true });

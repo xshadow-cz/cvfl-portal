@@ -34,7 +34,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/style.css">
 </head>
-<body class="bg-[#13236b] text-gray-100 min-h-screen flex flex-col transition-colors duration-200">
+<body class="auth-gated bg-[#13236b] text-gray-100 min-h-screen flex flex-col transition-colors duration-200">
 
     <!-- Maintenance Mode Banner -->
     <div id="maintenance-banner" class="hidden bg-amber-500 text-black text-xs font-black px-4 py-2 text-center flex justify-between items-center z-50">
@@ -42,19 +42,19 @@
         <button onclick="toggleMaintenance(false)" class="underline text-xs hover:text-gray-900">Vypnout</button>
     </div>
 
-<div id="auth-gate-overlay" class="fixed inset-0 z-[300] bg-[#0a1238] flex items-center justify-center p-6 text-center">
-        <div class="max-w-md w-full space-y-4">
+<div id="auth-gate-overlay" class="fixed inset-0 z-[300] flex items-center justify-center overflow-y-auto bg-[#0a1238] p-4 text-center sm:p-6">
+        <div class="my-auto flex w-full max-w-md flex-col items-center gap-4">
             <i class="fa-brands fa-discord text-5xl text-[#5865f2]"></i>
             <h2 id="auth-gate-title" class="text-xl font-black text-white">Přihlášení do CVFL portálu</h2>
             <p id="auth-gate-message" class="text-sm text-gray-300">Pro pokračování se přihlaste svým Discord účtem.</p>
             <p id="auth-gate-error" class="hidden text-sm text-red-400"></p>
-            <a id="discord-login-link" href="https://api.portal.cvfl.cz/api/auth/discord" class="hidden px-5 py-2 bg-[#5865f2] hover:bg-[#4752c4] text-white font-black rounded-lg">
+            <a id="discord-login-link" href="https://api.portal.cvfl.cz/api/auth/discord" class="hidden min-h-11 items-center justify-center rounded-lg bg-[#5865f2] px-5 py-2 font-black text-white hover:bg-[#4752c4]">
                 <i class="fa-brands fa-discord mr-2"></i>Přihlásit přes Discord
             </a>
-            <button id="auth-retry-button" type="button" onclick="retryPortalConnection()" class="hidden px-5 py-2 bg-[#aefb12] text-[#13236b] font-black rounded-lg">
+            <button id="auth-retry-button" type="button" onclick="retryPortalConnection()" class="hidden min-h-11 items-center justify-center rounded-lg bg-[#aefb12] px-5 py-2 font-black text-[#13236b]">
                 <i class="fa-solid fa-rotate mr-2"></i>Zkusit znovu
             </button>
-            <button id="discord-logout-button" onclick="logoutDiscord()" class="hidden px-5 py-2 bg-[#1e307d] text-white font-bold rounded-lg">Odhlásit</button>
+            <button id="discord-logout-button" onclick="logoutDiscord()" class="hidden min-h-11 items-center justify-center rounded-lg bg-[#1e307d] px-5 py-2 font-bold text-white">Odhlásit</button>
         </div>
     </div>
 
