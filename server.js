@@ -60,6 +60,7 @@ const refereeSyncStatus = {
     removedReferees: 0
 };
 let refereeSyncInProgress = false;
+let lastLoggedRefereeSyncError = null;
 
 const allowedOrigins = [
     'https://portal.cvfl.cz',
@@ -136,6 +137,7 @@ app.get(['/disciplinarka', '/administrace'], (req, res) => {
 let isPostgres = false;
 let dbClient = null;
 let isDatabaseReady = false;
+let configuredSyncsStarted = false;
 
 if (process.env.DATABASE_URL) {
     const { Pool } = require('pg');
@@ -403,6 +405,7 @@ async function initPostgresDatabase() {
         console.log('✅ PostgreSQL databáze na Supabase byla úspěšně inicializována.');
         isDatabaseReady = true;
         scheduleAuditLogCleanup();
+        startConfiguredSyncs();
     } catch (err) {
         console.error('❌ Chyba při inicializaci Supabase databáze:', err.message);
     }
@@ -443,6 +446,7 @@ function initSqliteDatabase() {
         console.log('✅ Schéma SQLite databáze bylo ověřeno a inicializováno.');
         isDatabaseReady = true;
         scheduleAuditLogCleanup();
+        startConfiguredSyncs();
     } catch (migrationError) {
         console.error('❌ Nepodařilo se aktualizovat schéma SQLite databáze:', migrationError.message);
     }
@@ -996,10 +1000,15 @@ async function runRefereeSync() {
     if (refereeSyncInProgress) return null;
     refereeSyncInProgress = true;
     try {
-        return await synchronizeRefereesFromBot();
+        const result = await synchronizeRefereesFromBot();
+        lastLoggedRefereeSyncError = null;
+        return result;
     } catch (error) {
         refereeSyncStatus.lastError = error.message;
-        console.error(`[CVFL Referee Sync] Synchronizace selhala: ${error.message}`);
+        if (lastLoggedRefereeSyncError !== error.message) {
+            console.error(`[CVFL Referee Sync] Synchronizace selhala: ${error.message}`);
+            lastLoggedRefereeSyncError = error.message;
+        }
         throw error;
     } finally {
         refereeSyncInProgress = false;
@@ -3239,22 +3248,23 @@ app.use('/api', (req, res) => {
     });
 });
 
-if (PLAYER_BOT_API_URL && PLAYER_BOT_API_TOKEN) {
-    runPlayerSync().catch(() => {});
-    const syncTimer = setInterval(() => runPlayerSync().catch(() => {}), PLAYER_BOT_SYNC_INTERVAL_MS);
-    syncTimer.unref();
-}
+function startConfiguredSyncs() {
+    if (configuredSyncsStarted) return;
+    configuredSyncsStarted = true;
 
-if (REFEREE_BOT_API_URL && REFEREE_BOT_API_TOKEN) {
-    runRefereeSync().catch(() => {});
-    const refereeSyncTimer = setInterval(() => {
-        runRefereeSync().catch(error => {
-            console.error(`[CVFL Referee Sync] Synchronizace selhala: ${error.message}`);
-        });
-    }, REFEREE_BOT_SYNC_INTERVAL_MS);
-    refereeSyncTimer.unref();
-} else {
-    console.warn('[CVFL Referee Sync] Synchronizace je vypnutá: nastavte REFEREE_BOT_API_URL a REFEREE_BOT_API_TOKEN.');
+    if (PLAYER_BOT_API_URL && PLAYER_BOT_API_TOKEN) {
+        runPlayerSync().catch(() => {});
+        const syncTimer = setInterval(() => runPlayerSync().catch(() => {}), PLAYER_BOT_SYNC_INTERVAL_MS);
+        syncTimer.unref();
+    }
+
+    if (REFEREE_BOT_API_URL && REFEREE_BOT_API_TOKEN) {
+        runRefereeSync().catch(() => {});
+        const refereeSyncTimer = setInterval(() => runRefereeSync().catch(() => {}), REFEREE_BOT_SYNC_INTERVAL_MS);
+        refereeSyncTimer.unref();
+    } else {
+        console.warn('[CVFL Referee Sync] Synchronizace je vypnutá: nastavte REFEREE_BOT_API_URL a REFEREE_BOT_API_TOKEN.');
+    }
 }
 
 const inviteCleanupTimer = setInterval(() => {
