@@ -947,7 +947,7 @@ async function synchronizeRefereesFromBot() {
                 Accept: 'application/json',
                 Authorization: `Bearer ${REFEREE_BOT_API_TOKEN}`
             },
-            redirect: 'error',
+            redirect: 'manual',
             signal: AbortSignal.timeout(15000)
         });
     } catch (error) {
@@ -959,6 +959,38 @@ async function synchronizeRefereesFromBot() {
             `Nepodařilo se připojit k API rozhodčích ${apiUrl.origin}${apiUrl.pathname}: ${reason}. ` +
             'Ověřte, že je endpoint dostupný z backend hostingu, URL obsahuje správný port/cestu a služba přijímá HTTP(S) spojení.'
         );
+    }
+    if ([301, 302, 303, 307, 308].includes(response.status)) {
+        const location = response.headers.get('location');
+        let redirectUrl;
+        try {
+            redirectUrl = location ? new URL(location, apiUrl) : null;
+        } catch {
+            redirectUrl = null;
+        }
+        if (!redirectUrl ||
+            apiUrl.protocol !== 'http:' ||
+            redirectUrl.protocol !== 'https:' ||
+            redirectUrl.hostname !== apiUrl.hostname ||
+            redirectUrl.port) {
+            throw new Error('API rozhodčích přesměrovalo na nepovolenou adresu. Je povoleno pouze přesměrování HTTP na HTTPS na stejném hostu.');
+        }
+        try {
+            response = await fetch(redirectUrl, {
+                headers: {
+                    Accept: 'application/json',
+                    Authorization: `Bearer ${REFEREE_BOT_API_TOKEN}`
+                },
+                redirect: 'error',
+                signal: AbortSignal.timeout(15000)
+            });
+        } catch (error) {
+            const cause = error.cause;
+            const reason = cause?.code
+                ? `${cause.code}${cause.message ? `: ${cause.message}` : ''}`
+                : error.message;
+            throw new Error(`Nepodařilo se připojit k HTTPS API rozhodčích ${redirectUrl.origin}${redirectUrl.pathname}: ${reason}.`);
+        }
     }
     if (!response.ok) throw new Error(`Bot rozhodčích vrátil HTTP ${response.status}.`);
     if (!response.headers.get('content-type')?.includes('application/json')) {

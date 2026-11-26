@@ -118,8 +118,9 @@ HTTP and HTTPS are supported. HTTPS is strongly preferred: with plain HTTP the
 Bearer token and referee data are not encrypted in transit, so only use HTTP
 over a trusted/private network. Use a high-entropy secret, store the token only
 in the bot and portal backend environment settings, and restart/redeploy both
-services after configuration changes. The portal rejects redirects, limits
-response size, and does not expose the token in the admin status endpoint. The single Admin
+services after configuration changes. The portal permits only a same-host
+HTTP-to-HTTPS redirect, limits response size, and does not expose the token in
+the admin status endpoint. The single Admin
 synchronization panel reports the last successful import or the exact sync
 error. If it says the integration is not configured, one or both of
 `REFEREE_BOT_API_URL` and `REFEREE_BOT_API_TOKEN` is missing from the running
