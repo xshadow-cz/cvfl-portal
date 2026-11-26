@@ -1351,7 +1351,7 @@ function requireRoles(...roles) {
 
 // ZDE JE DEFINICE FUNKCE REQUIREMATCHEDITOR (která dříve chyběla):
 async function requireMatchEditor(req, res, next) {
-    const privilegedRoles = ['Admin', 'DK', 'Referee_Manager'];
+    const privilegedRoles = ['Admin', 'DK', 'Referee_Manager', 'Referee'];
     if (req.auth.roles.some(role => privilegedRoles.includes(role))) return next();
 
     const match = await dbGet('SELECT * FROM matches WHERE id = ?', [req.params.id]);
@@ -2718,8 +2718,7 @@ app.put('/api/matches/:id', requireMatchEditor, async (req, res) => {
         if (changedNomination && !roles.some(role => ['Admin', 'Referee_Manager'].includes(role))) {
             return res.status(403).json({ success: false, error: 'Nominace může upravovat pouze vedení ligy nebo vedení rozhodčích.' });
         }
-        const canSetOfficialState = roles.some(role => ['Admin', 'DK', 'Referee_Manager'].includes(role)) ||
-            (req.assignedOfficialMatch && roles.includes('Referee'));
+        const canSetOfficialState = roles.some(role => ['Admin', 'DK', 'Referee_Manager', 'Referee'].includes(role));
         const canSetReady = canSetOfficialState;
         if (m.isReady !== undefined && Boolean(m.isReady) !== Boolean(currentMatch.is_ready) && !canSetReady) {
             return res.status(403).json({ success: false, error: 'Zápis může připravit ke kontrole pouze rozhodčí.' });

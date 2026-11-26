@@ -321,7 +321,7 @@ export function openMatchProtocol(matchId, { updateHistory = true } = {}) {
                     <input type="text" id="zou-recorder-input" value="${escapeTeamName(match.recorder || '')}" ${!canEditEverything || match.isLocked ? 'disabled' : ''} onchange="updateMatchDetails(${match.id})" class="w-full bg-[#0e1a4f] border border-[#1e307d] p-1.5 rounded text-white font-semibold disabled:opacity-60">
                 </div>
                 <div>
-                    <label class="text-gray-400 block mb-1">Diváci / Počet Zápasů</label>
+                    <label class="text-gray-400 block mb-1">Diváci</label>
                     <input type="number" id="zou-spectators-input" value="${match.spectators || 120}" ${!canEditEverything || match.isLocked ? 'disabled' : ''} onchange="updateMatchDetails(${match.id})" class="w-full bg-[#0e1a4f] border border-[#1e307d] p-1.5 rounded text-white font-mono disabled:opacity-60">
                 </div>
             </div>
@@ -330,7 +330,7 @@ export function openMatchProtocol(matchId, { updateHistory = true } = {}) {
         <div class="flex flex-nowrap gap-1 overflow-x-auto border-b border-[#1e307d] mb-4 font-semibold text-xs text-gray-300 custom-scrollbar">
             <button onclick="switchFISTab('sestavy')" id="fistab-sestavy" class="fis-tab-btn active whitespace-nowrap px-3 py-2">Sestavy týmů</button>
             <button onclick="switchFISTab('realizacni')" id="fistab-realizacni" class="fis-tab-btn whitespace-nowrap px-3 py-2">Realizační tým</button>
-            <button onclick="switchFISTab('hraci-casti')" id="fistab-hraci-casti" class="fis-tab-btn whitespace-nowrap px-3 py-2">Prodloužení a penalty</button>
+            <button onclick="switchFISTab('hraci-casti')" id="fistab-hraci-casti" class="fis-tab-btn whitespace-nowrap px-3 py-2">Hrací části</button>
             <button onclick="switchFISTab('stridani')" id="fistab-stridani" class="fis-tab-btn whitespace-nowrap px-3 py-2">Střídání</button>
             <button onclick="switchFISTab('branky')" id="fistab-branky" class="fis-tab-btn whitespace-nowrap px-3 py-2">Branky a Asistence</button>
             <button onclick="switchFISTab('vylouceni')" id="fistab-vylouceni" class="fis-tab-btn whitespace-nowrap px-3 py-2">Karty</button>
@@ -1997,7 +1997,7 @@ export function renderCardForm(matchId, side = 'home', timeStr = '00:00') {
                 <!-- 5. ČAS -->
                 <div>
                     <label class="block text-gray-400 mb-1">5. Čas (00:00):</label>
-                    <input type="text" id="card-time-input" placeholder="00:00" value="${escapeTeamName(timeStr)}" maxlength="5" onchange="onCardTimeChange(${matchId})" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-mono font-bold text-center">
+                    <input type="text" id="card-time-input" placeholder="00:00" value="${timeStr && timeStr !== '00:00' ? escapeTeamName(timeStr) : ''}" maxlength="5" oninput="onCardTimeChange(${matchId})" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-mono font-bold text-center">
                 </div>
             </div>
 
