@@ -137,6 +137,9 @@ async function requestJSON(path, options = {}) {
             `Zkontrolujte, zda web používá správný backend. Aktuální API: ${API_ORIGIN}.${deploymentHint}`
         );
     }
+    if (response.status === 401 && typeof window.handleSessionRevoked === 'function') {
+        window.handleSessionRevoked();
+    }
     if (!response.ok || json.success === false) {
         throw new Error(json.error || `Server vrátil stav ${response.status}.`);
     }

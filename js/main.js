@@ -442,6 +442,83 @@ async function logoutDiscord() {
 
 window.logoutDiscord = logoutDiscord;
 
+let sessionMonitorInterval = null;
+let sessionCheckInFlight = false;
+let sessionMonitorListenersAttached = false;
+
+function handleSessionRevoked() {
+    if (sessionMonitorInterval) {
+        clearInterval(sessionMonitorInterval);
+        sessionMonitorInterval = null;
+    }
+    if (!state.currentUser) return;
+    state.currentUser = null;
+    state.availableRoles = [];
+    state.currentUserRole = null;
+    state.unsavedChangesGuard = false;
+    sessionStorage.removeItem('cvfl_invite_code');
+
+    const authGate = document.getElementById('auth-gate-overlay');
+    const authError = document.getElementById('auth-gate-error');
+    const loginLink = document.getElementById('discord-login-link');
+    const retryButton = document.getElementById('auth-retry-button');
+    const logoutButton = document.getElementById('discord-logout-button');
+    const headerLogoutButton = document.getElementById('header-discord-logout-button');
+    const authTitle = document.getElementById('auth-gate-title');
+    const authMessage = document.getElementById('auth-gate-message');
+
+    document.body.classList.add('auth-gated');
+    authGate?.classList.remove('hidden');
+    authError?.classList.add('hidden');
+    retryButton?.classList.add('hidden');
+    logoutButton?.classList.add('hidden');
+    headerLogoutButton?.classList.add('hidden');
+    if (loginLink) {
+        loginLink.href = `${getApiOrigin()}/api/auth/discord`;
+        loginLink.classList.remove('hidden');
+    }
+    if (authTitle) authTitle.textContent = 'Přístup byl odebrán';
+    if (authMessage) authMessage.textContent = 'Váš přístup k portálu byl odebrán nebo relace vypršela.';
+}
+
+window.handleSessionRevoked = handleSessionRevoked;
+
+async function verifyActiveSession() {
+    if (!state.currentUser || sessionCheckInFlight) return;
+    sessionCheckInFlight = true;
+    try {
+        const session = await loadDiscordSession();
+        if (!session.authenticated || !Array.isArray(session.roles) || session.roles.length === 0) {
+            handleSessionRevoked();
+        }
+    } catch {
+        // Ignorujeme dočasné síťové výpadky při kontrole na pozadí
+    } finally {
+        sessionCheckInFlight = false;
+    }
+}
+
+function startSessionMonitor() {
+    if (!sessionMonitorInterval) {
+        sessionMonitorInterval = setInterval(() => {
+            if (document.visibilityState === 'visible') {
+                void verifyActiveSession();
+            }
+        }, 5000);
+    }
+    if (!sessionMonitorListenersAttached) {
+        sessionMonitorListenersAttached = true;
+        window.addEventListener('focus', () => {
+            void verifyActiveSession();
+        });
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+                void verifyActiveSession();
+            }
+        });
+    }
+}
+
 let appInitializationPromise = null;
 
 function retryPortalConnection() {
@@ -733,6 +810,7 @@ async function initializeApp() {
     renderDashboard();
     updateAdminStats();
     renderDKAuditLogs();
+    startSessionMonitor();
 }
 
 if (document.readyState === 'loading') {

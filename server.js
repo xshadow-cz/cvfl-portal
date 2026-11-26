@@ -2065,15 +2065,15 @@ app.put('/api/admin/discord-users/:discordId/roles', requireRoles('Admin'), asyn
         if (referee) effectiveRoles.add('Referee');
         if (referee?.is_delegate) effectiveRoles.add('Delegate');
         
-        await withDatabaseTransaction(async () => {
-            await dbRun('DELETE FROM discord_user_roles WHERE discord_id = ?', [discordId]);
+        await withDatabaseTransaction(async transactionClient => {
+            await dbRun('DELETE FROM discord_user_roles WHERE discord_id = ?', [discordId], transactionClient);
             for (const role of effectiveRoles) {
-                await dbRun('INSERT INTO discord_user_roles (discord_id, role) VALUES (?, ?)', [discordId, role]);
+                await dbRun('INSERT INTO discord_user_roles (discord_id, role) VALUES (?, ?)', [discordId, role], transactionClient);
             }
             if (effectiveRoles.size === 0) {
-                await dbRun('DELETE FROM auth_sessions WHERE discord_id = ?', [discordId]);
-                await dbRun('UPDATE referees SET discord_id = NULL WHERE discord_id = ?', [discordId]);
-                await dbRun('DELETE FROM discord_users WHERE discord_id = ?', [discordId]);
+                await dbRun('DELETE FROM auth_sessions WHERE discord_id = ?', [discordId], transactionClient);
+                await dbRun('UPDATE referees SET discord_id = NULL WHERE discord_id = ?', [discordId], transactionClient);
+                await dbRun('DELETE FROM discord_users WHERE discord_id = ?', [discordId], transactionClient);
             }
         });
         res.json({ success: true, deleted: effectiveRoles.size === 0, roles: [...effectiveRoles] });
@@ -2093,9 +2093,11 @@ app.delete('/api/admin/discord-users/:discordId', requireRoles('Admin'), async (
         }
         const account = await dbGet('SELECT discord_id FROM discord_users WHERE discord_id = ?', [discordId]);
         if (!account) return res.status(404).json({ success: false, error: 'Discord účet nebyl nalezen.' });
-        await withDatabaseTransaction(async () => {
-            await dbRun('UPDATE referees SET discord_id = NULL WHERE discord_id = ?', [discordId]);
-            await dbRun('DELETE FROM discord_users WHERE discord_id = ?', [discordId]);
+        await withDatabaseTransaction(async transactionClient => {
+            await dbRun('DELETE FROM auth_sessions WHERE discord_id = ?', [discordId], transactionClient);
+            await dbRun('DELETE FROM discord_user_roles WHERE discord_id = ?', [discordId], transactionClient);
+            await dbRun('UPDATE referees SET discord_id = NULL WHERE discord_id = ?', [discordId], transactionClient);
+            await dbRun('DELETE FROM discord_users WHERE discord_id = ?', [discordId], transactionClient);
         });
         res.json({ success: true });
     } catch (err) {
