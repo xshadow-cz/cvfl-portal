@@ -217,8 +217,15 @@ async function withDatabaseTransaction(callback) {
             client.release();
         }
     } else {
-        const transaction = dbClient.transaction(callback);
-        return transaction();
+        dbClient.exec('BEGIN');
+        try {
+            const result = await callback(null);
+            dbClient.exec('COMMIT');
+            return result;
+        } catch (err) {
+            try { dbClient.exec('ROLLBACK'); } catch (_) {}
+            throw err;
+        }
     }
 }
 
@@ -1506,32 +1513,40 @@ app.get('/api/auth/discord/callback', async (req, res) => {
             if (currentRefereeRegistration?.is_delegate && assignableRoles.has('Delegate')) rolesToAssign.push('Delegate');
             if (!rolesToAssign.length) throw new Error('invite_roles_invalid');
 
-            await withDatabaseTransaction(async () => {
+            await withDatabaseTransaction(async transactionClient => {
                 const claimedInvite = await dbRun(
-                    "UPDATE discord_invites SET used_at = CURRENT_TIMESTAMP, used_by = ? WHERE token_hash = ? AND used_at IS NULL AND revoked_at IS NULL AND expires_at > CURRENT_TIMESTAMP",
-                    [profile.id, inviteHash]
+                    "UPDATE discord_invites SET used_at = CURRENT_TIMESTAMP WHERE token_hash = ? AND used_at IS NULL AND revoked_at IS NULL AND expires_at > CURRENT_TIMESTAMP",
+                    [inviteHash],
+                    transactionClient
                 );
                 if (!claimedInvite.changes) throw new Error('invite_expired');
                 if (isUnclaimedPlaceholder) {
                     await dbRun(
                         `UPDATE discord_users SET username = ?, avatar_hash = ?, updated_at = CURRENT_TIMESTAMP
                          WHERE discord_id = ?`,
-                        [discordUsername, profile.avatar || null, profile.id]
+                        [discordUsername, profile.avatar || null, profile.id],
+                        transactionClient
                     );
-                    await dbRun('DELETE FROM discord_user_roles WHERE discord_id = ?', [profile.id]);
+                    await dbRun('DELETE FROM discord_user_roles WHERE discord_id = ?', [profile.id], transactionClient);
                 } else {
                     await dbRun(
                         `INSERT INTO discord_users (discord_id, username, avatar_hash)
                          VALUES (?, ?, ?)`,
-                        [profile.id, discordUsername, profile.avatar || null]
+                        [profile.id, discordUsername, profile.avatar || null],
+                        transactionClient
                     );
                 }
+                await dbRun(
+                    'UPDATE discord_invites SET used_by = ? WHERE token_hash = ?',
+                    [profile.id, inviteHash],
+                    transactionClient
+                );
                 for (const role of rolesToAssign) {
-                    await dbRun('INSERT INTO discord_user_roles (discord_id, role) VALUES (?, ?)', [profile.id, role]);
+                    await dbRun('INSERT INTO discord_user_roles (discord_id, role) VALUES (?, ?)', [profile.id, role], transactionClient);
                 }
             });
         } else {
-            await withDatabaseTransaction(async () => {
+            await withDatabaseTransaction(async transactionClient => {
                 await dbRun(
                     `INSERT INTO discord_users (discord_id, username, avatar_hash)
                      VALUES (?, ?, ?)
@@ -1539,18 +1554,20 @@ app.get('/api/auth/discord/callback', async (req, res) => {
                         username = EXCLUDED.username,
                         avatar_hash = EXCLUDED.avatar_hash,
                         updated_at = CURRENT_TIMESTAMP`,
-                    [profile.id, discordUsername, profile.avatar || null]
+                    [profile.id, discordUsername, profile.avatar || null],
+                    transactionClient
                 );
                 const currentRefereeRegistration = await dbGet(
                     'SELECT is_delegate FROM referees WHERE discord_id = ?',
-                    [profile.id]
+                    [profile.id],
+                    transactionClient
                 );
                 if ((!existingUser || isUnclaimedPlaceholder) && !currentRefereeRegistration) {
                     throw new Error('invite_required');
                 }
                 if (currentRefereeRegistration) {
-                    await syncRegisteredRefereeRole(profile.id, true);
-                    await syncRegisteredDelegateRole(profile.id, Boolean(currentRefereeRegistration.is_delegate));
+                    await syncRegisteredRefereeRole(profile.id, true, transactionClient);
+                    await syncRegisteredDelegateRole(profile.id, Boolean(currentRefereeRegistration.is_delegate), transactionClient);
                 }
             });
         }
