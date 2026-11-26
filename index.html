@@ -418,17 +418,28 @@
                     </div>
                 </div>
 
-                <!-- PŘIDÁNÍ NOVÉHO HRÁČE DO DATABÁZE -->
                 <div class="bg-[#0e1a4f] p-5 rounded-xl border border-[#05fda3]/40 space-y-4 shadow-xl">
+                    <div class="space-y-3">
                         <div>
-                            <h3 class="mb-3 text-xs font-black uppercase tracking-wider text-gray-400">Synchronizace hráčů</h3>
-                            <h3 class="font-bold text-sm flex items-center gap-2 text-[#05fda3]"><i class="fa-solid fa-user-plus"></i> Přidat Nového Hráče</h3>
+                            <h3 class="text-xs font-black uppercase tracking-wider text-gray-400">Synchronizace</h3>
+                            <p class="mt-1 text-sm font-bold text-white"><i class="fa-solid fa-arrows-rotate mr-1 text-[#05fda3]"></i> Stav synchronizace botů</p>
                         </div>
-                        <div id="admin-player-sync-panel" class="hidden rounded-lg border border-[#05fda3]/30 bg-[#05fda3]/10 p-3 text-xs text-gray-200">
-                            <p class="font-bold text-[#05fda3]">Hráče a Transfer Bany spravuje Discord bot.</p>
+                        <div class="rounded-lg border border-[#05fda3]/30 bg-[#05fda3]/10 p-3 text-xs text-gray-200">
+                            <p class="font-bold text-[#05fda3]"><i class="fa-solid fa-user mr-1"></i> Hráči</p>
                             <p id="admin-player-sync-status" class="mt-1 text-gray-300">Načítám stav synchronizace…</p>
                         </div>
-                        <div id="admin-add-player-fields" class="space-y-3 text-xs">
+                        <div class="rounded-lg border border-[#aefb12]/20 bg-[#aefb12]/5 p-3 text-xs text-gray-200">
+                            <p class="font-bold text-[#aefb12]"><i class="fa-solid fa-user-ninja mr-1"></i> Rozhodčí</p>
+                            <p id="admin-referee-sync-status" class="mt-1 text-gray-300">Načítám stav synchronizace…</p>
+                            <p class="mt-2 text-gray-400">Údaje o účtu, licenci a suspendaci se přebírají z databáze rozhodčího bota. Oprávnění delegáta lze nastavit v seznamu rozhodčích.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PŘIDÁNÍ NOVÉHO HRÁČE DO DATABÁZE -->
+                <div class="bg-[#0e1a4f] p-5 rounded-xl border border-[#05fda3]/40 space-y-4 shadow-xl">
+                    <h3 class="font-bold text-sm flex items-center gap-2 text-[#05fda3]"><i class="fa-solid fa-user-plus"></i> Přidat Nového Hráče</h3>
+                    <div id="admin-add-player-fields" class="space-y-3 text-xs">
                             <div>
                                 <label class="block text-gray-400 mb-1">Roblox Username:</label>
                                 <input type="text" id="admin-add-player-roblox" placeholder="Zadejte Roblox Nick" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-mono">
@@ -451,18 +462,7 @@
                                 <i class="fa-solid fa-user-plus mr-1"></i> Registroval Hráče
                             </button>
                     </div>
-                    </div>
-
-                    <div class="bg-[#0e1a4f] p-5 rounded-xl border border-[#aefb12]/40 space-y-3 shadow-xl">
-                        <div>
-                            <h3 class="mb-1 text-xs font-black uppercase tracking-wider text-gray-400">Synchronizace rozhodčích</h3>
-                            <p class="font-bold text-sm text-[#aefb12]"><i class="fa-solid fa-user-ninja mr-1"></i> Rozhodčí spravuje Discord bot</p>
-                        </div>
-                        <p id="admin-referee-sync-status" class="rounded-lg border border-[#aefb12]/20 bg-[#aefb12]/5 p-3 text-xs text-gray-300">
-                            Načítám stav synchronizace…
-                        </p>
-                        <p class="text-xs text-gray-400">Údaje o účtu, licenci a suspendaci se přebírají z databáze bota. Oprávnění delegáta lze nastavit v seznamu rozhodčích.</p>
-                    </div>
+                </div>
 
                     <div class="bg-[#0e1a4f] p-5 rounded-xl border border-amber-400/40 space-y-4 shadow-xl role-perm-admin">
                         <h3 class="font-bold text-sm flex items-center gap-2 text-amber-300"><i class="fa-solid fa-user-tie"></i> Realizační tým</h3>

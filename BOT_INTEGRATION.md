@@ -64,8 +64,9 @@ player names, Discord names, team membership, and Transfer Bans. Manage those
 fields in the bot; portal-only player registration and Transfer Ban edits are
 disabled. Portal match statistics remain portal-owned.
 
-Administrators can see the last sync result in the Admin player panel. If sync
-fails, the previous snapshot is retained and the error is displayed there.
+Administrators can see the player sync result in the single Admin
+synchronization panel. If sync fails, the previous snapshot is retained and
+the error is displayed there.
 
 ## Referee bot SQLite database
 
@@ -99,10 +100,15 @@ resolved from the portal backend directory. Give the portal service account
 read access to the database and its directory; keep write access with the bot.
 Do not set this path to the portal's own `DATABASE_FILE`.
 
-Restart the portal backend after editing `.env`. In Admin, the
-“Synchronizace rozhodčích” panel reports whether the database was opened, the
-last successful import, the number of imported source rows, and removed
-licenses.
+Restart or redeploy the portal backend after setting this variable in the
+hosting provider's environment settings. The single Admin synchronization
+panel reports whether the database was opened, the last successful import,
+the number of imported source rows, and removed licenses. A message saying
+that synchronization is not configured means `REFEREE_BOT_DB_FILE` is missing
+or empty in the running backend environment. If startup reports
+`scheduleAuditLogCleanup is not defined`, the deployed backend is running an
+older or different `server.js`; deploy the current backend source and restart
+the service.
 The sync fails visibly in that panel and leaves the previous portal data
 unchanged if the source cannot be read, required columns are absent, values are
 invalid, duplicate Discord/Roblox identities are found, or a previously

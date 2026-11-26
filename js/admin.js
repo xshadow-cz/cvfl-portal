@@ -203,41 +203,37 @@ export function renderAdmin() {
         if (button) button.classList.toggle('hidden', !isShown);
     });
 
-    const syncPanel = document.getElementById('admin-player-sync-panel');
     const playerFields = document.getElementById('admin-add-player-fields');
-    if (syncPanel) syncPanel.classList.toggle('hidden', !state.playerSyncEnabled);
     if (playerFields) playerFields.classList.toggle('hidden', state.playerSyncEnabled);
-    if (state.playerSyncEnabled) {
-        apiGetPlayerSyncStatus().then(status => {
-            const statusEl = document.getElementById('admin-player-sync-status');
-            if (!statusEl) return;
-            if (status.lastError) {
-                statusEl.textContent = `Chyba synchronizace: ${status.lastError}`;
-            } else if (status.lastSuccessAt) {
-                statusEl.textContent = `Poslední úspěch: ${new Date(status.lastSuccessAt).toLocaleString('cs-CZ')}. Aktivních hráčů: ${status.syncedPlayers}; archivováno: ${status.archivedPlayers}.`;
-            } else {
-                statusEl.textContent = 'Synchronizace čeká na první úspěšné načtení od bota.';
-            }
-        }).catch(error => {
-            const statusEl = document.getElementById('admin-player-sync-status');
-            if (statusEl) statusEl.textContent = `Stav synchronizace se nepodařilo načíst: ${error.message}`;
-        });
-    }
-    apiGetRefereeSyncStatus().then(status => {
-        const statusEl = document.getElementById('admin-referee-sync-status');
-        if (!statusEl) return;
+    const playerStatusEl = document.getElementById('admin-player-sync-status');
+    const refereeStatusEl = document.getElementById('admin-referee-sync-status');
+    apiGetPlayerSyncStatus().then(status => {
+        if (!playerStatusEl) return;
         if (!status.enabled) {
-            statusEl.textContent = 'Synchronizace není nakonfigurovaná. Nastavte REFEREE_BOT_DB_FILE na cestu ke sdílenému souboru game.db.';
+            playerStatusEl.textContent = 'Synchronizace hráčů není nakonfigurovaná. Hráče lze spravovat ručně v tomto panelu.';
         } else if (status.lastError) {
-            statusEl.textContent = `Chyba synchronizace: ${status.lastError}`;
+            playerStatusEl.textContent = `Chyba synchronizace: ${status.lastError}`;
         } else if (status.lastSuccessAt) {
-            statusEl.textContent = `Poslední úspěch: ${new Date(status.lastSuccessAt).toLocaleString('cs-CZ')}. Záznamů od bota: ${status.syncedReferees}; odebráno zrušených licencí: ${status.removedReferees}.`;
+            playerStatusEl.textContent = `Poslední úspěch: ${new Date(status.lastSuccessAt).toLocaleString('cs-CZ')}. Aktivních hráčů: ${status.syncedPlayers}; archivováno: ${status.archivedPlayers}.`;
         } else {
-            statusEl.textContent = 'Synchronizace čeká na první načtení databáze bota.';
+            playerStatusEl.textContent = 'Synchronizace čeká na první úspěšné načtení od bota.';
         }
     }).catch(error => {
-        const statusEl = document.getElementById('admin-referee-sync-status');
-        if (statusEl) statusEl.textContent = `Stav synchronizace se nepodařilo načíst: ${error.message}`;
+        if (playerStatusEl) playerStatusEl.textContent = `Stav synchronizace se nepodařilo načíst: ${error.message}`;
+    });
+    apiGetRefereeSyncStatus().then(status => {
+        if (!refereeStatusEl) return;
+        if (!status.enabled) {
+            refereeStatusEl.textContent = 'Synchronizace není nakonfigurovaná. Nastavte REFEREE_BOT_DB_FILE na cestu ke sdílenému game.db v prostředí backendu a backend restartujte.';
+        } else if (status.lastError) {
+            refereeStatusEl.textContent = `Chyba synchronizace: ${status.lastError}`;
+        } else if (status.lastSuccessAt) {
+            refereeStatusEl.textContent = `Poslední úspěch: ${new Date(status.lastSuccessAt).toLocaleString('cs-CZ')}. Záznamů od bota: ${status.syncedReferees}; odebráno zrušených licencí: ${status.removedReferees}.`;
+        } else {
+            refereeStatusEl.textContent = 'Synchronizace čeká na první načtení databáze bota.';
+        }
+    }).catch(error => {
+        if (refereeStatusEl) refereeStatusEl.textContent = `Stav synchronizace se nepodařilo načíst: ${error.message}`;
     });
 
     const announcementInput = document.getElementById('admin-system-announcement');

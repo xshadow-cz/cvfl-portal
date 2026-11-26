@@ -3213,6 +3213,8 @@ if (REFEREE_BOT_DB_FILE) {
         });
     }, REFEREE_BOT_SYNC_INTERVAL_MS);
     refereeSyncTimer.unref();
+} else {
+    console.warn('[CVFL Referee Sync] Synchronizace je vypnutá: nastavte REFEREE_BOT_DB_FILE na cestu ke sdílenému game.db.');
 }
 
 const inviteCleanupTimer = setInterval(() => {
