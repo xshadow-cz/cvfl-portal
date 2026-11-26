@@ -192,7 +192,7 @@ export function renderSelectedTeamView() {
         .sort((a, b) => matchTimestamp(a) - matchTimestamp(b) || Number(a.id) - Number(b.id))
         .slice(0, 5);
     const renderTeamMatches = (matches, completed) => matches.length ? `
-        <div class="grid grid-cols-1 gap-2 lg:grid-cols-2">
+        <div class="space-y-2">
             ${matches.map(match => {
                 const isHome = Number(match.homeTeamId) === Number(team.id);
                 const opponent = teamsData.find(candidate =>
@@ -212,8 +212,8 @@ export function renderSelectedTeamView() {
                 const teamPenaltyScore = Number(isHome ? match.homePenaltyScore : match.awayPenaltyScore) || 0;
                 const opponentPenaltyScore = Number(isHome ? match.awayPenaltyScore : match.homePenaltyScore) || 0;
                 const round = match.cupStage || `${match.round}. kolo`;
-                return `<article class="flex min-w-0 items-center justify-between gap-3 rounded-lg border border-[#1e307d] bg-[#13236b]/60 p-3">
-                    <div class="min-w-0">
+                return `<article class="flex w-full min-w-0 items-center justify-between gap-3 rounded-lg border border-[#1e307d] bg-[#13236b]/60 p-3">
+                    <div class="min-w-0 flex-1">
                         <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-gray-400">
                             <span>${escapeTeamName(match.competition)}</span><span>${escapeTeamName(round)}</span>
                         </div>
@@ -223,10 +223,10 @@ export function renderSelectedTeamView() {
                         </div>
                         <div class="mt-1 text-[10px] text-gray-400">${completed ? dateText : `<i class="fa-regular fa-calendar mr-1"></i>${dateText}`}</div>
                     </div>
-                    <button type="button" onclick="openMatchProtocol(${match.id})" class="shrink-0 rounded-lg border border-[#1e307d] bg-[#0e1a4f] px-3 py-2 text-center transition hover:border-[#aefb12]" aria-label="Otevřít zápis utkání">
-                        <span class="block font-mono text-lg font-black ${completed ? 'text-[#aefb12]' : 'text-gray-300'}">${completed ? `${teamScore}:${opponentScore}` : 'Zápis'}</span>
-                        ${hasPenaltyWinner ? `<span class="text-[9px] font-bold text-amber-300">pen. ${teamPenaltyScore}:${opponentPenaltyScore}</span>` : completed ? '<span class="text-[9px] font-bold text-gray-400">Zápis</span>' : '<span class="text-[9px] font-bold text-gray-400">Program</span>'}
-                    </button>
+                    <div class="shrink-0 min-w-[3.75rem] rounded-lg border border-[#1e307d] bg-[#0e1a4f] px-3 py-2 text-center">
+                        <span class="block font-mono text-lg font-black ${completed ? 'text-[#aefb12]' : 'text-gray-400'}">${completed ? `${teamScore}:${opponentScore}` : '-'}</span>
+                        ${hasPenaltyWinner ? `<span class="text-[9px] font-bold text-amber-300">pen. ${teamPenaltyScore}:${opponentPenaltyScore}</span>` : ''}
+                    </div>
                 </article>`;
             }).join('')}
         </div>
@@ -261,11 +261,11 @@ export function renderSelectedTeamView() {
         </div>
 
         <section class="grid grid-cols-1 gap-5 xl:grid-cols-2">
-            <div class="space-y-3">
+            <div class="min-w-0 space-y-3">
                 <h3 class="font-bold text-sm text-white"><i class="fa-solid fa-clock-rotate-left mr-2 text-[#aefb12]"></i>Poslední zápasy</h3>
                 ${renderTeamMatches(recentMatches, true)}
             </div>
-            <div class="space-y-3">
+            <div class="min-w-0 space-y-3">
                 <h3 class="font-bold text-sm text-white"><i class="fa-regular fa-calendar mr-2 text-[#05fda3]"></i>Program</h3>
                 ${renderTeamMatches(upcomingMatches, false)}
             </div>

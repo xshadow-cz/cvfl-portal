@@ -1344,12 +1344,15 @@ export function renderStaffList(match, side, canEdit = true) {
     }
 
     return staffList.map(s => `
-        <div class="p-2 bg-[#0e1a4f] border border-[#1e307d] rounded flex justify-between items-center">
+        <div class="p-2 bg-[#0e1a4f] border border-[#1e307d] rounded flex justify-between items-center gap-2">
             <div>
                 <span class="font-bold text-white block">${escapeTeamName(s.robloxNick)} <span class="text-gray-400 font-normal">(${escapeTeamName(s.discordNick)})</span></span>
-                <div class="mt-0.5 flex flex-wrap items-center gap-1">
+                <div class="mt-1 flex flex-wrap items-center gap-2">
                     <span class="text-[10px] bg-[#aefb12]/20 text-[#aefb12] font-bold px-1.5 py-0.5 rounded">${escapeTeamName(s.role)}</span>
-                    ${s.isTeamLeader ? `<span class="text-[10px] bg-amber-400/20 text-amber-300 font-bold px-1.5 py-0.5 rounded">Vedoucí týmu</span>` : ''}
+                    <label class="inline-flex items-center gap-1.5 text-[10px] font-bold ${s.isTeamLeader ? 'text-amber-300' : 'text-gray-400'} ${canEdit && !match.isLocked ? 'cursor-pointer hover:text-amber-200' : 'opacity-70'}">
+                        <input type="checkbox" ${s.isTeamLeader ? 'checked' : ''} ${!canEdit || match.isLocked ? 'disabled' : ''} onchange="toggleStaffTeamLeader(${match.id}, '${side}', ${s.id}, this.checked)" class="accent-amber-400 w-3.5 h-3.5">
+                        <span>Vedoucí týmu</span>
+                    </label>
                 </div>
             </div>
             ${canEdit && !match.isLocked ? `
@@ -1566,6 +1569,12 @@ export function submitStaffMember() {
         showToast("Upozornění: V realizačním týmu je již registrován Hlavní trenér.", true);
     }
 
+    if (isTeamLeader) {
+        staffList.forEach(s => {
+            s.isTeamLeader = false;
+        });
+    }
+
     staffList.push({
         id: Date.now(),
         robloxNick: selectedPerson.robloxNick,
@@ -1578,6 +1587,33 @@ export function submitStaffMember() {
     showToast(`Člen realizačního týmu (${role}${isTeamLeader ? ', Vedoucí týmu' : ''}) přidán!`);
     closeSpecificModal('modal-add-staff-member');
     openMatchProtocol(state.activeRosterMatchId);
+}
+
+export function toggleStaffTeamLeader(matchId, side, staffId, isChecked) {
+    const match = matchesData.find(m => m.id === matchId);
+    if (!match || match.isLocked) return;
+
+    const isTeamMgr = state.currentUserRole.startsWith('Team_Manager');
+    const targetTeamId = side === 'home' ? match.homeTeamId : match.awayTeamId;
+    if (isTeamMgr && state.activeTeamManagerTeamId !== targetTeamId) {
+        showToast("Nemáte oprávnění upravovat realizační tým soupeře!", true);
+        return;
+    }
+
+    const staffList = side === 'home' ? match.homeStaff : match.awayStaff;
+    const target = staffList.find(s => s.id === staffId);
+    if (!target) return;
+
+    if (isChecked) {
+        staffList.forEach(s => {
+            s.isTeamLeader = s.id === staffId;
+        });
+    } else {
+        target.isTeamLeader = false;
+    }
+
+    state.unsavedChangesGuard = true;
+    openMatchProtocol(matchId);
 }
 
 export function removeStaffMemberWithConfirm(matchId, side, staffId) {
