@@ -654,6 +654,7 @@ async function initializeApp() {
         authMessage.textContent = 'Přihlášení zůstává zachováno. Zkuste se znovu připojit; není potřeba znovu ověřovat Discord.';
         authError.textContent = getFriendlyErrorMessage(error);
         authError.classList.remove('hidden');
+        loginLink.classList.remove('hidden');
         retryButton.classList.remove('hidden');
         return;
     }
