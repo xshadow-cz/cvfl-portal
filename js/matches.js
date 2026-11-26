@@ -275,7 +275,7 @@ export function openMatchProtocol(matchId, { updateHistory = true } = {}) {
         <div class="border-b border-[#1e307d] pb-4 mb-4">
             <div class="flex flex-wrap items-center justify-between gap-4">
                 <div>
-                    <span class="text-xs font-mono text-[#aefb12] uppercase tracking-wider">Oficiální Elektronický Zápis O Utkání (FIS ZOU)</span>
+                    <span class="text-xs font-mono text-[#aefb12] uppercase tracking-wider">Oficiální Elektronický Zápis O Utkání (ZOU)</span>
                     <div class="mt-2 grid grid-cols-[1fr_auto_1fr] items-center gap-2 sm:gap-5">
                         <div class="min-w-0 overflow-x-auto font-black text-white">
                             <div class="inline-flex min-w-max justify-center">
