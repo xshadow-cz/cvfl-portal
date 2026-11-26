@@ -68,51 +68,60 @@ Administrators can see the player sync result in the single Admin
 synchronization panel. If sync fails, the previous snapshot is retained and
 the error is displayed there.
 
-## Referee bot SQLite database
+## Referee bot HTTP API
 
-The portal can read the referee bot's existing SQLite database directly. In the
-provided referee bot, `DB_NAME = 'game.db'` and the `referees` table contains
-`discord_id`, `discord_name`, `roblox_name`, `license_type`, `is_suspended`,
-`suspended_until`, and `suspension_reason`. The portal opens that database
-read-only and imports the current table every 60 seconds by default.
+The referee integration uses the same server-to-server HTTPS snapshot pattern
+as the player bot. The portal does not need access to the bot's `game.db` or a
+shared hosting volume. Expose a private `GET /integration/referees` endpoint
+from the referee bot, protected by a bearer token, and return the complete
+current referee roster:
 
-### Sharing the database file
+```http
+GET /integration/referees
+Authorization: Bearer <shared-secret>
+Accept: application/json
+```
 
-The portal backend process must be able to read the same persistent file as the
-bot. On a hosting platform with separate containers, both services must mount
-the same persistent volume at a path visible to each service. Sharing only the
-hosting account, uploading a second copy, or using a temporary deployment
-directory is not sufficient. Do not copy the live database on each deployment.
+```json
+{
+  "complete": true,
+  "referees": [
+    {
+      "discord_id": "123456789012345678",
+      "discord_name": "discord-name",
+      "roblox_name": "roblox-name",
+      "license_type": "Licence A",
+      "is_suspended": 0,
+      "suspension_reason": null
+    }
+  ]
+}
+```
 
-Find the actual database path on the host. The bot's relative `game.db` path is
-resolved against its current working directory, not necessarily the folder
-containing the Python file. Configure the bot to use a stable absolute path if
-its working directory may change. Then set the portal backend's `.env`:
+The response must include every current license and set `complete` to `true`
+only after all rows have been read successfully. `license_type` accepts `A`,
+`B`, `C`, or `Licence A/B/C`; `is_suspended` must be `0` or `1`. Always return
+`discord_id` as a string to preserve the full Discord snowflake exactly. The
+portal validates the full snapshot before applying it transactionally. A malformed
+response, duplicate identity, or empty snapshot when the portal already has
+referees leaves the existing roster and permissions unchanged.
+
+Configure the portal backend's environment variables (not frontend code):
 
 ```dotenv
-REFEREE_BOT_DB_FILE=/absolute/shared/path/game.db
+REFEREE_BOT_API_URL=https://your-referee-bot-host.example/integration/referees
+REFEREE_BOT_API_TOKEN=<long-random-secret>
 REFEREE_BOT_SYNC_INTERVAL_MS=60000
 ```
 
-For Windows hosts, use the absolute path visible to the Node.js backend, for
-example `REFEREE_BOT_DB_FILE=C:/cvfl/shared/game.db`. Relative paths are
-resolved from the portal backend directory. Give the portal service account
-read access to the database and its directory; keep write access with the bot.
-Do not set this path to the portal's own `DATABASE_FILE`.
-
-Restart or redeploy the portal backend after setting this variable in the
-hosting provider's environment settings. The single Admin synchronization
-panel reports whether the database was opened, the last successful import,
-the number of imported source rows, and removed licenses. A message saying
-that synchronization is not configured means `REFEREE_BOT_DB_FILE` is missing
-or empty in the running backend environment. If startup reports
-`scheduleAuditLogCleanup is not defined`, the deployed backend is running an
-older or different `server.js`; deploy the current backend source and restart
-the service.
-The sync fails visibly in that panel and leaves the previous portal data
-unchanged if the source cannot be read, required columns are absent, values are
-invalid, duplicate Discord/Roblox identities are found, or a previously
-non-empty portal roster receives an empty bot table.
+Use HTTPS and a high-entropy secret, store the token only in the bot and portal
+backend environment settings, and restart/redeploy both services after
+configuration changes. The portal rejects redirects, limits response size,
+and does not expose the token in the admin status endpoint. The single Admin
+synchronization panel reports the last successful import or the exact sync
+error. If it says the integration is not configured, one or both of
+`REFEREE_BOT_API_URL` and `REFEREE_BOT_API_TOKEN` is missing from the running
+backend environment.
 
 ### Imported fields and ownership
 
@@ -136,7 +145,8 @@ Delegate access; match records retain their historical text.
 
 1. A manager grants the user a referee license in the Discord bot. The bot
    inserts the Discord ID and names in `game.db`.
-2. The portal imports that row on its next sync (normally within 60 seconds).
+2. The bot exposes that row in its complete HTTP snapshot. The portal imports
+   it on its next sync (normally within 60 seconds).
 3. The user opens the portal and selects “Přihlásit přes Discord”. OAuth
    authenticates the exact Discord account ID; the portal finds that ID in the
    synchronized referee table.

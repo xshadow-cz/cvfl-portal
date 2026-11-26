@@ -224,13 +224,13 @@ export function renderAdmin() {
     apiGetRefereeSyncStatus().then(status => {
         if (!refereeStatusEl) return;
         if (!status.enabled) {
-            refereeStatusEl.textContent = 'Synchronizace není nakonfigurovaná. Nastavte REFEREE_BOT_DB_FILE na cestu ke sdílenému game.db v prostředí backendu a backend restartujte.';
+            refereeStatusEl.textContent = 'Synchronizace není nakonfigurovaná. Nastavte REFEREE_BOT_API_URL a REFEREE_BOT_API_TOKEN v prostředí backendu a backend restartujte.';
         } else if (status.lastError) {
             refereeStatusEl.textContent = `Chyba synchronizace: ${status.lastError}`;
         } else if (status.lastSuccessAt) {
             refereeStatusEl.textContent = `Poslední úspěch: ${new Date(status.lastSuccessAt).toLocaleString('cs-CZ')}. Záznamů od bota: ${status.syncedReferees}; odebráno zrušených licencí: ${status.removedReferees}.`;
         } else {
-            refereeStatusEl.textContent = 'Synchronizace čeká na první načtení databáze bota.';
+            refereeStatusEl.textContent = 'Synchronizace čeká na první načtení snapshotu z API bota.';
         }
     }).catch(error => {
         if (refereeStatusEl) refereeStatusEl.textContent = `Stav synchronizace se nepodařilo načíst: ${error.message}`;

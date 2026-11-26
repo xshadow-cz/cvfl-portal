@@ -23,8 +23,8 @@ const OWNER_DISCORD_ID = process.env.OWNER_DISCORD_ID || '928288966162141194';
 const PLAYER_BOT_API_URL = (process.env.PLAYER_BOT_API_URL || '').trim();
 const PLAYER_BOT_API_TOKEN = (process.env.PLAYER_BOT_API_TOKEN || '').trim();
 const PLAYER_BOT_SYNC_INTERVAL_MS = Number(process.env.PLAYER_BOT_SYNC_INTERVAL_MS || 60000);
-const REFEREE_BOT_DB_FILE = (process.env.REFEREE_BOT_DB_FILE || '').trim();
-const REFEREE_BOT_DB_PATH = REFEREE_BOT_DB_FILE ? path.resolve(__dirname, REFEREE_BOT_DB_FILE) : '';
+const REFEREE_BOT_API_URL = (process.env.REFEREE_BOT_API_URL || '').trim();
+const REFEREE_BOT_API_TOKEN = (process.env.REFEREE_BOT_API_TOKEN || '').trim();
 const REFEREE_BOT_SYNC_INTERVAL_MS = Number(process.env.REFEREE_BOT_SYNC_INTERVAL_MS || 60000);
 
 if (!Number.isInteger(PLAYER_BOT_SYNC_INTERVAL_MS) ||
@@ -43,7 +43,7 @@ function getDiscordApiOrigin() {
 }
 
 const playerSyncStatus = {
-    enabled: Boolean(PLAYER_BOT_API_URL || PLAYER_BOT_API_TOKEN),
+    enabled: Boolean(PLAYER_BOT_API_URL && PLAYER_BOT_API_TOKEN),
     lastAttemptAt: null,
     lastSuccessAt: null,
     lastError: null,
@@ -52,7 +52,7 @@ const playerSyncStatus = {
 };
 let playerSyncInProgress = false;
 const refereeSyncStatus = {
-    enabled: Boolean(REFEREE_BOT_DB_FILE),
+    enabled: Boolean(REFEREE_BOT_API_URL && REFEREE_BOT_API_TOKEN),
     lastAttemptAt: null,
     lastSuccessAt: null,
     lastError: null,
@@ -84,7 +84,7 @@ const normalizeStaticPath = value => {
     const normalized = value.replace(/\\/g, '/').replace(/^\/+/, '');
     return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
 };
-const protectedDatabaseRelativePaths = [DB_PATH, REFEREE_BOT_DB_PATH]
+const protectedDatabaseRelativePaths = [DB_PATH]
     .filter(Boolean)
     .map(databasePath => normalizeStaticPath(path.relative(__dirname, databasePath)));
 app.use((req, res, next) => {
@@ -726,13 +726,15 @@ async function runPlayerSync() {
     }
 }
 
-function validateBotReferees(rows) {
-    if (!Array.isArray(rows)) throw new Error('Databáze rozhodčích nevrátila seznam záznamů.');
+function validateBotReferees(payload) {
+    if (!payload || payload.complete !== true || !Array.isArray(payload.referees)) {
+        throw new Error('Bot rozhodčích musí vrátit úplný snapshot ve tvaru { complete: true, referees: [...] }.');
+    }
     const discordIds = new Set();
     const robloxNames = new Set();
 
-    return rows.map((row, index) => {
-        const discordId = String(row.discord_id ?? '').trim();
+    return payload.referees.map((row, index) => {
+        const discordId = typeof row.discord_id === 'string' ? row.discord_id.trim() : '';
         const discordNick = String(row.discord_name ?? '').trim();
         const robloxNick = String(row.roblox_name ?? '').trim();
         const licenseMatch = /^(?:Licence\s*)?([ABC])$/i.exec(String(row.license_type ?? '').trim());
@@ -916,59 +918,78 @@ function applyRefereeSyncPlanSqlite(referees) {
 
 async function synchronizeRefereesFromBot() {
     refereeSyncStatus.lastAttemptAt = new Date().toISOString();
-    if (!refereeSyncStatus.enabled) throw new Error('Cesta k databázi rozhodčích není nakonfigurována.');
+    if (!REFEREE_BOT_API_URL || !REFEREE_BOT_API_TOKEN) {
+        throw new Error('Nastavte REFEREE_BOT_API_URL a REFEREE_BOT_API_TOKEN v prostředí backendu.');
+    }
     if (!isDatabaseReady) throw new Error('Databáze portálu ještě není připravena.');
-    const normalizeDatabasePath = value => process.platform === 'win32' ? value.toLowerCase() : value;
-    if (normalizeDatabasePath(path.resolve(REFEREE_BOT_DB_PATH)) ===
-        normalizeDatabasePath(path.resolve(DB_PATH))) {
-        throw new Error('Databáze bota musí být oddělený soubor od databáze portálu.');
+
+    let apiUrl;
+    try {
+        apiUrl = new URL(REFEREE_BOT_API_URL);
+    } catch {
+        throw new Error('REFEREE_BOT_API_URL není platná URL.');
+    }
+    if (apiUrl.username || apiUrl.password || apiUrl.search || apiUrl.hash) {
+        throw new Error('REFEREE_BOT_API_URL nesmí obsahovat přihlašovací údaje, query parametry ani fragment.');
+    }
+    if (apiUrl.protocol !== 'https:') {
+        throw new Error('REFEREE_BOT_API_URL musí používat HTTPS.');
     }
 
-    const Database = require('better-sqlite3');
-    let botDatabase;
-    try {
-        botDatabase = new Database(REFEREE_BOT_DB_PATH, {
-            readonly: true,
-            fileMustExist: true,
-            timeout: 5000
-        });
-        botDatabase.pragma('query_only = ON');
-        const columns = botDatabase.prepare('PRAGMA table_info(referees)').all()
-            .map(column => column.name);
-        const requiredColumns = [
-            'discord_id', 'discord_name', 'roblox_name', 'license_type',
-            'is_suspended', 'suspension_reason'
-        ];
-        if (requiredColumns.some(column => !columns.includes(column))) {
-            throw new Error('Tabulka referees v databázi bota nemá očekávaná pole.');
-        }
-        const sourceRows = botDatabase.prepare(`
-            SELECT CAST(discord_id AS TEXT) AS discord_id, discord_name, roblox_name,
-                   license_type, is_suspended, suspension_reason
-            FROM referees
-            ORDER BY discord_id
-        `).all();
-        const referees = validateBotReferees(sourceRows);
-        const result = isPostgres
-            ? await withDatabaseTransaction(async transactionClient => {
-                const existingReferees = await dbAll(
-                    'SELECT id, discord_id, roblox_nick, is_delegate FROM referees',
-                    [],
-                    transactionClient
-                );
-                const plan = createRefereeSyncPlan(referees, existingReferees);
-                await applyRefereeSyncPlanPostgres(plan, transactionClient);
-                return { syncedReferees: plan.updates.length, removedReferees: plan.removed.length };
-            })
-            : applyRefereeSyncPlanSqlite(referees);
-        refereeSyncStatus.lastSuccessAt = new Date().toISOString();
-        refereeSyncStatus.lastError = null;
-        refereeSyncStatus.syncedReferees = result.syncedReferees;
-        refereeSyncStatus.removedReferees = result.removedReferees;
-        return result;
-    } finally {
-        botDatabase?.close();
+    const response = await fetch(apiUrl, {
+        headers: {
+            Accept: 'application/json',
+            Authorization: `Bearer ${REFEREE_BOT_API_TOKEN}`
+        },
+        redirect: 'error',
+        signal: AbortSignal.timeout(15000)
+    });
+    if (!response.ok) throw new Error(`Bot rozhodčích vrátil HTTP ${response.status}.`);
+    if (!response.headers.get('content-type')?.includes('application/json')) {
+        throw new Error('Bot rozhodčích nevrátil JSON.');
     }
+    const responseSize = Number(response.headers.get('content-length'));
+    if (Number.isFinite(responseSize) && responseSize > 2_000_000) {
+        throw new Error('Snapshot rozhodčích překročil limit 2 MB.');
+    }
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error('Odpověď bota rozhodčích nemá čitelné tělo.');
+    const responseChunks = [];
+    let totalBytes = 0;
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        totalBytes += value.byteLength;
+        if (totalBytes > 2_000_000) {
+            await reader.cancel();
+            throw new Error('Snapshot rozhodčích překročil limit 2 MB.');
+        }
+        responseChunks.push(Buffer.from(value));
+    }
+    let payload;
+    try {
+        payload = JSON.parse(Buffer.concat(responseChunks).toString('utf8'));
+    } catch {
+        throw new Error('Bot rozhodčích vrátil neplatný JSON.');
+    }
+    const referees = validateBotReferees(payload);
+    const result = isPostgres
+        ? await withDatabaseTransaction(async transactionClient => {
+            const existingReferees = await dbAll(
+                'SELECT id, discord_id, roblox_nick, is_delegate FROM referees',
+                [],
+                transactionClient
+            );
+            const plan = createRefereeSyncPlan(referees, existingReferees);
+            await applyRefereeSyncPlanPostgres(plan, transactionClient);
+            return { syncedReferees: plan.updates.length, removedReferees: plan.removed.length };
+        })
+        : applyRefereeSyncPlanSqlite(referees);
+    refereeSyncStatus.lastSuccessAt = new Date().toISOString();
+    refereeSyncStatus.lastError = null;
+    refereeSyncStatus.syncedReferees = result.syncedReferees;
+    refereeSyncStatus.removedReferees = result.removedReferees;
+    return result;
 }
 
 async function runRefereeSync() {
@@ -1696,7 +1717,7 @@ const robloxAvatarCache = new Map();
 const robloxAvatarRequests = new Map();
 const ROBLOX_AVATAR_CACHE_MS = 6 * 60 * 60 * 1000;
 
-async function getRobloxAvatarUrl(player) {
+async function getRobloxAvatarUrl(player, persistRobloxId = true) {
     const cacheKey = String(player.roblox_id || player.roblox_nick).toLowerCase();
     const cached = robloxAvatarCache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) return cached.avatarUrl;
@@ -1721,7 +1742,7 @@ async function getRobloxAvatarUrl(player) {
             if (robloxUserId && !/^\d+$/.test(robloxUserId)) {
                 throw new Error('Roblox vrátil neplatné ID uživatele.');
             }
-            if (robloxUserId && !player.roblox_id) {
+            if (robloxUserId && !player.roblox_id && persistRobloxId) {
                 await dbRun('UPDATE players SET roblox_id = ? WHERE id = ? AND roblox_id IS NULL', [
                     robloxUserId,
                     player.id
@@ -1776,6 +1797,25 @@ app.get('/api/players/:id/avatar', async (req, res) => {
         res.json({ success: true, avatarUrl });
     } catch (err) {
         console.error(`Roblox avatar hráče ${req.params.id} se nepodařilo načíst:`, err.message);
+        res.status(502).json({ success: false, error: 'Avatar Roblox se nepodařilo načíst.' });
+    }
+});
+
+app.get('/api/referees/:id/avatar', async (req, res) => {
+    if (!/^\d+$/.test(req.params.id)) {
+        return res.status(400).json({ success: false, error: 'Neplatné ID rozhodčího.' });
+    }
+    try {
+        const referee = await dbGet(
+            'SELECT id, roblox_nick FROM referees WHERE id = ?',
+            [Number(req.params.id)]
+        );
+        if (!referee) return res.status(404).json({ success: false, error: 'Rozhodčí nebyl nalezen.' });
+        const avatarUrl = await getRobloxAvatarUrl(referee, false);
+        res.set('Cache-Control', 'private, max-age=21600');
+        res.json({ success: true, avatarUrl });
+    } catch (err) {
+        console.error(`Roblox avatar rozhodčího ${req.params.id} se nepodařilo načíst:`, err.message);
         res.status(502).json({ success: false, error: 'Avatar Roblox se nepodařilo načíst.' });
     }
 });
@@ -3205,7 +3245,7 @@ if (PLAYER_BOT_API_URL && PLAYER_BOT_API_TOKEN) {
     syncTimer.unref();
 }
 
-if (REFEREE_BOT_DB_FILE) {
+if (REFEREE_BOT_API_URL && REFEREE_BOT_API_TOKEN) {
     runRefereeSync().catch(() => {});
     const refereeSyncTimer = setInterval(() => {
         runRefereeSync().catch(error => {
@@ -3214,7 +3254,7 @@ if (REFEREE_BOT_DB_FILE) {
     }, REFEREE_BOT_SYNC_INTERVAL_MS);
     refereeSyncTimer.unref();
 } else {
-    console.warn('[CVFL Referee Sync] Synchronizace je vypnutá: nastavte REFEREE_BOT_DB_FILE na cestu ke sdílenému game.db.');
+    console.warn('[CVFL Referee Sync] Synchronizace je vypnutá: nastavte REFEREE_BOT_API_URL a REFEREE_BOT_API_TOKEN.');
 }
 
 const inviteCleanupTimer = setInterval(() => {

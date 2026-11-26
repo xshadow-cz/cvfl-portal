@@ -5,7 +5,7 @@
 import { state, refereesData, matchesData, refereeAssignmentsData, teamsData } from './state.js';
 import { openModal, closeSpecificModal, showToast } from './ui.js';
 import { getTeamProfileLinkMarkup, escapeTeamName } from './team-logo.js';
-import { apiSetRefereeDelegate, apiSaveMatch } from './api.js';
+import { apiSetRefereeDelegate, apiSaveMatch, apiGetRobloxRefereeAvatar } from './api.js';
 
 function canManageReferees() {
     return ['Admin', 'Referee_Manager'].includes(state.currentUserRole);
@@ -194,8 +194,9 @@ export function openRefereeCard(refereeId) {
     content.innerHTML = `
         <div class="flex items-start justify-between gap-4 border-b border-[#aefb12]/30 bg-gradient-to-r from-[#13236b] to-[#0e1a4f] p-5 sm:p-6">
             <div class="flex min-w-0 items-center gap-4">
-                <div class="flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl border border-[#aefb12]/40 bg-[#0e1a4f] text-3xl text-gray-500 shadow-lg sm:h-24 sm:w-24">
-                    <i class="fa-solid fa-user-ninja"></i>
+                <div class="relative h-20 w-20 shrink-0 overflow-hidden rounded-2xl border border-[#aefb12]/40 bg-[#0e1a4f] shadow-lg sm:h-24 sm:w-24">
+                    <img id="referee-card-avatar-${referee.id}" alt="${escapeTeamName(referee.robloxNick)} Roblox avatar" class="hidden h-full w-full object-cover">
+                    <div class="flex h-full w-full items-center justify-center text-3xl text-gray-500"><i class="fa-solid fa-user-ninja"></i></div>
                 </div>
                 <div class="min-w-0">
                     <span class="inline-flex rounded bg-[#aefb12] px-2 py-1 text-[10px] font-black uppercase text-[#13236b]">Licence ${escapeTeamName(referee.license || '—')}</span>
@@ -280,6 +281,21 @@ export function openRefereeCard(refereeId) {
         </div>
     `;
     openModal('modal-player-card');
+    const avatar = document.getElementById(`referee-card-avatar-${referee.id}`);
+    apiGetRobloxRefereeAvatar(referee.id).then(avatarUrl => {
+        if (!avatar || !avatarUrl || !avatar.isConnected) return;
+        avatar.onload = () => {
+            avatar.classList.remove('hidden');
+            avatar.nextElementSibling?.classList.add('hidden');
+        };
+        avatar.onerror = () => {
+            avatar.classList.add('hidden');
+            avatar.nextElementSibling?.classList.remove('hidden');
+        };
+        avatar.src = avatarUrl;
+    }).catch(error => {
+        console.warn(`Roblox avatar rozhodčího ${referee.id} není dostupný:`, error.message);
+    });
 }
 
 export function renderRefereeAssignments() {

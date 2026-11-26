@@ -253,6 +253,11 @@ export async function apiGetRobloxPlayerAvatar(playerId) {
     return result.avatarUrl;
 }
 
+export async function apiGetRobloxRefereeAvatar(refereeId) {
+    const result = await requestJSON(`/referees/${encodeURIComponent(refereeId)}/avatar`);
+    return result.avatarUrl;
+}
+
 /**
  * Načte kompletní stav z backendu při startu aplikace
  */
