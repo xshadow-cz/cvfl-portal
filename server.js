@@ -1342,24 +1342,6 @@ function requireRoles(...roles) {
     };
 }
 
-async function matchesVisibleToUser(matches, auth) {
-    const privilegedRoles = ['Admin', 'DK', 'Referee_Manager'];
-    if (auth.roles.some(role => privilegedRoles.includes(role))) return matches;
-    const teamIds = auth.roles
-        .filter(role => role.startsWith('Team_Manager_'))
-        .map(role => Number(role.slice('Team_Manager_'.length)));
-    const official = auth.roles.some(role => role === 'Referee' || role === 'Delegate')
-        ? await dbGet("SELECT roblox_nick, is_delegate FROM referees WHERE discord_id = ? AND status = 'Active'", [auth.discordId])
-        : null;
-    return matches.filter(match =>
-        teamIds.includes(match.home_team_id) || teamIds.includes(match.away_team_id) ||
-        (official && auth.roles.includes('Referee') &&
-            [match.referee, match.fourth_ref, match.var].includes(official.roblox_nick)) ||
-        (official && official.is_delegate && auth.roles.includes('Delegate') &&
-            match.delegate === official.roblox_nick)
-    );
-}
-
 // ZDE JE DEFINICE FUNKCE REQUIREMATCHEDITOR (která dříve chyběla):
 async function requireMatchEditor(req, res, next) {
     const privilegedRoles = ['Admin', 'DK', 'Referee_Manager'];
@@ -2119,7 +2101,7 @@ app.get('/api/state', async (req, res) => {
             [OWNER_DISCORD_ID]
         );
         const allMatchesRaw = await dbAll('SELECT * FROM matches ORDER BY round ASC, id ASC');
-        const matchesRaw = await matchesVisibleToUser(allMatchesRaw, req.auth);
+        const matchesRaw = allMatchesRaw;
         const refereeMatchStats = new Map();
         for (const match of allMatchesRaw) {
             if (!['Completed', 'In_Progress'].includes(match.status)) continue;
@@ -2653,10 +2635,7 @@ app.delete('/api/referees/:id', requireRoles('Admin', 'Referee_Manager'), async 
 
 app.get('/api/matches', async (req, res) => {
     try {
-        const rows = await matchesVisibleToUser(
-            await dbAll('SELECT * FROM matches ORDER BY round ASC, id ASC'),
-            req.auth
-        );
+        const rows = await dbAll('SELECT * FROM matches ORDER BY round ASC, id ASC');
         res.json({ success: true, data: rows });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
