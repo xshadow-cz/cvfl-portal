@@ -346,11 +346,11 @@ export function openMatchProtocol(matchId, { updateHistory = true } = {}) {
                 <div class="bg-[#13236b] p-4 rounded-xl border border-[#1e307d] space-y-3">
                     <div class="flex justify-between items-center border-b border-[#1e307d] pb-2">
                         <div>
-                            <h3 class="max-w-full overflow-hidden font-bold text-[#aefb12] text-sm">${home ? getTeamNameMarkup(home) : ''}</h3>
+                            <h3 class="max-w-full overflow-hidden font-bold text-[#aefb12] text-sm">${home ? getTeamNameMarkup(home) : ''} (${match.homeRoster.length}/10)</h3>
                             <span class="text-[10px] text-gray-400">3–5 v základu, max. 10 na soupisce, 1 brankář</span>
                         </div>
                         ${canEditHome && !match.isLocked ? `
-                        <button onclick="openAddPlayerToRosterModal(${match.id}, 'home')" class="px-2.5 py-1 bg-[#aefb12] text-[#13236b] font-black rounded text-[11px] shadow hover:bg-opacity-90">
+                        <button onclick="openAddPlayerToRosterModal(${match.id}, 'home')" ${match.homeRoster.length >= 10 ? 'disabled title="Na soupisce může být maximálně 10 hráčů"' : ''} class="px-2.5 py-1 bg-[#aefb12] text-[#13236b] font-black rounded text-[11px] shadow hover:bg-opacity-90 disabled:opacity-40 disabled:cursor-not-allowed">
                             + Přidat Hráče
                         </button>` : ''}
                     </div>
@@ -362,11 +362,11 @@ export function openMatchProtocol(matchId, { updateHistory = true } = {}) {
                 <div class="bg-[#13236b] p-4 rounded-xl border border-[#1e307d] space-y-3">
                     <div class="flex justify-between items-center border-b border-[#1e307d] pb-2">
                         <div>
-                            <h3 class="max-w-full overflow-hidden font-bold text-[#05fda3] text-sm">${away ? getTeamNameMarkup(away) : ''}</h3>
+                            <h3 class="max-w-full overflow-hidden font-bold text-[#05fda3] text-sm">${away ? getTeamNameMarkup(away) : ''} (${match.awayRoster.length}/10)</h3>
                             <span class="text-[10px] text-gray-400">3–5 v základu, max. 10 na soupisce, 1 brankář</span>
                         </div>
                         ${canEditAway && !match.isLocked ? `
-                        <button onclick="openAddPlayerToRosterModal(${match.id}, 'away')" class="px-2.5 py-1 bg-[#05fda3] text-[#13236b] font-black rounded text-[11px] shadow hover:bg-opacity-90">
+                        <button onclick="openAddPlayerToRosterModal(${match.id}, 'away')" ${match.awayRoster.length >= 10 ? 'disabled title="Na soupisce může být maximálně 10 hráčů"' : ''} class="px-2.5 py-1 bg-[#05fda3] text-[#13236b] font-black rounded text-[11px] shadow hover:bg-opacity-90 disabled:opacity-40 disabled:cursor-not-allowed">
                             + Přidat Hráče
                         </button>` : ''}
                     </div>
@@ -1381,6 +1381,10 @@ export function openAddPlayerToRosterModal(matchId, side) {
     }
 
     const roster = side === 'home' ? match.homeRoster : match.awayRoster;
+    if (roster.length >= 10) {
+        showToast("Na soupisce může být maximálně 10 hráčů.", true);
+        return;
+    }
 
     const teamId = side === 'home' ? match.homeTeamId : match.awayTeamId;
     const team = teamsData.find(t => t.id === teamId);
@@ -1434,6 +1438,11 @@ export function addPlayerToRoster(playerId) {
     if (!match) return;
 
     const roster = state.activeRosterSide === 'home' ? match.homeRoster : match.awayRoster;
+    if (roster.length >= 10) {
+        showToast("Na soupisce může být maximálně 10 hráčů.", true);
+        closeSpecificModal('modal-add-roster-player');
+        return;
+    }
 
     if (isPlayerSuspended(playerId)) {
         showToast("Upozornění: Přidáváte hráče, který má aktivní stopku.", true);
@@ -1453,9 +1462,13 @@ export function addPlayerToRoster(playerId) {
     state.unsavedChangesGuard = true;
     showToast("Hráč přidán do zápasové sestavy.");
     
-    // Obnoví protokol a znovu načte překryvné okno
+    // Obnoví protokol a znovu načte překryvné okno (pokud není plná soupiska)
     openMatchProtocol(state.activeRosterMatchId);
-    openAddPlayerToRosterModal(state.activeRosterMatchId, state.activeRosterSide);
+    if (roster.length >= 10) {
+        closeSpecificModal('modal-add-roster-player');
+    } else {
+        openAddPlayerToRosterModal(state.activeRosterMatchId, state.activeRosterSide);
+    }
 }
 
 export function removePlayerFromRosterWithConfirm(matchId, side, playerId) {

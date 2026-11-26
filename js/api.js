@@ -261,6 +261,79 @@ export async function apiGetRobloxRefereeAvatar(refereeId) {
     return result.avatarUrl;
 }
 
+let lastStateSignature = '';
+
+function applyStateData(data) {
+    if (Array.isArray(data.teams)) {
+        teamsData.length = 0;
+        teamsData.push(...data.teams);
+    }
+
+    // Naplnění hráčů
+    if (Array.isArray(data.players)) {
+        playersData.length = 0;
+        playersData.push(...data.players);
+    }
+
+    // Naplnění rozhodčích
+    if (Array.isArray(data.referees)) {
+        refereesData.length = 0;
+        refereesData.push(...data.referees);
+    }
+    if (Number.isInteger(data.refereeCount)) {
+        state.refereeCount = data.refereeCount;
+    }
+
+    // Naplnění trenérů
+    if (Array.isArray(data.trainers)) {
+        trainersData.length = 0;
+        trainersData.push(...data.trainers);
+    }
+
+    state.maintenanceMode = Boolean(data.maintenanceMode);
+    state.isMaintenanceMode = state.maintenanceMode;
+    state.maintenanceNotice = data.maintenanceNotice || '';
+    state.playerSyncEnabled = Boolean(data.playerSyncEnabled);
+    if (data.competitionVisibility && typeof data.competitionVisibility === 'object') {
+        state.competitionVisibility = {
+            nadstavba: Boolean(data.competitionVisibility.nadstavba),
+            baraz: Boolean(data.competitionVisibility.baraz),
+            molcup: Boolean(data.competitionVisibility.molcup)
+        };
+    }
+    if (typeof data.systemAnnouncement === 'string') {
+        state.systemAnnouncement = data.systemAnnouncement;
+    }
+
+    // Naplnění zápasů
+    if (Array.isArray(data.matches)) {
+        matchesData.length = 0;
+        matchesData.push(...data.matches);
+    }
+    if (Array.isArray(data.refereeAssignments)) {
+        refereeAssignmentsData.length = 0;
+        refereeAssignmentsData.push(...data.refereeAssignments);
+    }
+
+    // Naplnění disciplinárních trestů
+    if (Array.isArray(data.suspensions)) {
+        suspensionsData.length = 0;
+        suspensionsData.push(...data.suspensions);
+    }
+
+    // Naplnění odečtů bodů do objektu state (pokud existuje)
+    if (Array.isArray(data.pointsDeductions) && Array.isArray(state.pointsDeductions)) {
+        state.pointsDeductions.length = 0;
+        state.pointsDeductions.push(...data.pointsDeductions);
+    }
+
+    // Naplnění audit logů
+    if (Array.isArray(data.dkAuditLogs)) {
+        dkAuditLogs.length = 0;
+        dkAuditLogs.push(...data.dkAuditLogs);
+    }
+}
+
 /**
  * Načte kompletní stav z backendu při startu aplikace
  */
@@ -278,76 +351,8 @@ export async function loadInitialStateFromAPI() {
 
         const json = await response.json();
         if (json && json.success && json.data) {
-            const data = json.data;
-
-            if (Array.isArray(data.teams)) {
-                teamsData.length = 0;
-                teamsData.push(...data.teams);
-            }
-
-            // Naplnění hráčů
-            if (Array.isArray(data.players)) {
-                playersData.length = 0;
-                playersData.push(...data.players);
-            }
-
-            // Naplnění rozhodčích
-            if (Array.isArray(data.referees)) {
-                refereesData.length = 0;
-                refereesData.push(...data.referees);
-            }
-            if (Number.isInteger(data.refereeCount)) {
-                state.refereeCount = data.refereeCount;
-            }
-
-            // Naplnění trenérů
-            if (Array.isArray(data.trainers)) {
-                trainersData.length = 0;
-                trainersData.push(...data.trainers);
-            }
-
-            state.maintenanceMode = Boolean(data.maintenanceMode);
-            state.isMaintenanceMode = state.maintenanceMode;
-            state.maintenanceNotice = data.maintenanceNotice || '';
-            state.playerSyncEnabled = Boolean(data.playerSyncEnabled);
-            if (data.competitionVisibility && typeof data.competitionVisibility === 'object') {
-                state.competitionVisibility = {
-                    nadstavba: Boolean(data.competitionVisibility.nadstavba),
-                    baraz: Boolean(data.competitionVisibility.baraz),
-                    molcup: Boolean(data.competitionVisibility.molcup)
-                };
-            }
-            if (typeof data.systemAnnouncement === 'string') {
-                state.systemAnnouncement = data.systemAnnouncement;
-            }
-
-            // Naplnění zápasů
-            if (Array.isArray(data.matches)) {
-                matchesData.length = 0;
-                matchesData.push(...data.matches);
-            }
-            if (Array.isArray(data.refereeAssignments)) {
-                refereeAssignmentsData.length = 0;
-                refereeAssignmentsData.push(...data.refereeAssignments);
-            }
-
-            // Naplnění disciplinárních trestů
-            if (Array.isArray(data.suspensions)) {
-                suspensionsData.length = 0;
-                suspensionsData.push(...data.suspensions);
-            }
-
-            // Naplnění odečtů bodů do objektu state (pokud existuje)
-            if (Array.isArray(data.pointsDeductions) && Array.isArray(state.pointsDeductions)) {
-                state.pointsDeductions.length = 0;
-                state.pointsDeductions.push(...data.pointsDeductions);
-            }
-
-            // Naplnění audit logů
-            if (Array.isArray(data.dkAuditLogs)) {
-                dkAuditLogs.length = 0;
-                dkAuditLogs.push(...data.dkAuditLogs);
-            }
+            lastStateSignature = JSON.stringify(json.data);
+            applyStateData(json.data);
 
             isBackendConnected = true;
             console.log(`%c[CVFL API] ✅ Úspěšně připojeno k databázi na ${API_ORIGIN}/api.`, 'color: #aefb12; font-weight: bold;');
@@ -358,6 +363,31 @@ export async function loadInitialStateFromAPI() {
         console.error('[CVFL API] Nelze načíst stav z databáze:', err);
         return false;
     }
+}
+
+export async function syncStateFromAPIIfChanged() {
+    const response = await fetchApi('/state', {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+        cache: 'no-store',
+        signal: AbortSignal.timeout(10000)
+    });
+    if (response.status === 401 && typeof window.handleSessionRevoked === 'function') {
+        window.handleSessionRevoked();
+        return { ok: false, changed: false };
+    }
+    if (!response.ok) return { ok: false, changed: false };
+    const json = await response.json();
+    if (!json || !json.success || !json.data) return { ok: false, changed: false };
+
+    const signature = JSON.stringify(json.data);
+    if (signature === lastStateSignature) {
+        return { ok: true, changed: false };
+    }
+    lastStateSignature = signature;
+    applyStateData(json.data);
+    isBackendConnected = true;
+    return { ok: true, changed: true };
 }
 
 export async function apiCreateTeam(team) {

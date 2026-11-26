@@ -11,12 +11,9 @@ const STAT_CATEGORIES = [
     { key: 'goals', label: 'Góly', icon: 'fa-futbol', color: 'text-[#aefb12]' },
     { key: 'assists', label: 'Asistence', icon: 'fa-handshake', color: 'text-[#05fda3]' },
     { key: 'cleanSheets', label: 'Čistá konta', icon: 'fa-shield-halved', color: 'text-amber-400' },
-    { key: 'yellowCards', label: 'Žluté karty', icon: 'fa-square', color: 'text-yellow-300', cell: 'bg-yellow-500/20 text-yellow-200 border-yellow-400/40' },
-    { key: 'redCards', label: 'Červené karty', icon: 'fa-square', color: 'text-red-400', cell: 'bg-red-500/20 text-red-200 border-red-400/40' }
+    { key: 'yellowCards', label: 'Žluté karty', icon: 'fa-square', color: 'text-yellow-300' },
+    { key: 'redCards', label: 'Červené karty', icon: 'fa-square', color: 'text-red-400' }
 ];
-STAT_CATEGORIES[0].cell = 'bg-lime-500/15 text-lime-200 border-lime-400/30';
-STAT_CATEGORIES[1].cell = 'bg-emerald-500/15 text-emerald-200 border-emerald-400/30';
-STAT_CATEGORIES[2].cell = 'bg-amber-500/15 text-amber-200 border-amber-400/30';
 
 // Stav okna statistik
 const statsModalState = {
@@ -90,7 +87,15 @@ function getMatchCleanSheetPlayerIds(match) {
                 return scoringSide !== side && minute >= interval.start &&
                     (minute < interval.end || (interval.end === 20 && minute === interval.end));
             });
-            if (interval.end - interval.start >= 10 && !conceded) playerIds.push(interval.playerId);
+            // Check for red card (or second yellow) before minute 10 for this keeper
+            const redCardBeforeTen = events.some(ev =>
+                (ev.type === 'Red_Card' || ev.type === 'Second_Yellow_Card') &&
+                Number(ev.playerId) === Number(interval.playerId) &&
+                matchMinute(ev.timeStr || `${ev.minute || 0}:00`) < 10
+            );
+            if (interval.end - interval.start >= 10 && !conceded && !redCardBeforeTen) {
+                playerIds.push(interval.playerId);
+            }
         });
     }
 
@@ -478,7 +483,7 @@ function renderStatsModal() {
                                     </td>
                                     <td class="py-2.5 px-2 text-center font-mono text-gray-300">${item.matchesPlayed}</td>
                                     ${STAT_CATEGORIES.map(cat => `
-                                        <td class="border-x border-[#0e1a4f] py-2.5 px-2 text-center font-bold ${cat.cell}">
+                                        <td class="py-2.5 px-2 text-center font-bold ${cat.color}">
                                             ${item[cat.key]}
                                         </td>
                                     `).join('')}

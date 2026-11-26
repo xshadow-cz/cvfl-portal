@@ -189,6 +189,7 @@ import {
 
 import {
     loadInitialStateFromAPI,
+    syncStateFromAPIIfChanged,
     isApiOnline,
     loadDiscordSession,
     apiGetSystemAnnouncement,
@@ -498,11 +499,70 @@ async function verifyActiveSession() {
     }
 }
 
+let stateSyncInFlight = false;
+
+function renderActiveSectionAfterSync() {
+    applySystemAnnouncement(state.systemAnnouncement);
+    applyMaintenanceVisibility();
+    updateAdminStats();
+    renderDKAuditLogs();
+
+    switch (state.activeTab) {
+        case 'dashboard':
+            renderDashboard();
+            break;
+        case 'competitions':
+            renderCompetitions();
+            break;
+        case 'matches':
+            renderMatches();
+            break;
+        case 'teams':
+            renderTeams();
+            break;
+        case 'referees':
+            renderRefereesTab();
+            break;
+        case 'disciplinary':
+            renderDisciplinary();
+            break;
+        case 'admin':
+            renderAdmin();
+            break;
+        default:
+            renderDashboard();
+    }
+
+    const protocolModal = document.getElementById('modal-match-protocol');
+    if (protocolModal && !protocolModal.classList.contains('hidden') && !state.unsavedChangesGuard && state.matchProtocolSnapshotId != null) {
+        openMatchProtocol(state.matchProtocolSnapshotId, { updateHistory: false });
+    }
+}
+
+async function syncPortalStateNow() {
+    if (!state.currentUser || stateSyncInFlight || state.unsavedChangesGuard) return;
+    const activeTag = document.activeElement?.tagName;
+    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(activeTag)) return;
+
+    stateSyncInFlight = true;
+    try {
+        const result = await syncStateFromAPIIfChanged();
+        if (result.ok && result.changed) {
+            renderActiveSectionAfterSync();
+        }
+    } catch {
+        // Ignorujeme dočasné síťové výpadky při kontrole na pozadí
+    } finally {
+        stateSyncInFlight = false;
+    }
+}
+
 function startSessionMonitor() {
     if (!sessionMonitorInterval) {
         sessionMonitorInterval = setInterval(() => {
             if (document.visibilityState === 'visible') {
                 void verifyActiveSession();
+                void syncPortalStateNow();
             }
         }, 5000);
     }
@@ -510,10 +570,12 @@ function startSessionMonitor() {
         sessionMonitorListenersAttached = true;
         window.addEventListener('focus', () => {
             void verifyActiveSession();
+            void syncPortalStateNow();
         });
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'visible') {
                 void verifyActiveSession();
+                void syncPortalStateNow();
             }
         });
     }
