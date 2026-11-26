@@ -39,6 +39,8 @@ incomplete query.
 timestamp in seconds/milliseconds; it is treated as an active Transfer Ban only
 while it is in the future. Use `null` when there is no ban. `ban_id` is not used.
 Discord IDs must be 17–20 digit strings. `roblox_id` may be `null`.
+Backslash characters (`\`) are removed from Discord usernames before they are
+stored in the portal database.
 
 The portal matches players by Discord ID, then Roblox ID, and finally the exact
 Roblox username to preserve portal statistics and historical match references.
@@ -100,9 +102,10 @@ Accept: application/json
 
 The response must include every current license and set `complete` to `true`
 only after all rows have been read successfully. `license_type` accepts `A`,
-`B`, `C`, or `Licence A/B/C`; `is_suspended` must be `0` or `1`. Always return
-`discord_id` as a string to preserve the full Discord snowflake exactly. The
-portal validates the full snapshot before applying it transactionally. A malformed
+`B`, `C`, or `Licence A/B/C`; `is_suspended` must be `0` or `1`. Always return `discord_id` as a string to preserve the full Discord snowflake
+exactly. Backslash characters (`\`) are removed from Discord usernames before
+they are stored. The portal validates the full snapshot before applying it
+transactionally. A malformed
 response, duplicate identity, or empty snapshot when the portal already has
 referees leaves the existing roster and permissions unchanged.
 

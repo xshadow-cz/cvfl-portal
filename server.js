@@ -495,6 +495,10 @@ function normalizeTeamName(name) {
     return String(name || '').trim().toLocaleLowerCase('cs-CZ');
 }
 
+function normalizeDiscordUsername(username) {
+    return String(username ?? '').replace(/\\/g, '').trim();
+}
+
 function parseTransferBanExpiry(value) {
     if (value === null || value === undefined || value === '') return null;
     if (typeof value !== 'number' && typeof value !== 'string') {
@@ -521,7 +525,7 @@ function validateBotPlayers(payload) {
             throw new Error(`Záznam hráče č. ${index + 1} není platný objekt.`);
         }
         const discordId = String(player.discord_id || '').trim();
-        const discordNick = String(player.discord_username || '').trim();
+        const discordNick = normalizeDiscordUsername(player.discord_username);
         const robloxNick = String(player.roblox_username || '').trim();
         if (!/^\d{17,20}$/.test(discordId) || !discordNick || !robloxNick) {
             throw new Error(`Hráč č. ${index + 1} nemá platné discord_id, discord_username nebo roblox_username.`);
@@ -739,7 +743,7 @@ function validateBotReferees(payload) {
 
     return payload.referees.map((row, index) => {
         const discordId = typeof row.discord_id === 'string' ? row.discord_id.trim() : '';
-        const discordNick = String(row.discord_name ?? '').trim();
+        const discordNick = normalizeDiscordUsername(row.discord_name);
         const robloxNick = String(row.roblox_name ?? '').trim();
         const licenseMatch = /^(?:Licence\s*)?([ABC])$/i.exec(String(row.license_type ?? '').trim());
         const suspendedValue = Number(row.is_suspended);
@@ -1483,8 +1487,9 @@ app.get('/api/auth/discord/callback', async (req, res) => {
             throw new Error('Discord did not return a valid user profile.');
         }
 
+        const discordUsername = normalizeDiscordUsername(profile.global_name || profile.username);
         const existingUser = profile.id === OWNER_DISCORD_ID
-            ? { discord_id: profile.id, username: profile.global_name || profile.username }
+            ? { discord_id: profile.id, username: discordUsername }
             : await dbGet('SELECT discord_id, username FROM discord_users WHERE discord_id = ?', [profile.id]);
             
         const refereeRegistration = await dbGet(
@@ -1529,14 +1534,14 @@ app.get('/api/auth/discord/callback', async (req, res) => {
                     await dbRun(
                         `UPDATE discord_users SET username = ?, avatar_hash = ?, updated_at = CURRENT_TIMESTAMP
                          WHERE discord_id = ?`,
-                        [profile.global_name || profile.username, profile.avatar || null, profile.id]
+                        [discordUsername, profile.avatar || null, profile.id]
                     );
                     await dbRun('DELETE FROM discord_user_roles WHERE discord_id = ?', [profile.id]);
                 } else {
                     await dbRun(
                         `INSERT INTO discord_users (discord_id, username, avatar_hash)
                          VALUES (?, ?, ?)`,
-                        [profile.id, profile.global_name || profile.username, profile.avatar || null]
+                        [profile.id, discordUsername, profile.avatar || null]
                     );
                 }
                 for (const role of rolesToAssign) {
@@ -1552,7 +1557,7 @@ app.get('/api/auth/discord/callback', async (req, res) => {
                         username = EXCLUDED.username,
                         avatar_hash = EXCLUDED.avatar_hash,
                         updated_at = CURRENT_TIMESTAMP`,
-                    [profile.id, profile.global_name || profile.username, profile.avatar || null]
+                    [profile.id, discordUsername, profile.avatar || null]
                 );
                 const currentRefereeRegistration = await dbGet(
                     'SELECT is_delegate FROM referees WHERE discord_id = ?',
@@ -1581,7 +1586,7 @@ app.get('/api/auth/discord/callback', async (req, res) => {
                     (action, method, resource, actor_discord_id, actor_username, details)
                  VALUES (?, ?, ?, ?, ?, ?)`,
                 ['Přihlášení přes Discord', 'OAUTH', '/api/auth/discord/callback', profile.id,
-                    profile.global_name || profile.username, 'Úspěšné přihlášení.']
+                    discordUsername, 'Úspěšné přihlášení.']
             );
         } catch (auditError) {
             console.error('Přihlášení proběhlo, ale audit přihlášení se nepodařilo uložit:', auditError);
@@ -2433,7 +2438,7 @@ app.put('/api/maintenance', requireRoles('Admin'), async (req, res) => {
 app.post('/api/trainers', requireRoles('Admin'), async (req, res) => {
     try {
         const robloxNick = typeof req.body.robloxNick === 'string' ? req.body.robloxNick.trim() : '';
-        const discordNick = typeof req.body.discordNick === 'string' ? req.body.discordNick.trim() : '';
+        const discordNick = normalizeDiscordUsername(req.body.discordNick);
         const teamId = Number(req.body.teamId);
         const role = req.body.role || 'Coach';
         if (!robloxNick || !discordNick || !Number.isInteger(teamId) || !['Owner', 'Coach'].includes(role)) {
@@ -2537,12 +2542,13 @@ app.post('/api/players', requireRoles('Admin'), async (req, res) => {
             return res.status(409).json({ success: false, error: 'Hráčská data spravuje Discord bot; upravte hráče přímo v botovi.' });
         }
         const { teamId, robloxNick, discordNick, isTransferBanned } = req.body;
-        if (!robloxNick || !discordNick) {
+        const normalizedDiscordNick = normalizeDiscordUsername(discordNick);
+        if (!robloxNick || !normalizedDiscordNick) {
             return res.status(400).json({ success: false, error: 'Roblox Nick i Discord Nick jsou povinné!' });
         }
         const result = await dbRun(
             `INSERT INTO players (team_id, roblox_nick, discord_nick, is_transfer_banned) VALUES (?, ?, ?, ?)`,
-            [teamId || null, robloxNick.trim(), discordNick.trim(), isTransferBanned ? true : false]
+            [teamId || null, robloxNick.trim(), normalizedDiscordNick, isTransferBanned ? true : false]
         );
         res.status(201).json({ success: true, id: result.lastID });
     } catch (err) {

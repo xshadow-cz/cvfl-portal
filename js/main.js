@@ -158,7 +158,6 @@ import {
 import {
     updateCreateMatchTeams,
     submitCreateMatch,
-    submitAdminAddPlayer,
     submitAdminAddTrainer,
     toggleExtraSection,
     renderAdmin,
@@ -401,7 +400,6 @@ Object.assign(window, {
     // Admin
     updateCreateMatchTeams,
     submitCreateMatch,
-    submitAdminAddPlayer,
     submitAdminAddTrainer,
     toggleExtraSection,
     renderAdmin,

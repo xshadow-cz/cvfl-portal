@@ -249,6 +249,25 @@ function getPlayoffGroupTable(groupName, startingTeams) {
     return { teams: sortedTeams, titleClinchedTeamId };
 }
 
+function renderDeductionsFooter(teams) {
+    const deductedTeams = teams.filter(t => t.deducted > 0);
+    if (deductedTeams.length === 0) return '';
+    return `
+        <div class="mt-4 pt-3 border-t border-[#1e307d] space-y-1.5 text-xs">
+            ${deductedTeams.map(dt => `
+                <div class="flex items-center justify-between text-gray-300">
+                    <div class="flex items-center space-x-2">
+                        <i class="fa-regular fa-circle-question text-gray-400"></i>
+                        <span class="font-bold text-white">${escapeTeamName(dt.name)}: <span class="text-[#f33332]">-${dt.deducted} bodů</span> <span class="text-gray-400 font-normal">(${escapeTeamName(dt.deductionReason || 'Rozhodnutí svazu')})</span></span>
+                    </div>
+                    ${['Admin', 'DK'].includes(state.currentUserRole) ? `
+                    <button onclick="cancelPointsDeductionWithConfirm(${dt.id})" class="px-2 py-0.5 bg-[#f33332]/20 hover:bg-[#f33332] text-[#f33332] hover:text-white rounded text-[10px] font-bold border border-[#f33332]/30 transition">Zrušit odečet</button>` : ''}
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
 export function renderCompetitions() {
     ['nadstavba', 'baraz', 'molcup'].forEach(section => {
         const button = document.getElementById(`comp-btn-${section}`);
@@ -270,7 +289,6 @@ export function renderCompetitions() {
         }
 
         const tableRows = Array.from({ length: 8 }, (_, index) => teams[index] || null);
-        const deductedTeams = teams.filter(t => t.deducted > 0);
 
         container.innerHTML = `
             <div class="flex justify-between items-center mb-4 border-b border-[#1e307d] pb-3">
@@ -349,20 +367,7 @@ export function renderCompetitions() {
                 </div>
             ` : ''}
 
-            ${deductedTeams.length > 0 ? `
-                <div class="mt-4 pt-3 border-t border-[#1e307d] space-y-1.5 text-xs">
-                    ${deductedTeams.map(dt => `
-                        <div class="flex items-center justify-between text-gray-300">
-                            <div class="flex items-center space-x-2">
-                                <i class="fa-regular fa-circle-question text-gray-400"></i>
-                                <span class="font-bold text-white">${escapeTeamName(dt.name)}: <span class="text-[#f33332]">-${dt.deducted} bodů</span> <span class="text-gray-400 font-normal">(${escapeTeamName(dt.deductionReason || 'Rozhodnutí svazu')})</span></span>
-                            </div>
-                            ${['Admin', 'DK'].includes(state.currentUserRole) ? `
-                            <button onclick="cancelPointsDeductionWithConfirm(${dt.id})" class="px-2 py-0.5 bg-[#f33332]/20 hover:bg-[#f33332] text-[#f33332] hover:text-white rounded text-[10px] font-bold border border-[#f33332]/30 transition">Zrušit odečet</button>` : ''}
-                        </div>
-                    `).join('')}
-                </div>
-            ` : ''}
+            ${renderDeductionsFooter(teams)}
         `;
     } else if (state.activeCompTab === 'nadstavba') {
         const leagueTeams = getBaseLeagueTable('1_Liga');
@@ -411,7 +416,7 @@ export function renderCompetitions() {
                                         <td class="p-2.5 text-center ${isConfirmedChampion ? 'text-amber-200' : 'text-[#f33332]'}">${team?.lost ?? ''}</td>
                                         <td class="p-2.5 text-center font-mono ${isConfirmedChampion ? 'text-amber-200' : 'text-gray-300'}">${team ? `${team.gf}:${team.ga}` : ''}</td>
                                         <td class="p-2.5 text-right font-black text-sm ${isConfirmedChampion ? 'text-amber-300' : 'text-[#aefb12]'}">
-                                            ${team ? `<span class="inline-flex items-center justify-end gap-1.5">${team.finalPoints}<span class="sr-only"> bodů</span>${team.deducted > 0 ? `<span class="inline-flex items-center gap-1 rounded bg-red-500/20 px-1.5 py-0.5 text-[10px] font-bold text-red-300" title="Odečet ${team.deducted} bodů" aria-label="Odečet ${team.deducted} bodů"><i class="fa-solid fa-minus"></i>${team.deducted}</span>` : ''}</span>` : ''}
+                                            ${team ? `${team.finalPoints}<span class="sr-only"> bodů</span>` : ''}
                                         </td>
                                     </tr>`;
                             }).join('')}
@@ -431,6 +436,7 @@ export function renderCompetitions() {
                     <span class="inline-flex items-center gap-2"><i class="fa-solid fa-circle text-red-500"></i> Místa 2–3 skupiny o udržení: baráž o sestup</span>
                     <span class="inline-flex items-center gap-2"><i class="fa-solid fa-circle text-red-800"></i> 4. místo skupiny o udržení: sestup</span>
                 </div>
+                ${renderDeductionsFooter(leagueTeams)}
             </div>`;
     } else if (state.activeCompTab === 'baraz') {
         const playoffMatches = matchesData.filter(match =>

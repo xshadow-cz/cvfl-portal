@@ -2,7 +2,7 @@
  * CVFL Portál - Zápasy a Oficiální Elektronický Zápis O Utkání (FIS ZOU)
  */
 
-import { state, teamsData, playersData, matchesData, suspensionsData } from './state.js';
+import { state, teamsData, playersData, trainersData, matchesData, suspensionsData } from './state.js';
 import { openModal, closeSpecificModal, showToast, openConfirmModal } from './ui.js';
 import { logDKAction } from './disciplinary.js';
 import { renderDashboard } from './dashboard.js';
@@ -1347,7 +1347,10 @@ export function renderStaffList(match, side, canEdit = true) {
         <div class="p-2 bg-[#0e1a4f] border border-[#1e307d] rounded flex justify-between items-center">
             <div>
                 <span class="font-bold text-white block">${escapeTeamName(s.robloxNick)} <span class="text-gray-400 font-normal">(${escapeTeamName(s.discordNick)})</span></span>
-                <span class="text-[10px] bg-[#aefb12]/20 text-[#aefb12] font-bold px-1.5 py-0.5 rounded">${s.role}</span>
+                <div class="mt-0.5 flex flex-wrap items-center gap-1">
+                    <span class="text-[10px] bg-[#aefb12]/20 text-[#aefb12] font-bold px-1.5 py-0.5 rounded">${escapeTeamName(s.role)}</span>
+                    ${s.isTeamLeader ? `<span class="text-[10px] bg-amber-400/20 text-amber-300 font-bold px-1.5 py-0.5 rounded">Vedoucí týmu</span>` : ''}
+                </div>
             </div>
             ${canEdit && !match.isLocked ? `
             <button onclick="removeStaffMemberWithConfirm(${match.id}, '${side}',${s.id})" class="text-[#f33332] hover:text-red-400 p-1">
@@ -1473,30 +1476,79 @@ export function openAddStaffModal(matchId, side) {
     state.activeStaffTeamSide = side;
 
     const match = matchesData.find(m => m.id === matchId);
-    if (match) {
-        const isTeamMgr = state.currentUserRole.startsWith('Team_Manager');
-        if (isTeamMgr) {
-            const myTeamId = state.activeTeamManagerTeamId;
-            const targetTeamId = side === 'home' ? match.homeTeamId : match.awayTeamId;
-            if (myTeamId !== targetTeamId) {
-                showToast("Nemáte oprávnění upravovat realizační tým soupeře!", true);
-                return;
-            }
-        }
+    if (!match) return;
+
+    const isTeamMgr = state.currentUserRole.startsWith('Team_Manager');
+    const targetTeamId = side === 'home' ? match.homeTeamId : match.awayTeamId;
+    if (isTeamMgr && state.activeTeamManagerTeamId !== targetTeamId) {
+        showToast("Nemáte oprávnění upravovat realizační tým soupeře!", true);
+        return;
     }
 
-    document.getElementById('staff-roblox-input').value = '';
-    document.getElementById('staff-discord-input').value = '';
+    const staffList = side === 'home' ? match.homeStaff : match.awayStaff;
+    const roster = side === 'home' ? match.homeRoster : match.awayRoster;
+    const rosterPlayerIds = new Set(roster.map(r => r.playerId));
+    const isAlreadyInStaff = (robloxNick, discordNick) => staffList.some(s =>
+        String(s.robloxNick || '').trim().toLowerCase() === String(robloxNick || '').trim().toLowerCase() &&
+        String(s.discordNick || '').trim().toLowerCase() === String(discordNick || '').trim().toLowerCase()
+    );
+
+    const availableTrainers = trainersData.filter(t =>
+        Number(t.teamId) === Number(targetTeamId) && !isAlreadyInStaff(t.robloxNick, t.discordNick)
+    );
+    const availablePlayers = playersData.filter(p =>
+        !p.isArchived &&
+        Number(p.teamId) === Number(targetTeamId) &&
+        !rosterPlayerIds.has(p.id) &&
+        !isAlreadyInStaff(p.robloxNick, p.discordNick)
+    );
+
+    const memberSelect = document.getElementById('staff-member-select');
+    const groupsHtml = [];
+    if (availableTrainers.length > 0) {
+        groupsHtml.push(`
+            <optgroup label="Členové realizačního týmu">
+                ${availableTrainers.map(t => `<option value="trainer:${t.id}">${escapeTeamName(t.robloxNick)} (${escapeTeamName(t.discordNick)}) — ${t.role === 'Owner' ? 'Majitel' : 'Trenér'}</option>`).join('')}
+            </optgroup>
+        `);
+    }
+    if (availablePlayers.length > 0) {
+        groupsHtml.push(`
+            <optgroup label="Hráči mimo sestavu">
+                ${availablePlayers.map(p => `<option value="player:${p.id}">${escapeTeamName(p.robloxNick)} (${escapeTeamName(p.discordNick)})</option>`).join('')}
+            </optgroup>
+        `);
+    }
+    memberSelect.innerHTML = groupsHtml.length > 0
+        ? groupsHtml.join('')
+        : '<option value="">Žádní dostupní členové ani hráči mimo sestavu</option>';
+
+    const leaderCheckbox = document.getElementById('staff-leader-checkbox');
+    if (leaderCheckbox) leaderCheckbox.checked = false;
+
     openModal('modal-add-staff-member');
 }
 
 export function submitStaffMember() {
-    const roblox = document.getElementById('staff-roblox-input').value.trim();
-    const discord = document.getElementById('staff-discord-input').value.trim();
+    const selectedVal = document.getElementById('staff-member-select').value;
     const role = document.getElementById('staff-role-select').value;
+    const isTeamLeader = Boolean(document.getElementById('staff-leader-checkbox')?.checked);
 
-    if (!roblox || !discord) {
-        showToast("Vyplňte prosím Roblox i Discord Username!", true);
+    if (!selectedVal) {
+        showToast("Vyberte prosím člena realizačního týmu nebo hráče!", true);
+        return;
+    }
+
+    const [sourceType, sourceIdRaw] = selectedVal.split(':');
+    const sourceId = Number(sourceIdRaw);
+    const selectedPerson = sourceType === 'trainer'
+        ? trainersData.find(t => t.id === sourceId)
+        : sourceType === 'player'
+            ? playersData.find(p => p.id === sourceId)
+            : null;
+
+    if (!selectedPerson) {
+        showToast("Vybraný člen nebyl nalezen!", true);
         return;
     }
 
@@ -1516,13 +1568,14 @@ export function submitStaffMember() {
 
     staffList.push({
         id: Date.now(),
-        robloxNick: roblox,
-        discordNick: discord,
-        role: role
+        robloxNick: selectedPerson.robloxNick,
+        discordNick: selectedPerson.discordNick,
+        role: role,
+        isTeamLeader: isTeamLeader
     });
 
     state.unsavedChangesGuard = true;
-    showToast(`Člen realizačního týmu (${role}) přidán!`);
+    showToast(`Člen realizačního týmu (${role}${isTeamLeader ? ', Vedoucí týmu' : ''}) přidán!`);
     closeSpecificModal('modal-add-staff-member');
     openMatchProtocol(state.activeRosterMatchId);
 }

@@ -117,53 +117,6 @@ export function submitCreateMatch() {
     renderAdminMatchesDeleteList();
 }
 
-export async function submitAdminAddPlayer() {
-    if (state.playerSyncEnabled) {
-        showToast('Hráče a Transfer Bany spravuje připojený Discord bot.', true);
-        return;
-    }
-    const roblox = document.getElementById('admin-add-player-roblox').value.trim();
-    const discord = document.getElementById('admin-add-player-discord').value.trim();
-    const teamVal = document.getElementById('admin-add-player-team').value;
-
-    if (!roblox || !discord) {
-        showToast("Vyplňte prosím Roblox i Discord Nick!", true);
-        return;
-    }
-
-    const isFree = (teamVal === 'free');
-    const teamId = isFree ? null : parseInt(teamVal);
-
-    const newPlayer = {
-        id: Date.now(),
-        teamId: teamId,
-        robloxNick: roblox,
-        discordNick: discord,
-        goals: 0,
-        assists: 0,
-        cleanSheets: 0,
-        motm: 0,
-        isTransferBanned: document.getElementById('admin-add-player-transfer-ban').checked
-    };
-
-    try {
-        newPlayer.id = await apiCreatePlayer(newPlayer);
-    } catch (error) {
-        showToast(`Hráče se nepodařilo uložit: ${error.message}`, true);
-        return;
-    }
-    playersData.push(newPlayer);
-    showToast(`Hráč ${roblox} byl úspěšně zaregistrován!`);
-
-    document.getElementById('admin-add-player-roblox').value = '';
-    document.getElementById('admin-add-player-discord').value = '';
-    document.getElementById('admin-add-player-transfer-ban').checked = false;
-
-    updateAdminStats();
-    renderDashboard();
-    if (state.activeTab === 'teams') renderTeams();
-}
-
 export async function toggleExtraSection(secId, isShown) {
     if (!['nadstavba', 'baraz', 'molcup'].includes(secId) || !['Admin'].includes(state.currentUserRole)) {
         showToast('Viditelnost soutěže může měnit pouze administrátor.', true);
@@ -203,8 +156,6 @@ export function renderAdmin() {
         if (button) button.classList.toggle('hidden', !isShown);
     });
 
-    const playerFields = document.getElementById('admin-add-player-fields');
-    if (playerFields) playerFields.classList.toggle('hidden', state.playerSyncEnabled);
     const playerStatusEl = document.getElementById('admin-player-sync-status');
     const refereeStatusEl = document.getElementById('admin-referee-sync-status');
     apiGetPlayerSyncStatus().then(status => {
@@ -239,11 +190,6 @@ export function renderAdmin() {
     const announcementInput = document.getElementById('admin-system-announcement');
     if (announcementInput && document.activeElement !== announcementInput) {
         announcementInput.value = state.systemAnnouncement;
-    }
-    const selectPlayerTeam = document.getElementById('admin-add-player-team');
-    if (selectPlayerTeam) {
-        selectPlayerTeam.innerHTML = `<option value="free">Bez klubu</option>` + 
-            teamsData.map(t => `<option value="${t.id}">${escapeTeamName(t.name)}</option>`).join('');
     }
     const selectTrainerTeam = document.getElementById('admin-add-trainer-team');
     if (selectTrainerTeam) {

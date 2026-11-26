@@ -436,35 +436,7 @@
                     </div>
                 </div>
 
-                <!-- PŘIDÁNÍ NOVÉHO HRÁČE DO DATABÁZE -->
-                <div class="bg-[#0e1a4f] p-5 rounded-xl border border-[#05fda3]/40 space-y-4 shadow-xl">
-                    <h3 class="font-bold text-sm flex items-center gap-2 text-[#05fda3]"><i class="fa-solid fa-user-plus"></i> Přidat Nového Hráče</h3>
-                    <div id="admin-add-player-fields" class="space-y-3 text-xs">
-                            <div>
-                                <label class="block text-gray-400 mb-1">Roblox Username:</label>
-                                <input type="text" id="admin-add-player-roblox" placeholder="Zadejte Roblox Nick" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-mono">
-                            </div>
-                            <div>
-                                <label class="block text-gray-400 mb-1">Discord Username:</label>
-                                <input type="text" id="admin-add-player-discord" placeholder="Zadejte Discord Nick" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-mono">
-                            </div>
-                            <div>
-                                <label class="block text-gray-400 mb-1">Klub / Tým:</label>
-                                <select id="admin-add-player-team" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-bold">
-                                    <option value="free">Bez klubu</option>
-                                </select>
-                            </div>
-                            <label class="flex items-center gap-2 text-red-300 font-bold">
-                                <input id="admin-add-player-transfer-ban" type="checkbox" class="accent-[#f33332] w-4 h-4">
-                                Transfer Ban
-                            </label>
-                            <button onclick="submitAdminAddPlayer()" class="w-full py-2 bg-[#05fda3] hover:bg-opacity-90 text-[#13236b] font-black rounded-lg shadow-lg transition">
-                                <i class="fa-solid fa-user-plus mr-1"></i> Registroval Hráče
-                            </button>
-                    </div>
-                </div>
-
-                    <div class="bg-[#0e1a4f] p-5 rounded-xl border border-amber-400/40 space-y-4 shadow-xl role-perm-admin">
+                <div class="bg-[#0e1a4f] p-5 rounded-xl border border-amber-400/40 space-y-4 shadow-xl role-perm-admin">
                         <h3 class="font-bold text-sm flex items-center gap-2 text-amber-300"><i class="fa-solid fa-user-tie"></i> Realizační tým</h3>
                         <div class="space-y-3 text-xs">
                             <label class="block text-gray-400">Roblox Username:
@@ -727,15 +699,11 @@
             </div>
             <div class="space-y-3 text-xs">
                 <div>
-                    <label class="block text-gray-400 mb-1">Roblox Username:</label>
-                    <input type="text" id="staff-roblox-input" placeholder="Zadejte Roblox Nick" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-mono">
+                    <label class="block text-gray-400 mb-1" for="staff-member-select">Člen realizačního týmu / Hráč mimo sestavu:</label>
+                    <select id="staff-member-select" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-bold"></select>
                 </div>
                 <div>
-                    <label class="block text-gray-400 mb-1">Discord Username:</label>
-                    <input type="text" id="staff-discord-input" placeholder="Zadejte Discord Nick" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-mono">
-                </div>
-                <div>
-                    <label class="block text-gray-400 mb-1">Role v týmu:</label>
+                    <label class="block text-gray-400 mb-1" for="staff-role-select">Role v týmu:</label>
                     <select id="staff-role-select" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-bold">
                         <option value="Hlavní trenér">Hlavní trenér</option>
                         <option value="Asistent Trenéra">Asistent Trenéra</option>
@@ -744,6 +712,10 @@
                         <option value="Ostatní">Ostatní</option>
                     </select>
                 </div>
+                <label class="flex items-center gap-2 cursor-pointer text-amber-300 font-bold">
+                    <input type="checkbox" id="staff-leader-checkbox" class="accent-amber-400 w-4 h-4">
+                    <span>Vedoucí týmu</span>
+                </label>
                 <button onclick="submitStaffMember()" class="w-full py-2 bg-[#05fda3] hover:bg-opacity-90 text-[#13236b] font-black rounded-lg shadow-lg">Přidat do Týmu</button>
             </div>
         </div>
