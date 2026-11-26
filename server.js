@@ -940,14 +940,26 @@ async function synchronizeRefereesFromBot() {
         throw new Error('REFEREE_BOT_API_URL musí používat HTTP nebo HTTPS.');
     }
 
-    const response = await fetch(apiUrl, {
-        headers: {
-            Accept: 'application/json',
-            Authorization: `Bearer ${REFEREE_BOT_API_TOKEN}`
-        },
-        redirect: 'error',
-        signal: AbortSignal.timeout(15000)
-    });
+    let response;
+    try {
+        response = await fetch(apiUrl, {
+            headers: {
+                Accept: 'application/json',
+                Authorization: `Bearer ${REFEREE_BOT_API_TOKEN}`
+            },
+            redirect: 'error',
+            signal: AbortSignal.timeout(15000)
+        });
+    } catch (error) {
+        const cause = error.cause;
+        const reason = cause?.code
+            ? `${cause.code}${cause.message ? `: ${cause.message}` : ''}`
+            : error.message;
+        throw new Error(
+            `Nepodařilo se připojit k API rozhodčích ${apiUrl.origin}${apiUrl.pathname}: ${reason}. ` +
+            'Ověřte, že je endpoint dostupný z backend hostingu, URL obsahuje správný port/cestu a služba přijímá HTTP(S) spojení.'
+        );
+    }
     if (!response.ok) throw new Error(`Bot rozhodčích vrátil HTTP ${response.status}.`);
     if (!response.headers.get('content-type')?.includes('application/json')) {
         throw new Error('Bot rozhodčích nevrátil JSON.');
