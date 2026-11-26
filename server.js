@@ -932,8 +932,8 @@ async function synchronizeRefereesFromBot() {
     if (apiUrl.username || apiUrl.password || apiUrl.search || apiUrl.hash) {
         throw new Error('REFEREE_BOT_API_URL nesmí obsahovat přihlašovací údaje, query parametry ani fragment.');
     }
-    if (apiUrl.protocol !== 'https:') {
-        throw new Error('REFEREE_BOT_API_URL musí používat HTTPS.');
+    if (!['http:', 'https:'].includes(apiUrl.protocol)) {
+        throw new Error('REFEREE_BOT_API_URL musí používat HTTP nebo HTTPS.');
     }
 
     const response = await fetch(apiUrl, {

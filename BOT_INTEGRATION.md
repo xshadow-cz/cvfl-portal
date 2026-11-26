@@ -70,7 +70,7 @@ the error is displayed there.
 
 ## Referee bot HTTP API
 
-The referee integration uses the same server-to-server HTTPS snapshot pattern
+The referee integration uses the same server-to-server HTTP snapshot pattern
 as the player bot. The portal does not need access to the bot's `game.db` or a
 shared hosting volume. Expose a private `GET /integration/referees` endpoint
 from the referee bot, protected by a bearer token, and return the complete
@@ -109,15 +109,17 @@ referees leaves the existing roster and permissions unchanged.
 Configure the portal backend's environment variables (not frontend code):
 
 ```dotenv
-REFEREE_BOT_API_URL=https://your-referee-bot-host.example/integration/referees
+REFEREE_BOT_API_URL=http://your-referee-bot-host.example/integration/referees
 REFEREE_BOT_API_TOKEN=<long-random-secret>
 REFEREE_BOT_SYNC_INTERVAL_MS=60000
 ```
 
-Use HTTPS and a high-entropy secret, store the token only in the bot and portal
-backend environment settings, and restart/redeploy both services after
-configuration changes. The portal rejects redirects, limits response size,
-and does not expose the token in the admin status endpoint. The single Admin
+HTTP and HTTPS are supported. HTTPS is strongly preferred: with plain HTTP the
+Bearer token and referee data are not encrypted in transit, so only use HTTP
+over a trusted/private network. Use a high-entropy secret, store the token only
+in the bot and portal backend environment settings, and restart/redeploy both
+services after configuration changes. The portal rejects redirects, limits
+response size, and does not expose the token in the admin status endpoint. The single Admin
 synchronization panel reports the last successful import or the exact sync
 error. If it says the integration is not configured, one or both of
 `REFEREE_BOT_API_URL` and `REFEREE_BOT_API_TOKEN` is missing from the running
