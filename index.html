@@ -275,9 +275,6 @@
             <div id="referees-directory-panel" class="hidden bg-[#0e1a4f] border border-[#1e307d] rounded-xl p-4 shadow-xl">
                 <div class="flex justify-between items-center mb-3">
                     <h3 class="font-bold text-sm text-white">Seznam Registrovaných Rozhodčích</h3>
-                    <button onclick="openAddRefereeModal()" class="px-3 py-1.5 bg-[#aefb12] hover:bg-opacity-90 text-[#13236b] text-xs font-black rounded-lg shadow role-perm-admin role-perm-ref-mgr">
-                        <i class="fa-solid fa-plus mr-1"></i> Přidat Nového Rozhodčího
-                    </button>
                 </div>
                 <div class="overflow-x-auto">
                     <table class="w-full text-xs text-left">
@@ -288,8 +285,7 @@
                                 <th class="p-3">Přístup do portálu</th>
                                 <th class="p-3">Licence</th>
                                 <th class="p-3">Status Licence</th>
-                                <th class="p-3">Je Delegát?</th>
-                                <th id="referee-directory-actions-heading" class="p-3 text-right">Akce</th>
+                                <th class="p-3">Delegát</th>
                             </tr>
                         </thead>
                         <tbody id="referees-main-table" class="divide-y divide-[#1e307d]"></tbody>
@@ -455,6 +451,17 @@
                                 <i class="fa-solid fa-user-plus mr-1"></i> Registroval Hráče
                             </button>
                     </div>
+                    </div>
+
+                    <div class="bg-[#0e1a4f] p-5 rounded-xl border border-[#aefb12]/40 space-y-3 shadow-xl">
+                        <div>
+                            <h3 class="mb-1 text-xs font-black uppercase tracking-wider text-gray-400">Synchronizace rozhodčích</h3>
+                            <p class="font-bold text-sm text-[#aefb12]"><i class="fa-solid fa-user-ninja mr-1"></i> Rozhodčí spravuje Discord bot</p>
+                        </div>
+                        <p id="admin-referee-sync-status" class="rounded-lg border border-[#aefb12]/20 bg-[#aefb12]/5 p-3 text-xs text-gray-300">
+                            Načítám stav synchronizace…
+                        </p>
+                        <p class="text-xs text-gray-400">Údaje o účtu, licenci a suspendaci se přebírají z databáze bota. Oprávnění delegáta lze nastavit v seznamu rozhodčích.</p>
                     </div>
 
                     <div class="bg-[#0e1a4f] p-5 rounded-xl border border-amber-400/40 space-y-4 shadow-xl role-perm-admin">
@@ -738,58 +745,6 @@
                     </select>
                 </div>
                 <button onclick="submitStaffMember()" class="w-full py-2 bg-[#05fda3] hover:bg-opacity-90 text-[#13236b] font-black rounded-lg shadow-lg">Přidat do Týmu</button>
-            </div>
-        </div>
-
-        <!-- EDIT / ADD REFEREE MODAL -->
-        <div id="modal-edit-referee" class="hidden bg-[#0e1a4f] border border-[#aefb12]/40 rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl relative z-50">
-            <div class="flex justify-between items-center border-b border-[#1e307d] pb-3">
-                <h3 id="referee-modal-title" class="font-bold text-lg text-[#aefb12] flex items-center gap-2"><i class="fa-solid fa-user-ninja"></i> Upravit Rozhodčího</h3>
-                <button onclick="closeSpecificModal('modal-edit-referee')" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
-            </div>
-            <div class="space-y-3 text-xs">
-                <div>
-                    <label class="block text-gray-400 mb-1">Roblox Username:</label>
-                    <input type="text" id="edit-ref-roblox" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-mono">
-                </div>
-                <div>
-                    <label class="block text-gray-400 mb-1">Discord Username:</label>
-                    <input type="text" id="edit-ref-discord" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-mono">
-                </div>
-                <div id="referee-discord-id-field">
-                    <label class="block text-gray-400 mb-1">Discord ID (umožní rozhodčímu registraci bez pozvánky):</label>
-                    <input type="text" id="edit-ref-discord-id" inputmode="numeric" pattern="[0-9]{17,20}" placeholder="Discord User ID (17–20 číslic)" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-mono">
-                </div>
-                <div class="grid grid-cols-2 gap-2">
-                    <div>
-                        <label class="block text-gray-400 mb-1">Licence Rozhodčího:</label>
-                        <select id="edit-ref-license" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-bold">
-                            <option value="A">Licence A</option>
-                            <option value="B">Licence B</option>
-                            <option value="C">Licence C</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-gray-400 mb-1">Status Licence:</label>
-                        <select id="edit-ref-status" onchange="toggleRefStatusReasonInput()" class="w-full bg-[#13236b] border border-[#1e307d] rounded p-2 text-white font-bold">
-                            <option value="Active">Platná</option>
-                            <option value="Suspended">Suspendovaná</option>
-                        </select>
-                    </div>
-                </div>
-
-                <div id="ref-status-reason-box" class="hidden">
-                    <label class="block text-gray-400 mb-1">Důvod suspendace (Povinné při suspendování):</label>
-                    <input type="text" id="edit-ref-reason" placeholder="Zadejte odůvodnění suspendace..." class="w-full bg-[#13236b] border border-[#f33332]/50 rounded p-2 text-white">
-                </div>
-
-                <div class="p-3 bg-[#13236b] border border-[#1e307d] rounded-lg mt-2">
-                    <label class="flex items-center space-x-2 cursor-pointer text-white">
-                        <input type="checkbox" id="edit-ref-is-delegate" class="accent-[#aefb12] w-4 h-4">
-                        <span class="font-bold text-sm">Je zároveň Delegát utkání</span>
-                    </label>
-                </div>
-                <button onclick="saveRefereeChanges()" class="w-full py-2 bg-[#aefb12] hover:bg-opacity-90 text-[#13236b] font-black rounded-lg shadow-lg">Uložit Rozhodčího</button>
             </div>
         </div>
 

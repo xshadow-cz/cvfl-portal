@@ -219,9 +219,17 @@ body.mobile-nav-visible #app-header {
 }
 
 #modal-backdrop > [id^="modal-"]:not(.match-protocol-fullscreen),
+#modal-backdrop > .nested-modal-overlay > [id^="modal-"]:not(.match-protocol-fullscreen) {
+    box-sizing: border-box;
+    width: min(100%, 72rem);
+    max-height: calc(100dvh - 1.5rem);
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+
 #confirm-overlay > div {
     box-sizing: border-box;
-    max-width: 100%;
+    width: min(100%, 28rem);
     max-height: calc(100dvh - 1.5rem);
     overflow-x: hidden;
     overflow-y: auto;

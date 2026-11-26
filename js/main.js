@@ -124,16 +124,12 @@ import {
     dismissDelegateAlert,
     renderRefereesMainTable,
     openRefereeCard,
-    deleteRefereeLicenseWithConfirm,
+    toggleRefereeDelegate,
     renderRefereeAssignments,
     saveRefereeAssignmentsForMatch,
     openSlotPicker,
     selectRefereeForSlot,
     selectRefereeForSlotById,
-    openAddRefereeModal,
-    editRefereeModal,
-    toggleRefStatusReasonInput,
-    saveRefereeChanges
 } from './referees.js';
 
 import {
@@ -374,16 +370,12 @@ Object.assign(window, {
     dismissDelegateAlert,
     renderRefereesMainTable,
     openRefereeCard,
-    deleteRefereeLicenseWithConfirm,
+    toggleRefereeDelegate,
     renderRefereeAssignments,
     saveRefereeAssignmentsForMatch,
     openSlotPicker,
     selectRefereeForSlot,
     selectRefereeForSlotById,
-    openAddRefereeModal,
-    editRefereeModal,
-    toggleRefStatusReasonInput,
-    saveRefereeChanges,
 
     // Disciplinary (DK)
     logDKAction,

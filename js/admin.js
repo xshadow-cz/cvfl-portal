@@ -18,7 +18,7 @@ import {
     apiCreateMatch, apiDeleteMatch, apiCreatePlayer, apiCreateTrainer, apiCreateTeam,
     apiUpdateTeam, apiDeleteTeam, apiGetDiscordUsers, apiSetDiscordUserRoles,
     apiCreateDiscordInvite, apiRevokeDiscordUserAccess, apiGetDiscordInvites, apiRevokeDiscordInvite,
-    apiGetDiscordUser, apiGetPlayerSyncStatus, apiGetAdminAuditLogs,
+    apiGetDiscordUser, apiGetPlayerSyncStatus, apiGetRefereeSyncStatus, apiGetAdminAuditLogs,
     apiSetCompetitionVisibility
 } from './api.js';
 
@@ -223,6 +223,22 @@ export function renderAdmin() {
             if (statusEl) statusEl.textContent = `Stav synchronizace se nepodařilo načíst: ${error.message}`;
         });
     }
+    apiGetRefereeSyncStatus().then(status => {
+        const statusEl = document.getElementById('admin-referee-sync-status');
+        if (!statusEl) return;
+        if (!status.enabled) {
+            statusEl.textContent = 'Synchronizace není nakonfigurovaná. Nastavte REFEREE_BOT_DB_FILE na cestu ke sdílenému souboru game.db.';
+        } else if (status.lastError) {
+            statusEl.textContent = `Chyba synchronizace: ${status.lastError}`;
+        } else if (status.lastSuccessAt) {
+            statusEl.textContent = `Poslední úspěch: ${new Date(status.lastSuccessAt).toLocaleString('cs-CZ')}. Záznamů od bota: ${status.syncedReferees}; odebráno zrušených licencí: ${status.removedReferees}.`;
+        } else {
+            statusEl.textContent = 'Synchronizace čeká na první načtení databáze bota.';
+        }
+    }).catch(error => {
+        const statusEl = document.getElementById('admin-referee-sync-status');
+        if (statusEl) statusEl.textContent = `Stav synchronizace se nepodařilo načíst: ${error.message}`;
+    });
 
     const announcementInput = document.getElementById('admin-system-announcement');
     if (announcementInput && document.activeElement !== announcementInput) {

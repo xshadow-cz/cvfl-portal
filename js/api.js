@@ -237,6 +237,11 @@ export async function apiGetPlayerSyncStatus() {
     return result.data;
 }
 
+export async function apiGetRefereeSyncStatus() {
+    const result = await requestJSON('/admin/referee-sync-status');
+    return result.data;
+}
+
 export async function apiGetAdminAuditLogs(action = '') {
     const query = action ? `?action=${encodeURIComponent(action)}` : '';
     const result = await requestJSON(`/admin/audit-logs${query}`);
@@ -472,34 +477,15 @@ export async function apiUpdatePlayer(player) {
     });
 }
 
-/**
- * Uloží nového rozhodčího do databáze
- */
-export async function apiCreateReferee(referee) {
-    if (!referee) throw new Error('Chybí údaje o rozhodčím.');
-    const result = await requestJSON('/referees', {
-        method: 'POST',
-        body: JSON.stringify(referee)
-    });
-    return { id: result.id, isRegistered: result.isRegistered };
-}
-
-/**
- * Aktualizuje rozhodčího v databázi
- */
-export async function apiUpdateReferee(referee) {
-    if (!referee) throw new Error('Chybí údaje o rozhodčím.');
-    await requestJSON(`/referees/${referee.id}`, {
+export async function apiSetRefereeDelegate(refereeId, isDelegate) {
+    const id = Number(refereeId);
+    if (!Number.isSafeInteger(id) || id < 1 || typeof isDelegate !== 'boolean') {
+        throw new Error('Neplatné údaje pro změnu oprávnění delegáta.');
+    }
+    await requestJSON(`/referees/${id}`, {
         method: 'PUT',
-        body: JSON.stringify(referee)
+        body: JSON.stringify({ isDelegate })
     });
-}
-
-/**
- * Smaže rozhodčího v databázi
- */
-export async function apiDeleteReferee(refId) {
-    await requestJSON(`/referees/${refId}`, { method: 'DELETE' });
 }
 
 /**

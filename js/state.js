@@ -22,7 +22,6 @@ export const state = {
         molcup: false
     },
     unsavedChangesGuard: false,
-    activeEditRefId: null,
     activeSlotMatchId: null,
     activeSlotRole: null,
     activeStaffTeamSide: 'home',

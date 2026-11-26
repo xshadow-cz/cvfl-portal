@@ -66,3 +66,81 @@ disabled. Portal match statistics remain portal-owned.
 
 Administrators can see the last sync result in the Admin player panel. If sync
 fails, the previous snapshot is retained and the error is displayed there.
+
+## Referee bot SQLite database
+
+The portal can read the referee bot's existing SQLite database directly. In the
+provided referee bot, `DB_NAME = 'game.db'` and the `referees` table contains
+`discord_id`, `discord_name`, `roblox_name`, `license_type`, `is_suspended`,
+`suspended_until`, and `suspension_reason`. The portal opens that database
+read-only and imports the current table every 60 seconds by default.
+
+### Sharing the database file
+
+The portal backend process must be able to read the same persistent file as the
+bot. On a hosting platform with separate containers, both services must mount
+the same persistent volume at a path visible to each service. Sharing only the
+hosting account, uploading a second copy, or using a temporary deployment
+directory is not sufficient. Do not copy the live database on each deployment.
+
+Find the actual database path on the host. The bot's relative `game.db` path is
+resolved against its current working directory, not necessarily the folder
+containing the Python file. Configure the bot to use a stable absolute path if
+its working directory may change. Then set the portal backend's `.env`:
+
+```dotenv
+REFEREE_BOT_DB_FILE=/absolute/shared/path/game.db
+REFEREE_BOT_SYNC_INTERVAL_MS=60000
+```
+
+For Windows hosts, use the absolute path visible to the Node.js backend, for
+example `REFEREE_BOT_DB_FILE=C:/cvfl/shared/game.db`. Relative paths are
+resolved from the portal backend directory. Give the portal service account
+read access to the database and its directory; keep write access with the bot.
+Do not set this path to the portal's own `DATABASE_FILE`.
+
+Restart the portal backend after editing `.env`. In Admin, the
+“Synchronizace rozhodčích” panel reports whether the database was opened, the
+last successful import, the number of imported source rows, and removed
+licenses.
+The sync fails visibly in that panel and leaves the previous portal data
+unchanged if the source cannot be read, required columns are absent, values are
+invalid, duplicate Discord/Roblox identities are found, or a previously
+non-empty portal roster receives an empty bot table.
+
+### Imported fields and ownership
+
+| Referee bot column | Portal field | Notes |
+|---|---|---|
+| `discord_id` | `discord_id` | Converted to a string so Discord's 64-bit ID stays exact. |
+| `discord_name` | `discord_nick` | Discord username/name saved by the bot. |
+| `roblox_name` | `roblox_nick` | Referee's Roblox username. |
+| `license_type` | `license` | `Licence A/B/C` becomes `A/B/C`. |
+| `is_suspended` | `status` | `1` becomes `Suspended`; `0` becomes `Active`. |
+| `suspension_reason` | `suspension_reason` | The reason is copied; the bot remains authoritative. |
+
+`suspended_until` remains managed by the bot, which clears expired suspensions.
+The portal keeps the `is_delegate` checkbox as portal-owned data when refreshing
+an existing referee. A new referee starts with delegation disabled. Only League
+Management and Referee Management can change that checkbox. Removing a license
+from the bot removes the matching portal referee and its derived Referee and
+Delegate access; match records retain their historical text.
+
+### First sign-in for a referee
+
+1. A manager grants the user a referee license in the Discord bot. The bot
+   inserts the Discord ID and names in `game.db`.
+2. The portal imports that row on its next sync (normally within 60 seconds).
+3. The user opens the portal and selects “Přihlásit přes Discord”. OAuth
+   authenticates the exact Discord account ID; the portal finds that ID in the
+   synchronized referee table.
+4. A referee registration is accepted for a first sign-in without a separate
+   portal invite. The portal creates the Discord account/session and grants the
+   Referee role. The Delegate role is included only when the portal checkbox is
+   enabled.
+5. On later visits, the existing secure session cookie is reused until logout,
+   expiry, or access removal. If the Discord ID does not match the bot record,
+   the user still needs the normal Admin-issued portal invite/role assignment.
+
+The OAuth callback, state-cookie validation, one-time invite claiming, and
+session-cookie logic are unchanged by referee synchronization.

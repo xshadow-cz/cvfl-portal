@@ -23,10 +23,17 @@ const OWNER_DISCORD_ID = process.env.OWNER_DISCORD_ID || '928288966162141194';
 const PLAYER_BOT_API_URL = (process.env.PLAYER_BOT_API_URL || '').trim();
 const PLAYER_BOT_API_TOKEN = (process.env.PLAYER_BOT_API_TOKEN || '').trim();
 const PLAYER_BOT_SYNC_INTERVAL_MS = Number(process.env.PLAYER_BOT_SYNC_INTERVAL_MS || 60000);
+const REFEREE_BOT_DB_FILE = (process.env.REFEREE_BOT_DB_FILE || '').trim();
+const REFEREE_BOT_DB_PATH = REFEREE_BOT_DB_FILE ? path.resolve(__dirname, REFEREE_BOT_DB_FILE) : '';
+const REFEREE_BOT_SYNC_INTERVAL_MS = Number(process.env.REFEREE_BOT_SYNC_INTERVAL_MS || 60000);
 
 if (!Number.isInteger(PLAYER_BOT_SYNC_INTERVAL_MS) ||
     PLAYER_BOT_SYNC_INTERVAL_MS < 10000 || PLAYER_BOT_SYNC_INTERVAL_MS > 86400000) {
     throw new Error('PLAYER_BOT_SYNC_INTERVAL_MS musí být celé číslo mezi 10000 a 86400000.');
+}
+if (!Number.isInteger(REFEREE_BOT_SYNC_INTERVAL_MS) ||
+    REFEREE_BOT_SYNC_INTERVAL_MS < 10000 || REFEREE_BOT_SYNC_INTERVAL_MS > 86400000) {
+    throw new Error('REFEREE_BOT_SYNC_INTERVAL_MS musí být celé číslo mezi 10000 a 86400000.');
 }
 
 function getDiscordApiOrigin() {
@@ -44,6 +51,15 @@ const playerSyncStatus = {
     archivedPlayers: 0
 };
 let playerSyncInProgress = false;
+const refereeSyncStatus = {
+    enabled: Boolean(REFEREE_BOT_DB_FILE),
+    lastAttemptAt: null,
+    lastSuccessAt: null,
+    lastError: null,
+    syncedReferees: 0,
+    removedReferees: 0
+};
+let refereeSyncInProgress = false;
 
 const allowedOrigins = [
     'https://portal.cvfl.cz',
@@ -64,11 +80,24 @@ app.use(cors({
 app.use(express.json({ limit: '15mb' }));
 app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 
-const databaseRelativePath = path.relative(__dirname, DB_PATH).split(path.sep).join('/');
+const normalizeStaticPath = value => {
+    const normalized = value.replace(/\\/g, '/').replace(/^\/+/, '');
+    return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
+};
+const protectedDatabaseRelativePaths = [DB_PATH, REFEREE_BOT_DB_PATH]
+    .filter(Boolean)
+    .map(databasePath => normalizeStaticPath(path.relative(__dirname, databasePath)));
 app.use((req, res, next) => {
-    const requestedPath = req.path.replace(/^\/+/, '');
-    const isDatabaseFile = databaseRelativePath !== '..' &&
-        (requestedPath === databaseRelativePath || requestedPath.startsWith(`${databaseRelativePath}-`));
+    let requestedPath;
+    try {
+        requestedPath = normalizeStaticPath(decodeURIComponent(req.path));
+    } catch {
+        return res.sendStatus(400);
+    }
+    const isDatabaseFile = protectedDatabaseRelativePaths.some(databaseRelativePath =>
+        databaseRelativePath !== '..' &&
+        (requestedPath === databaseRelativePath || requestedPath.startsWith(`${databaseRelativePath}-`))
+    );
     if (isDatabaseFile || ['schema.sql', 'server.js'].includes(requestedPath)) {
         return res.sendStatus(404);
     }
@@ -129,25 +158,25 @@ if (process.env.DATABASE_URL) {
     }
 }
 
-async function dbAll(sql, params = []) {
+async function dbAll(sql, params = [], transactionClient = null) {
     if (isPostgres) {
         let paramIndex = 1;
         const pgSql = sql.replace(/\?/g, () => `$${paramIndex++}`)
                          .replace(/datetime\('now'\)/gi, 'CURRENT_TIMESTAMP')
                          .replace(/COLLATE NOCASE/gi, '');
-        const res = await dbClient.query(pgSql, params);
+        const res = await (transactionClient || dbClient).query(pgSql, params);
         return res.rows;
     } else {
         return dbClient.prepare(sql).all(params);
     }
 }
 
-async function dbGet(sql, params = []) {
-    const rows = await dbAll(sql, params);
+async function dbGet(sql, params = [], transactionClient = null) {
+    const rows = await dbAll(sql, params, transactionClient);
     return rows[0] || null;
 }
 
-async function dbRun(sql, params = []) {
+async function dbRun(sql, params = [], transactionClient = null) {
     if (isPostgres) {
         let paramIndex = 1;
         let pgSql = sql.replace(/\?/g, () => `$${paramIndex++}`)
@@ -160,7 +189,7 @@ async function dbRun(sql, params = []) {
             pgSql += ' RETURNING id';
         }
 
-        const res = await dbClient.query(pgSql, params);
+        const res = await (transactionClient || dbClient).query(pgSql, params);
         return {
             lastID: res.rows[0]?.id || null,
             changes: res.rowCount
@@ -425,22 +454,22 @@ function ensureDatabaseColumn(table, column, declaration) {
     if (!columns.some(item => item.name === column)) {
         dbClient.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${declaration}`).run();
     }
+}
 
-    function scheduleAuditLogCleanup() {
-        const cleanup = async () => {
-            const retentionCutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
-                .toISOString().slice(0, 19).replace('T', ' ');
-            try {
-                await dbRun('DELETE FROM audit_logs WHERE created_at < ?', [retentionCutoff]);
-                await dbRun('DELETE FROM dk_audit_logs WHERE created_at < ?', [retentionCutoff]);
-            } catch (error) {
-                console.error('Nepodařilo se odstranit auditní záznamy starší 30 dní:', error.message);
-            }
-        };
-        void cleanup();
-        const cleanupTimer = setInterval(cleanup, 24 * 60 * 60 * 1000);
-        cleanupTimer.unref?.();
-    }
+function scheduleAuditLogCleanup() {
+    const cleanup = async () => {
+        const retentionCutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+            .toISOString().slice(0, 19).replace('T', ' ');
+        try {
+            await dbRun('DELETE FROM audit_logs WHERE created_at < ?', [retentionCutoff]);
+            await dbRun('DELETE FROM dk_audit_logs WHERE created_at < ?', [retentionCutoff]);
+        } catch (error) {
+            console.error('Nepodařilo se odstranit auditní záznamy starší 30 dní:', error.message);
+        }
+    };
+    void cleanup();
+    const cleanupTimer = setInterval(cleanup, 24 * 60 * 60 * 1000);
+    cleanupTimer.unref?.();
 }
 
 function validateTeamLogo(logo) {
@@ -697,6 +726,265 @@ async function runPlayerSync() {
     }
 }
 
+function validateBotReferees(rows) {
+    if (!Array.isArray(rows)) throw new Error('Databáze rozhodčích nevrátila seznam záznamů.');
+    const discordIds = new Set();
+    const robloxNames = new Set();
+
+    return rows.map((row, index) => {
+        const discordId = String(row.discord_id ?? '').trim();
+        const discordNick = String(row.discord_name ?? '').trim();
+        const robloxNick = String(row.roblox_name ?? '').trim();
+        const licenseMatch = /^(?:Licence\s*)?([ABC])$/i.exec(String(row.license_type ?? '').trim());
+        const suspendedValue = Number(row.is_suspended);
+        if (!/^\d{17,20}$/.test(discordId) || !discordNick || !robloxNick || !licenseMatch ||
+            ![0, 1].includes(suspendedValue)) {
+            throw new Error(`Záznam rozhodčího č. ${index + 1} v databázi bota není platný.`);
+        }
+
+        const normalizedRobloxName = robloxNick.toLocaleLowerCase('cs-CZ');
+        if (discordIds.has(discordId) || robloxNames.has(normalizedRobloxName)) {
+            throw new Error(`Databáze bota obsahuje duplicitní účet rozhodčího: ${robloxNick}.`);
+        }
+        discordIds.add(discordId);
+        robloxNames.add(normalizedRobloxName);
+
+        return {
+            discordId,
+            discordNick,
+            robloxNick,
+            license: licenseMatch[1].toUpperCase(),
+            status: suspendedValue === 1 ? 'Suspended' : 'Active',
+            suspensionReason: String(row.suspension_reason ?? '').trim() || null
+        };
+    });
+}
+
+function createRefereeSyncPlan(referees, existingReferees) {
+    if (existingReferees.length > 0 && referees.length === 0) {
+        throw new Error('Prázdný seznam rozhodčích nebyl synchronizován, aby nedošlo k odebrání všech licencí.');
+    }
+
+    const byDiscordId = new Map(existingReferees
+        .filter(referee => referee.discord_id)
+        .map(referee => [referee.discord_id, referee]));
+    const byRobloxName = new Map(existingReferees.map(referee => [
+        referee.roblox_nick.toLocaleLowerCase('cs-CZ'),
+        referee
+    ]));
+    const activeIds = new Set();
+    const updates = referees.map(referee => {
+        const byDiscord = byDiscordId.get(referee.discordId);
+        const byRoblox = byRobloxName.get(referee.robloxNick.toLocaleLowerCase('cs-CZ'));
+        if (byDiscord && byRoblox && byDiscord.id !== byRoblox.id) {
+            throw new Error(`Discord ID a Roblox účet ${referee.robloxNick} patří v portálu různým záznamům.`);
+        }
+        const existing = byDiscord || byRoblox || null;
+        if (!existing) return { referee, id: null, oldDiscordId: null, isDelegate: false };
+        activeIds.add(existing.id);
+        return {
+            referee,
+            id: existing.id,
+            oldDiscordId: existing.discord_id,
+            isDelegate: Boolean(existing.is_delegate)
+        };
+    });
+    const removed = existingReferees.filter(referee => !activeIds.has(referee.id));
+    return { updates, removed };
+}
+
+async function applyRefereeSyncPlanPostgres(plan, transactionClient) {
+    for (const item of plan.updates) {
+        const referee = item.referee;
+        if (item.id) {
+            await dbRun(
+                `UPDATE referees SET
+                    roblox_nick = ?, discord_nick = ?, license = ?, status = ?,
+                    suspension_reason = ?, discord_id = ?, updated_at = CURRENT_TIMESTAMP
+                 WHERE id = ?`,
+                [referee.robloxNick, referee.discordNick, referee.license, referee.status,
+                    referee.suspensionReason, referee.discordId, item.id],
+                transactionClient
+            );
+            if (item.oldDiscordId && item.oldDiscordId !== referee.discordId) {
+                await removeRefereeRoles(item.oldDiscordId, transactionClient);
+            }
+        } else {
+            await dbRun(
+                `INSERT INTO referees
+                    (roblox_nick, discord_nick, license, status, suspension_reason, discord_id, is_delegate)
+                 VALUES (?, ?, ?, ?, ?, ?, FALSE)`,
+                [referee.robloxNick, referee.discordNick, referee.license, referee.status,
+                    referee.suspensionReason, referee.discordId],
+                transactionClient
+            );
+        }
+        await syncRegisteredRefereeRole(referee.discordId, true, transactionClient);
+        await syncRegisteredDelegateRole(referee.discordId, item.isDelegate, transactionClient);
+    }
+
+    for (const referee of plan.removed) {
+        await dbRun('DELETE FROM referees WHERE id = ?', [referee.id], transactionClient);
+        await removeRefereeRoles(referee.discord_id, transactionClient);
+    }
+}
+
+function applyRefereeSyncPlanSqlite(referees) {
+    const run = (sql, params = []) => dbClient.prepare(sql).run(
+        params.map(value => typeof value === 'boolean' ? Number(value) : value)
+    );
+    const get = (sql, params = []) => dbClient.prepare(sql).get(params);
+    const all = (sql, params = []) => dbClient.prepare(sql).all(params);
+    const transaction = dbClient.transaction(() => {
+        const plan = createRefereeSyncPlan(referees, all(
+            'SELECT id, discord_id, roblox_nick, is_delegate FROM referees'
+        ));
+
+        for (const item of plan.updates) {
+            const referee = item.referee;
+            if (item.id) {
+                run(
+                    `UPDATE referees SET
+                        roblox_nick = ?, discord_nick = ?, license = ?, status = ?,
+                        suspension_reason = ?, discord_id = ?, updated_at = CURRENT_TIMESTAMP
+                     WHERE id = ?`,
+                    [referee.robloxNick, referee.discordNick, referee.license, referee.status,
+                        referee.suspensionReason, referee.discordId, item.id]
+                );
+                if (item.oldDiscordId && item.oldDiscordId !== referee.discordId) {
+                    run(
+                        "DELETE FROM discord_user_roles WHERE discord_id = ? AND role IN ('Referee', 'Delegate')",
+                        [item.oldDiscordId]
+                    );
+                    pruneRolelessAccount(item.oldDiscordId);
+                }
+            } else {
+                run(
+                    `INSERT INTO referees
+                        (roblox_nick, discord_nick, license, status, suspension_reason, discord_id, is_delegate)
+                     VALUES (?, ?, ?, ?, ?, ?, FALSE)`,
+                    [referee.robloxNick, referee.discordNick, referee.license, referee.status,
+                        referee.suspensionReason, referee.discordId]
+                );
+            }
+            const account = get('SELECT discord_id FROM discord_users WHERE discord_id = ?', [referee.discordId]);
+            if (account) {
+                run(
+                    'INSERT INTO discord_user_roles (discord_id, role) VALUES (?, ?) ON CONFLICT DO NOTHING',
+                    [referee.discordId, 'Referee']
+                );
+                if (item.isDelegate) {
+                    run(
+                        'INSERT INTO discord_user_roles (discord_id, role) VALUES (?, ?) ON CONFLICT DO NOTHING',
+                        [referee.discordId, 'Delegate']
+                    );
+                } else {
+                    run('DELETE FROM discord_user_roles WHERE discord_id = ? AND role = ?', [
+                        referee.discordId, 'Delegate'
+                    ]);
+                }
+            }
+        }
+
+        for (const referee of plan.removed) {
+            run('DELETE FROM referees WHERE id = ?', [referee.id]);
+            if (!referee.discord_id) continue;
+            run(
+                "DELETE FROM discord_user_roles WHERE discord_id = ? AND role IN ('Referee', 'Delegate')",
+                [referee.discord_id]
+            );
+            pruneRolelessAccount(referee.discord_id);
+        }
+
+        return { syncedReferees: plan.updates.length, removedReferees: plan.removed.length };
+    });
+    return transaction();
+
+    function pruneRolelessAccount(discordId) {
+        if (!discordId || discordId === OWNER_DISCORD_ID) return;
+        const remainingRoles = get(
+            'SELECT COUNT(*) AS count FROM discord_user_roles WHERE discord_id = ?',
+            [discordId]
+        );
+        if (Number(remainingRoles.count) === 0) {
+            run('DELETE FROM auth_sessions WHERE discord_id = ?', [discordId]);
+            run('UPDATE referees SET discord_id = NULL WHERE discord_id = ?', [discordId]);
+            run('DELETE FROM discord_users WHERE discord_id = ?', [discordId]);
+        }
+    }
+}
+
+async function synchronizeRefereesFromBot() {
+    refereeSyncStatus.lastAttemptAt = new Date().toISOString();
+    if (!refereeSyncStatus.enabled) throw new Error('Cesta k databázi rozhodčích není nakonfigurována.');
+    if (!isDatabaseReady) throw new Error('Databáze portálu ještě není připravena.');
+    const normalizeDatabasePath = value => process.platform === 'win32' ? value.toLowerCase() : value;
+    if (normalizeDatabasePath(path.resolve(REFEREE_BOT_DB_PATH)) ===
+        normalizeDatabasePath(path.resolve(DB_PATH))) {
+        throw new Error('Databáze bota musí být oddělený soubor od databáze portálu.');
+    }
+
+    const Database = require('better-sqlite3');
+    let botDatabase;
+    try {
+        botDatabase = new Database(REFEREE_BOT_DB_PATH, {
+            readonly: true,
+            fileMustExist: true,
+            timeout: 5000
+        });
+        botDatabase.pragma('query_only = ON');
+        const columns = botDatabase.prepare('PRAGMA table_info(referees)').all()
+            .map(column => column.name);
+        const requiredColumns = [
+            'discord_id', 'discord_name', 'roblox_name', 'license_type',
+            'is_suspended', 'suspension_reason'
+        ];
+        if (requiredColumns.some(column => !columns.includes(column))) {
+            throw new Error('Tabulka referees v databázi bota nemá očekávaná pole.');
+        }
+        const sourceRows = botDatabase.prepare(`
+            SELECT CAST(discord_id AS TEXT) AS discord_id, discord_name, roblox_name,
+                   license_type, is_suspended, suspension_reason
+            FROM referees
+            ORDER BY discord_id
+        `).all();
+        const referees = validateBotReferees(sourceRows);
+        const result = isPostgres
+            ? await withDatabaseTransaction(async transactionClient => {
+                const existingReferees = await dbAll(
+                    'SELECT id, discord_id, roblox_nick, is_delegate FROM referees',
+                    [],
+                    transactionClient
+                );
+                const plan = createRefereeSyncPlan(referees, existingReferees);
+                await applyRefereeSyncPlanPostgres(plan, transactionClient);
+                return { syncedReferees: plan.updates.length, removedReferees: plan.removed.length };
+            })
+            : applyRefereeSyncPlanSqlite(referees);
+        refereeSyncStatus.lastSuccessAt = new Date().toISOString();
+        refereeSyncStatus.lastError = null;
+        refereeSyncStatus.syncedReferees = result.syncedReferees;
+        refereeSyncStatus.removedReferees = result.removedReferees;
+        return result;
+    } finally {
+        botDatabase?.close();
+    }
+}
+
+async function runRefereeSync() {
+    if (refereeSyncInProgress) return null;
+    refereeSyncInProgress = true;
+    try {
+        return await synchronizeRefereesFromBot();
+    } catch (error) {
+        refereeSyncStatus.lastError = error.message;
+        console.error(`[CVFL Referee Sync] Synchronizace selhala: ${error.message}`);
+        throw error;
+    } finally {
+        refereeSyncInProgress = false;
+    }
+}
+
 function parseCookies(req) {
     return Object.fromEntries((req.headers.cookie || '').split(';').map(cookie => {
         const separator = cookie.indexOf('=');
@@ -845,60 +1133,76 @@ async function availableRolesFor(discordId) {
     return roles;
 }
 
-async function pruneRolelessDiscordAccount(discordId) {
+async function pruneRolelessDiscordAccount(discordId, transactionClient = null) {
     if (!discordId || discordId === OWNER_DISCORD_ID) return;
-    const remainingRoles = await dbGet('SELECT COUNT(*) AS count FROM discord_user_roles WHERE discord_id = ?', [discordId]);
+    const remainingRoles = await dbGet(
+        'SELECT COUNT(*) AS count FROM discord_user_roles WHERE discord_id = ?',
+        [discordId],
+        transactionClient
+    );
     if (Number(remainingRoles.count) === 0) {
-        await dbRun('DELETE FROM auth_sessions WHERE discord_id = ?', [discordId]);
-        await dbRun('UPDATE referees SET discord_id = NULL WHERE discord_id = ?', [discordId]);
-        await dbRun('DELETE FROM discord_users WHERE discord_id = ?', [discordId]);
+        await dbRun('DELETE FROM auth_sessions WHERE discord_id = ?', [discordId], transactionClient);
+        await dbRun('UPDATE referees SET discord_id = NULL WHERE discord_id = ?', [discordId], transactionClient);
+        await dbRun('DELETE FROM discord_users WHERE discord_id = ?', [discordId], transactionClient);
     }
 }
 
-async function syncRegisteredDelegateRole(discordId, isDelegate) {
+async function syncRegisteredDelegateRole(discordId, isDelegate, transactionClient = null) {
     if (!discordId) return;
-    const account = await dbGet('SELECT discord_id FROM discord_users WHERE discord_id = ?', [discordId]);
+    const account = await dbGet(
+        'SELECT discord_id FROM discord_users WHERE discord_id = ?',
+        [discordId],
+        transactionClient
+    );
     if (!account) return;
     if (isDelegate) {
-        await dbRun('INSERT INTO discord_user_roles (discord_id, role) VALUES (?, ?) ON CONFLICT DO NOTHING', [discordId, 'Delegate']);
+        await dbRun(
+            'INSERT INTO discord_user_roles (discord_id, role) VALUES (?, ?) ON CONFLICT DO NOTHING',
+            [discordId, 'Delegate'],
+            transactionClient
+        );
         return;
     }
-    await dbRun('DELETE FROM discord_user_roles WHERE discord_id = ? AND role = ?', [discordId, 'Delegate']);
-    await pruneRolelessDiscordAccount(discordId);
+    await dbRun(
+        'DELETE FROM discord_user_roles WHERE discord_id = ? AND role = ?',
+        [discordId, 'Delegate'],
+        transactionClient
+    );
+    await pruneRolelessDiscordAccount(discordId, transactionClient);
 }
 
-async function syncRegisteredRefereeRole(discordId, isRegistered) {
+async function syncRegisteredRefereeRole(discordId, isRegistered, transactionClient = null) {
     if (!discordId) return;
-    const account = await dbGet('SELECT discord_id FROM discord_users WHERE discord_id = ?', [discordId]);
+    const account = await dbGet(
+        'SELECT discord_id FROM discord_users WHERE discord_id = ?',
+        [discordId],
+        transactionClient
+    );
     if (!account) return;
     if (isRegistered) {
-        await dbRun('INSERT INTO discord_user_roles (discord_id, role) VALUES (?, ?) ON CONFLICT DO NOTHING', [discordId, 'Referee']);
+        await dbRun(
+            'INSERT INTO discord_user_roles (discord_id, role) VALUES (?, ?) ON CONFLICT DO NOTHING',
+            [discordId, 'Referee'],
+            transactionClient
+        );
         return;
     }
-    await dbRun('DELETE FROM discord_user_roles WHERE discord_id = ? AND role = ?', [discordId, 'Referee']);
-    await pruneRolelessDiscordAccount(discordId);
+    await dbRun(
+        'DELETE FROM discord_user_roles WHERE discord_id = ? AND role = ?',
+        [discordId, 'Referee'],
+        transactionClient
+    );
+    await pruneRolelessDiscordAccount(discordId, transactionClient);
 }
 
-async function removeRefereeRoles(discordId) {
+async function removeRefereeRoles(discordId, transactionClient = null) {
     if (!discordId) return;
     await dbRun(
         "DELETE FROM discord_user_roles WHERE discord_id = ? AND role IN ('Referee', 'Delegate')",
-        [discordId]
+        [discordId],
+        transactionClient
     );
-    await pruneRolelessDiscordAccount(discordId);
-}
-
-function refereeUniqueConflict(error) {
-    if (!error) return null;
-    if (error.code === 'SQLITE_CONSTRAINT' || error.code === '23505') {
-        if (error.message.includes('discord_id')) {
-            return 'Tento Discord účet už je propojen s jiným profilem rozhodčího nebo delegáta.';
-        }
-        if (error.message.includes('roblox_nick')) {
-            return 'Tento Roblox účet už má profil rozhodčího nebo delegáta.';
-        }
-    }
-    return null;
+    await pruneRolelessDiscordAccount(discordId, transactionClient);
 }
 
 async function resolveAuthenticatedUser(req) {
@@ -2211,93 +2515,41 @@ app.get('/api/referees', requireRoles('Admin', 'Referee_Manager', 'DK', 'Delegat
 });
 
 app.post('/api/referees', requireRoles('Admin', 'Referee_Manager'), async (req, res) => {
-    try {
-        const { robloxNick, discordNick, license, isDelegate, discordId } = req.body;
-        if (!robloxNick || !discordNick || !/^\d{17,20}$/.test(String(discordId || ''))) {
-            return res.status(400).json({ success: false, error: 'Roblox Nick, Discord Nick a platné Discord ID jsou povinné.' });
-        }
-        const existingRegistration = await dbGet('SELECT id FROM referees WHERE discord_id = ?', [discordId]);
-        if (existingRegistration) return res.status(409).json({ success: false, error: 'Tento Discord účet už má profil rozhodčího nebo delegáta.' });
-        
-        const result = await withDatabaseTransaction(async () => {
-            const registration = await dbGet('SELECT id FROM referees WHERE discord_id = ?', [discordId]);
-            if (registration) throw Object.assign(new Error('Tento Discord účet už má profil rozhodčího nebo delegáta.'), { code: 'REFEREE_DISCORD_CONFLICT' });
-            const linkedAccount = await dbGet('SELECT discord_id FROM discord_users WHERE discord_id = ?', [discordId]);
-            const inserted = await dbRun(
-                `INSERT INTO referees (roblox_nick, discord_nick, license, is_delegate, discord_id) VALUES (?, ?, ?, ?, ?)`,
-                [robloxNick.trim(), discordNick.trim(), license || 'C', isDelegate ? true : false, discordId]
-            );
-            await syncRegisteredRefereeRole(discordId, true);
-            await syncRegisteredDelegateRole(discordId, Boolean(isDelegate));
-            return { ...inserted, isRegistered: Boolean(linkedAccount) };
-        });
-        res.status(201).json({ success: true, id: result.lastID, isRegistered: result.isRegistered });
-    } catch (err) {
-        if (err.code === 'REFEREE_DISCORD_CONFLICT') {
-            return res.status(409).json({ success: false, error: err.message });
-        }
-        const conflict = refereeUniqueConflict(err);
-        if (conflict) return res.status(409).json({ success: false, error: conflict });
-        res.status(500).json({ success: false, error: err.message });
-    }
+    res.status(409).json({
+        success: false,
+        error: 'Rozhodčí se registrují výhradně přes Discord bota.'
+    });
 });
 
 app.put('/api/referees/:id', requireRoles('Admin', 'Referee_Manager'), async (req, res) => {
     try {
         const id = req.params.id;
-        const { license, status, suspensionReason, isDelegate } = req.body;
-        const existing = await dbGet('SELECT discord_id, is_delegate FROM referees WHERE id = ?', [id]);
-        if (!existing) return res.status(404).json({ success: false, error: 'Profil rozhodčího nebyl nalezen.' });
-        const newDiscordId = typeof req.body.discordId === 'string' && req.body.discordId.trim()
-            ? req.body.discordId.trim()
-            : existing.discord_id;
-        if (newDiscordId !== existing.discord_id) {
-            if (!/^\d{17,20}$/.test(newDiscordId)) {
-                return res.status(400).json({ success: false, error: 'Zadejte platné Discord ID.' });
-            }
-            const duplicate = await dbGet('SELECT id FROM referees WHERE discord_id = ? AND id != ?', [newDiscordId, id]);
-            if (duplicate) return res.status(409).json({ success: false, error: 'Tento Discord účet už je propojen s jiným profilem.' });
+        const { isDelegate } = req.body;
+        if (typeof isDelegate !== 'boolean') {
+            return res.status(400).json({ success: false, error: 'Pole isDelegate musí být boolean.' });
         }
-        const delegateValue = isDelegate === undefined ? Boolean(existing.is_delegate) : Boolean(isDelegate);
-        
-        await withDatabaseTransaction(async () => {
+        const existing = await dbGet('SELECT discord_id FROM referees WHERE id = ?', [id]);
+        if (!existing) return res.status(404).json({ success: false, error: 'Profil rozhodčího nebyl nalezen.' });
+        await withDatabaseTransaction(async transactionClient => {
             await dbRun(
-                `UPDATE referees SET
-                    license = COALESCE(?, license),
-                    status = COALESCE(?, status),
-                    suspension_reason = COALESCE(?, suspension_reason),
-                    is_delegate = ?,
-                    discord_id = ?,
-                    updated_at = CURRENT_TIMESTAMP
-                 WHERE id = ?`,
-                [license, status, suspensionReason, delegateValue, newDiscordId, id]
+                'UPDATE referees SET is_delegate = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+                [isDelegate, id],
+                transactionClient
             );
-            if (existing.discord_id !== newDiscordId) {
-                await removeRefereeRoles(existing.discord_id);
-            }
-            await syncRegisteredRefereeRole(newDiscordId, true);
-            await syncRegisteredDelegateRole(newDiscordId, delegateValue);
+            await syncRegisteredRefereeRole(existing.discord_id, true, transactionClient);
+            await syncRegisteredDelegateRole(existing.discord_id, isDelegate, transactionClient);
         });
-        res.json({ success: true });
+        res.json({ success: true, isDelegate });
     } catch (err) {
-        const conflict = refereeUniqueConflict(err);
-        if (conflict) return res.status(409).json({ success: false, error: conflict });
         res.status(500).json({ success: false, error: err.message });
     }
 });
 
 app.delete('/api/referees/:id', requireRoles('Admin', 'Referee_Manager'), async (req, res) => {
-    try {
-        const referee = await dbGet('SELECT discord_id FROM referees WHERE id = ?', [req.params.id]);
-        if (!referee) return res.status(404).json({ success: false, error: 'Profil rozhodčího nebyl nalezen.' });
-        await withDatabaseTransaction(async () => {
-            await dbRun('DELETE FROM referees WHERE id = ?', [req.params.id]);
-            await removeRefereeRoles(referee.discord_id);
-        });
-        res.json({ success: true });
-    } catch (err) {
-        res.status(500).json({ success: false, error: err.message });
-    }
+    res.status(409).json({
+        success: false,
+        error: 'Licence rozhodčích spravuje Discord bot.'
+    });
 });
 
 app.get('/api/matches', async (req, res) => {
@@ -2930,6 +3182,16 @@ app.get('/api/admin/player-sync-status', requireRoles('Admin'), (req, res) => {
     });
 });
 
+app.get('/api/admin/referee-sync-status', requireRoles('Admin'), (req, res) => {
+    res.json({
+        success: true,
+        data: {
+            ...refereeSyncStatus,
+            intervalMs: REFEREE_BOT_SYNC_INTERVAL_MS
+        }
+    });
+});
+
 app.use('/api', (req, res) => {
     res.status(404).json({
         success: false,
@@ -2941,6 +3203,16 @@ if (PLAYER_BOT_API_URL && PLAYER_BOT_API_TOKEN) {
     runPlayerSync().catch(() => {});
     const syncTimer = setInterval(() => runPlayerSync().catch(() => {}), PLAYER_BOT_SYNC_INTERVAL_MS);
     syncTimer.unref();
+}
+
+if (REFEREE_BOT_DB_FILE) {
+    runRefereeSync().catch(() => {});
+    const refereeSyncTimer = setInterval(() => {
+        runRefereeSync().catch(error => {
+            console.error(`[CVFL Referee Sync] Synchronizace selhala: ${error.message}`);
+        });
+    }, REFEREE_BOT_SYNC_INTERVAL_MS);
+    refereeSyncTimer.unref();
 }
 
 const inviteCleanupTimer = setInterval(() => {
